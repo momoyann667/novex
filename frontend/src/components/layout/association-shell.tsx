@@ -4,18 +4,18 @@ import { Bell, Bot, Calendar, CreditCard, FileText, FolderKanban, Home, Menu, Se
 import { Button } from "@/components/ui/button";
 
 const nav = [
-  ["Dashboard", "dashboard", Home],
-  ["Membres", "members", Users],
-  ["Cotisations", "contributions", CreditCard],
-  ["Paiements", "payments", CreditCard],
-  ["Recettes", "revenues", Wallet],
-  ["Depenses", "expenses", Wallet],
-  ["Projets", "projects", FolderKanban],
-  ["Evenements", "events", Calendar],
-  ["Documents", "documents", FileText],
-  ["Rapports", "reports", FileText],
-  ["Assistant IA", "assistant", Bot],
-  ["Parametres", "settings", Settings]
+  { label: "Dashboard", path: "dashboard", icon: Home, permission: "dashboard.view" },
+  { label: "Membres", path: "members", icon: Users, permission: "members.view" },
+  { label: "Cotisations", path: "contributions", icon: CreditCard, permission: "contributions.view" },
+  { label: "Paiements", path: "payments", icon: CreditCard, permission: "payments.view", plan: "NOVEX_START" },
+  { label: "Recettes", path: "revenues", icon: Wallet, permission: "revenues.view" },
+  { label: "Depenses", path: "expenses", icon: Wallet, permission: "expenses.view" },
+  { label: "Projets", path: "projects", icon: FolderKanban, permission: "projects.view", plan: "NOVEX_START" },
+  { label: "Evenements", path: "events", icon: Calendar, permission: "events.view" },
+  { label: "Documents", path: "documents", icon: FileText, permission: "documents.view" },
+  { label: "Rapports", path: "reports", icon: FileText, permission: "reports.view", plan: "NOVEX_PRO" },
+  { label: "Assistant IA", path: "assistant", icon: Bot, permission: "assistant.view", plan: "NOVEX_PRO" },
+  { label: "Parametres", path: "settings", icon: Settings, permission: "settings.view" }
 ] as const;
 
 export function AssociationShell({ children, workspaceSlug }: Readonly<{ children: ReactNode; workspaceSlug: string }>) {
@@ -30,7 +30,7 @@ export function AssociationShell({ children, workspaceSlug }: Readonly<{ childre
           Association active
         </Button>
         <nav className="grid gap-1">
-          {nav.map(([label, path, Icon], index) => (
+          {nav.map(({ label, path, icon: Icon }, index) => (
             <Link
               className={`flex min-h-10 items-center gap-3 rounded-md px-3 text-sm ${index === 0 ? "bg-blue-50 font-semibold text-blue-700" : "text-slate-700 hover:bg-slate-100"}`}
               href={`/app/${workspaceSlug}/${path}`}

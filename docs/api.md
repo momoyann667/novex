@@ -29,6 +29,20 @@ POST /api/v1/contributions/campaigns/:id/generate/
 GET  /api/v1/payments/
 POST /api/v1/payments/manual/
 POST /api/v1/payments/webhooks/:provider/
+GET  /api/v1/projects/
+POST /api/v1/projects/
+GET  /api/v1/projects/:id/
+PATCH /api/v1/projects/:id/
+DELETE /api/v1/projects/:id/
+GET  /api/v1/projects/stats/
+GET  /api/v1/projects/:id/budget-categories/
+POST /api/v1/projects/:id/budget-categories/
+GET  /api/v1/projects/:id/expenses/
+POST /api/v1/projects/:id/expenses/
+GET  /api/v1/projects/:id/documents/
+POST /api/v1/projects/:id/documents/
+GET  /api/v1/projects/:id/activity/
+GET  /api/v1/projects/:id/reports/
 ```
 
 Les endpoints workspace doivent recevoir un contexte workspace fiable, puis le backend doit verifier le membership actif. Le frontend ne prouve jamais seul l'autorisation.

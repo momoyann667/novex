@@ -8,6 +8,7 @@ from apps.members.models import Member
 from apps.contributions.models import Contribution
 from apps.contributions.services import contribution_stats
 from apps.payments.models import Payment
+from apps.projects.services import workspace_project_stats
 from apps.workspaces.models import Workspace
 
 
@@ -57,6 +58,7 @@ def get_dashboard_overview(*, workspace: Workspace, period_code: str | None, use
         or zero
     )
     expenses = zero
+    project_totals = workspace_project_stats(workspace)
     net_flow = successful_payments - expenses
     finance = {
         "current_balance": format_money(zero, workspace.currency),
@@ -89,7 +91,12 @@ def get_dashboard_overview(*, workspace: Workspace, period_code: str | None, use
                 "recovery_rate": contribution_totals["recovery_rate"],
                 "late_members": contribution_totals["late_members"],
             },
-            "projects": {"total": 0, "active": 0, "at_risk": 0, "late": 0},
+            "projects": {
+                "total": project_totals["total_projects"],
+                "active": project_totals["active_projects"],
+                "at_risk": project_totals["delayed_projects"],
+                "late": project_totals["delayed_projects"],
+            },
             "events": {"upcoming": 0},
             "documents": {"recent": 0},
         },
