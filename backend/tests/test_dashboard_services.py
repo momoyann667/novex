@@ -1,5 +1,7 @@
 import pytest
 
+pytest.importorskip("pytest_django")
+
 from apps.dashboard.services import get_dashboard_overview
 from apps.members.models import Member
 from apps.workspaces.models import Workspace
@@ -10,8 +12,8 @@ def test_dashboard_overview_scopes_members_to_workspace(django_user_model):
     owner = django_user_model.objects.create_user(username="owner@example.com", email="owner@example.com", password="pass")
     workspace_a = Workspace.objects.create(name="A", slug="a", organization_type="association", owner=owner)
     workspace_b = Workspace.objects.create(name="B", slug="b", organization_type="association", owner=owner)
-    Member.objects.create(workspace=workspace_a, first_name="Awa", last_name="Kouame")
-    Member.objects.create(workspace=workspace_b, first_name="Yao", last_name="Koffi")
+    Member.objects.create(workspace=workspace_a, membership_number="A-000001", first_name="Awa", last_name="Kouame")
+    Member.objects.create(workspace=workspace_b, membership_number="B-000001", first_name="Yao", last_name="Koffi")
 
     overview = get_dashboard_overview(workspace=workspace_a, period_code="month", user_permissions={"*"})
 

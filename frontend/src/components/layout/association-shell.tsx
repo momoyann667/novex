@@ -7,6 +7,7 @@ const nav = [
   ["Dashboard", "dashboard", Home],
   ["Membres", "members", Users],
   ["Cotisations", "contributions", CreditCard],
+  ["Paiements", "payments", CreditCard],
   ["Recettes", "revenues", Wallet],
   ["Depenses", "expenses", Wallet],
   ["Projets", "projects", FolderKanban],

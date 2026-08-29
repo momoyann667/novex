@@ -1,10 +1,13 @@
 from dataclasses import dataclass
 from decimal import Decimal
 
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
 from apps.members.models import Member
+from apps.contributions.models import Contribution
+from apps.contributions.services import contribution_stats
+from apps.payments.models import Payment
 from apps.workspaces.models import Workspace
 
 
@@ -48,11 +51,18 @@ def get_dashboard_overview(*, workspace: Workspace, period_code: str | None, use
     can_view_finance = bool({"*", "finance.view", "contributions.view", "expenses.view", "revenues.view"} & user_permissions)
 
     zero = Decimal("0")
+    contribution_totals = contribution_stats(workspace)
+    successful_payments = (
+        Payment.objects.filter(workspace=workspace, status=Payment.Status.SUCCESSFUL).aggregate(total=Sum("amount"))["total"]
+        or zero
+    )
+    expenses = zero
+    net_flow = successful_payments - expenses
     finance = {
         "current_balance": format_money(zero, workspace.currency),
-        "revenues": format_money(zero, workspace.currency),
-        "expenses": format_money(zero, workspace.currency),
-        "net_flow": format_money(zero, workspace.currency),
+        "revenues": format_money(successful_payments, workspace.currency),
+        "expenses": format_money(expenses, workspace.currency),
+        "net_flow": format_money(net_flow, workspace.currency),
         "masked": not can_view_finance,
     }
 
@@ -69,15 +79,15 @@ def get_dashboard_overview(*, workspace: Workspace, period_code: str | None, use
                 "active": active_members,
                 "active_rate": active_rate,
                 "new_members": 0,
-                "contribution_current": 0,
-                "contribution_current_rate": 0,
+                "contribution_current": contribution_totals["current_members"],
+                "contribution_current_rate": round((contribution_totals["current_members"] / active_members) * 100, 1) if active_members else 0,
             },
             "contributions": {
-                "objective": format_money(zero, workspace.currency) if can_view_finance else None,
-                "collected": format_money(zero, workspace.currency) if can_view_finance else None,
-                "remaining": format_money(zero, workspace.currency) if can_view_finance else None,
-                "recovery_rate": 0,
-                "late_members": 0,
+                "objective": format_money(contribution_totals["expected"], workspace.currency) if can_view_finance else None,
+                "collected": format_money(contribution_totals["collected"], workspace.currency) if can_view_finance else None,
+                "remaining": format_money(contribution_totals["remaining"], workspace.currency) if can_view_finance else None,
+                "recovery_rate": contribution_totals["recovery_rate"],
+                "late_members": contribution_totals["late_members"],
             },
             "projects": {"total": 0, "active": 0, "at_risk": 0, "late": 0},
             "events": {"upcoming": 0},
@@ -87,7 +97,7 @@ def get_dashboard_overview(*, workspace: Workspace, period_code: str | None, use
             "financial_overview": [],
             "expense_breakdown": [],
             "revenue_breakdown": [],
-            "cash_flow": {"in": 0, "out": 0, "net": 0},
+            "cash_flow": {"in": int(successful_payments), "out": int(expenses), "net": int(net_flow)},
         },
         "alerts": [],
         "activity": [],

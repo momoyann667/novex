@@ -24,6 +24,8 @@ INSTALLED_APPS = [
     "apps.workspaces",
     "apps.dashboard",
     "apps.members",
+    "apps.contributions",
+    "apps.payments",
     "apps.subscriptions",
     "apps.audit_logs",
 ]
