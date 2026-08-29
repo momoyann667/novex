@@ -5,7 +5,22 @@ import pytest
 pytest.importorskip("pytest_django")
 
 from apps.contributions.models import Contribution
-from apps.contributions.services import create_campaign, generate_contributions_for_campaign, refresh_contribution_status, waive_contribution
+from datetime import timedelta
+
+from django.utils import timezone
+
+from apps.contributions.services import (
+    bulk_reminder_preview,
+    contribution_analytics,
+    create_campaign,
+    create_export_request,
+    create_manual_reminder,
+    generate_contributions_for_campaign,
+    overdue_days,
+    refresh_contribution_status,
+    upcoming_due,
+    waive_contribution,
+)
 from apps.contributions.statuses import ContributionStatus
 from apps.audit_logs.models import AuditLog
 from apps.members.models import Member
@@ -102,3 +117,50 @@ def test_waiver_updates_status_and_audit_log(django_user_model):
     assert contribution.remaining_amount == Decimal("0.00")
     assert contribution.status == ContributionStatus.WAIVED
     assert AuditLog.objects.filter(workspace=workspace, action="contribution.waived", resource_id=str(contribution.id)).exists()
+
+
+@pytest.mark.django_db
+def test_recovery_analytics_and_overdue_days(django_user_model):
+    owner = django_user_model.objects.create_user(username="owner@example.com", email="owner@example.com", password="pass")
+    workspace = Workspace.objects.create(name="Association", slug="association-analytics", organization_type="association", owner=owner)
+    member = Member.objects.create(workspace=workspace, membership_number="A-000004", first_name="Ami", last_name="Bamba")
+    campaign = create_campaign(workspace=workspace, actor=owner, name="Mensuelle", amount=Decimal("100000.00"))
+    contribution = Contribution.objects.create(
+        workspace=workspace,
+        campaign=campaign,
+        member=member,
+        amount_due=Decimal("100000.00"),
+        amount_paid=Decimal("80000.00"),
+        due_date=timezone.localdate() - timedelta(days=9),
+    )
+    refresh_contribution_status(contribution)
+
+    analytics = contribution_analytics(workspace=workspace, period="month")
+
+    assert analytics["collection_rate"] == 80
+    assert analytics["overdue_amount"] == Decimal("20000.00")
+    assert overdue_days(contribution) == 9
+    assert bulk_reminder_preview(workspace)["recipients"] == 1
+
+
+@pytest.mark.django_db
+def test_upcoming_due_reminder_and_export_request(django_user_model):
+    owner = django_user_model.objects.create_user(username="owner@example.com", email="owner@example.com", password="pass")
+    workspace = Workspace.objects.create(name="Association", slug="association-followup", organization_type="association", owner=owner)
+    member = Member.objects.create(workspace=workspace, membership_number="A-000005", first_name="Koffi", last_name="Yao")
+    campaign = create_campaign(workspace=workspace, actor=owner, name="Annuelle", amount=Decimal("25000.00"))
+    contribution = Contribution.objects.create(
+        workspace=workspace,
+        campaign=campaign,
+        member=member,
+        amount_due=Decimal("25000.00"),
+        due_date=timezone.localdate() + timedelta(days=3),
+    )
+
+    upcoming = upcoming_due(workspace, days=7)
+    reminder = create_manual_reminder(contribution=contribution, actor=owner, send_now=True)
+    export = create_export_request(workspace=workspace, actor=owner, export_type="overdue", filters={"days_overdue": 7})
+
+    assert upcoming["members"] == 1
+    assert reminder.status == "SENT"
+    assert export.status == "queued"

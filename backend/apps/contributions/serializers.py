@@ -1,8 +1,8 @@
 from rest_framework import serializers
 
 from apps.members.models import Member
-from .models import Contribution, ContributionCampaign, ContributionCategoryAmount, ReminderRule
-from .statuses import CampaignTargetMode
+from .models import Contribution, ContributionCampaign, ContributionCategoryAmount, ContributionExportRequest, ContributionRecoverySettings, ContributionReminder, ReminderRule
+from .statuses import CampaignTargetMode, ContributionExportFormat, ContributionReminderChannel, ContributionReminderKind
 
 
 class ContributionCampaignSerializer(serializers.ModelSerializer):
@@ -134,6 +134,74 @@ class ContributionWaiverSerializer(serializers.Serializer):
     def validate_amount(self, value):
         if value < 0:
             raise serializers.ValidationError("Le montant exonere ne peut pas etre negatif.")
+        return value
+
+
+class ContributionRecoverySettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContributionRecoverySettings
+        fields = ["id", "workspace", "collection_goal_percent", "created_at", "updated_at"]
+        read_only_fields = ["id", "workspace", "created_at", "updated_at"]
+
+    def validate_collection_goal_percent(self, value):
+        if value < 0 or value > 100:
+            raise serializers.ValidationError("L'objectif doit etre compris entre 0 et 100.")
+        return value
+
+
+class ContributionReminderSerializer(serializers.ModelSerializer):
+    member_name = serializers.SerializerMethodField()
+    contribution_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ContributionReminder
+        fields = [
+            "id",
+            "contribution",
+            "campaign",
+            "member",
+            "member_name",
+            "contribution_name",
+            "reminder_kind",
+            "channel",
+            "status",
+            "subject",
+            "message",
+            "scheduled_for",
+            "sent_at",
+            "result",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "campaign", "member", "member_name", "contribution_name", "status", "subject", "message", "sent_at", "result", "created_at", "updated_at"]
+
+    def get_member_name(self, obj):
+        return str(obj.member)
+
+    def get_contribution_name(self, obj):
+        return obj.campaign.name
+
+
+class ContributionReminderSendSerializer(serializers.Serializer):
+    channel = serializers.ChoiceField(choices=ContributionReminderChannel.choices, default=ContributionReminderChannel.IN_APP)
+    reminder_kind = serializers.ChoiceField(choices=ContributionReminderKind.choices, default=ContributionReminderKind.REMINDER)
+    send_now = serializers.BooleanField(default=True)
+
+
+class BulkReminderPreviewSerializer(serializers.Serializer):
+    days_overdue = serializers.IntegerField(required=False, min_value=0)
+    campaign = serializers.IntegerField(required=False)
+
+
+class ContributionExportRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContributionExportRequest
+        fields = ["id", "export_format", "export_type", "filters", "status", "file", "created_at", "completed_at"]
+        read_only_fields = ["id", "status", "file", "created_at", "completed_at"]
+
+    def validate_export_format(self, value):
+        if value not in ContributionExportFormat.values:
+            raise serializers.ValidationError("Format d'export invalide.")
         return value
 
 

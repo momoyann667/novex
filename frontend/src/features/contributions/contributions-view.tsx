@@ -11,8 +11,13 @@ const kpis = [
   ["0 XOF", "Reste a collecter"],
   ["0%", "Taux de recouvrement"],
   ["0", "Membres a jour"],
+  ["0", "Paiements partiels"],
   ["0", "Membres en retard"],
+  ["0", "Membres non payes"],
   ["0", "Echeances proches"],
+  ["0", "Echeances ce mois"],
+  ["0 XOF", "Montant en retard"],
+  ["0%", "Taux de retard"],
   ["0", "Cotisations actives"],
 ];
 

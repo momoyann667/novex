@@ -42,3 +42,30 @@ class CampaignTargetMode(models.TextChoices):
     CATEGORY = "CATEGORY", "Categorie"
     SELECTED = "SELECTED", "Selection"
     SEGMENT = "SEGMENT", "Segment"
+
+
+class ContributionReminderKind(models.TextChoices):
+    REMINDER = "REMINDER", "Rappel"
+    OVERDUE = "OVERDUE", "Relance retard"
+    FINAL_NOTICE = "FINAL_NOTICE", "Dernier avis"
+
+
+class ContributionReminderChannel(models.TextChoices):
+    IN_APP = "IN_APP", "NOVEX"
+    EMAIL = "EMAIL", "Email"
+    SMS = "SMS", "SMS"
+    WHATSAPP = "WHATSAPP", "WhatsApp"
+
+
+class ContributionReminderStatus(models.TextChoices):
+    DRAFT = "DRAFT", "Brouillon"
+    QUEUED = "QUEUED", "En file"
+    SENT = "SENT", "Envoyee"
+    FAILED = "FAILED", "Echec"
+    CANCELLED = "CANCELLED", "Annulee"
+
+
+class ContributionExportFormat(models.TextChoices):
+    CSV = "CSV", "CSV"
+    EXCEL = "EXCEL", "Excel"
+    PDF = "PDF", "PDF"

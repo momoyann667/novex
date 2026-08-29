@@ -1,10 +1,18 @@
+from datetime import timedelta
+
+from django.utils import timezone
 from rest_framework import decorators, filters, response, status, viewsets
 
 from common.permissions.workspace import RequireWorkspacePermission
-from .models import Contribution, ContributionCampaign, ReminderRule
+from .models import Contribution, ContributionCampaign, ContributionExportRequest, ContributionReminder, ReminderRule
 from .serializers import (
+    BulkReminderPreviewSerializer,
     ContributionCampaignSerializer,
+    ContributionExportRequestSerializer,
     ContributionManualPaymentSerializer,
+    ContributionRecoverySettingsSerializer,
+    ContributionReminderSendSerializer,
+    ContributionReminderSerializer,
     ContributionSerializer,
     ContributionWaiverSerializer,
     ReminderRuleSerializer,
@@ -15,12 +23,22 @@ from .services import (
     cancel_campaign,
     cancel_contribution,
     contribution_dashboard,
+    contribution_analytics,
+    create_export_request,
+    create_manual_reminder,
+    bulk_reminder_preview,
     create_campaign,
     generate_contributions_for_campaign,
     record_manual_contribution_payment,
     update_campaign,
     update_contribution,
     waive_contribution,
+    member_recovery_summary,
+    overdue_days,
+    overdue_queryset,
+    recovery_settings,
+    render_reminder_template,
+    upcoming_due,
 )
 
 
@@ -131,6 +149,14 @@ class ContributionViewSet(viewsets.ModelViewSet):
             "waive": "contributions.waive",
             "payments": "contributions.record_payment" if self.request.method == "POST" else "contributions.view",
             "dashboard": "contributions.view",
+            "analytics": "contributions.view_reports",
+            "overdue": "contributions.view",
+            "upcoming": "contributions.view",
+            "members_summary": "contributions.view",
+            "recovery": "contributions.view_reports",
+            "bulk_reminder_preview": "contributions.manage",
+            "reminder_preview": "contributions.view",
+            "send_reminder": "contributions.manage",
             "stats": "contributions.view_reports",
         }
         permission_code = permission_map.get(self.action, "contributions.view")
@@ -172,6 +198,75 @@ class ContributionViewSet(viewsets.ModelViewSet):
     def dashboard(self, request):
         return response.Response(contribution_dashboard(workspace=current_workspace(request), period=request.query_params.get("period")))
 
+    @decorators.action(detail=False, methods=["get"])
+    def analytics(self, request):
+        return response.Response(
+            contribution_analytics(
+                workspace=current_workspace(request),
+                period=request.query_params.get("period", "month"),
+                range_code=request.query_params.get("range", "30d"),
+            )
+        )
+
+    @decorators.action(detail=False, methods=["get"])
+    def overdue(self, request):
+        queryset = overdue_queryset(current_workspace(request))
+        if request.query_params.get("campaign"):
+            queryset = queryset.filter(campaign_id=request.query_params["campaign"])
+        if request.query_params.get("member"):
+            queryset = queryset.filter(member_id=request.query_params["member"])
+        if request.query_params.get("days_overdue"):
+            queryset = queryset.filter(due_date__lte=timezone.localdate() - timedelta(days=int(request.query_params["days_overdue"])))
+        page = self.paginate_queryset(queryset)
+        rows = page if page is not None else queryset
+        data = [
+            {
+                "id": item.id,
+                "member": item.member_id,
+                "member_name": str(item.member),
+                "phone": item.member.phone,
+                "campaign": item.campaign.name,
+                "amount_due": item.amount_due,
+                "amount_paid": item.amount_paid,
+                "remaining_amount": item.remaining_amount,
+                "due_date": item.due_date,
+                "days_overdue": overdue_days(item),
+            }
+            for item in rows
+        ]
+        return self.get_paginated_response(data) if page is not None else response.Response(data)
+
+    @decorators.action(detail=False, methods=["get"])
+    def upcoming(self, request):
+        days = int(request.query_params.get("days", 7))
+        campaign = request.query_params.get("campaign")
+        return response.Response(upcoming_due(current_workspace(request), days=days, campaign_id=int(campaign) if campaign else None))
+
+    @decorators.action(detail=False, methods=["get"], url_path="members-summary")
+    def members_summary(self, request):
+        rows = member_recovery_summary(current_workspace(request))
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            rows = [row for row in rows if row["status"] == status_filter]
+        return response.Response(rows)
+
+    @decorators.action(detail=False, methods=["get", "patch"])
+    def recovery(self, request):
+        workspace = current_workspace(request)
+        settings = recovery_settings(workspace)
+        if request.method == "PATCH":
+            serializer = ContributionRecoverySettingsSerializer(settings, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return response.Response(serializer.data)
+        return response.Response({"settings": ContributionRecoverySettingsSerializer(settings).data, "analytics": contribution_analytics(workspace=workspace)})
+
+    @decorators.action(detail=False, methods=["post"], url_path="bulk-reminder-preview")
+    def bulk_reminder_preview(self, request):
+        serializer = BulkReminderPreviewSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return response.Response(bulk_reminder_preview(current_workspace(request), **serializer.validated_data))
+
     @decorators.action(detail=True, methods=["get"])
     def stats(self, request, pk=None):
         item = self.get_object()
@@ -211,6 +306,56 @@ class ContributionViewSet(viewsets.ModelViewSet):
                 for payment in contribution.payments.order_by("-created_at")
             ]
         )
+
+    @decorators.action(detail=True, methods=["get"], url_path="reminder-preview")
+    def reminder_preview(self, request, pk=None):
+        return response.Response(render_reminder_template(contribution=self.get_object()))
+
+    @decorators.action(detail=True, methods=["post"], url_path="send-reminder")
+    def send_reminder(self, request, pk=None):
+        serializer = ContributionReminderSendSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        reminder = create_manual_reminder(contribution=self.get_object(), actor=request.user, **serializer.validated_data)
+        return response.Response(ContributionReminderSerializer(reminder).data, status=status.HTTP_201_CREATED)
+
+
+class ContributionReminderViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = ContributionReminderSerializer
+    permission_classes = [RequireWorkspacePermission.for_permission("contributions.view")]
+
+    def get_queryset(self):
+        queryset = ContributionReminder.objects.select_related("member", "campaign", "contribution").filter(
+            workspace__slug=self.request.headers.get("X-Workspace"),
+            workspace__memberships__user=self.request.user,
+            workspace__memberships__status="active",
+        )
+        if self.request.query_params.get("member"):
+            queryset = queryset.filter(member_id=self.request.query_params["member"])
+        if self.request.query_params.get("campaign"):
+            queryset = queryset.filter(campaign_id=self.request.query_params["campaign"])
+        return queryset.order_by("-created_at")
+
+
+class ContributionExportRequestViewSet(viewsets.ModelViewSet):
+    serializer_class = ContributionExportRequestSerializer
+    permission_classes = [RequireWorkspacePermission.for_permission("contributions.view_reports")]
+
+    def get_permissions(self):
+        permission_code = "contributions.view_reports" if self.request.method == "GET" else "contributions.manage"
+        return [RequireWorkspacePermission.for_permission(permission_code)()]
+
+    def get_queryset(self):
+        return ContributionExportRequest.objects.filter(
+            workspace__slug=self.request.headers.get("X-Workspace"),
+            workspace__memberships__user=self.request.user,
+            workspace__memberships__status="active",
+        ).order_by("-created_at")
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        export = create_export_request(workspace=current_workspace(request), actor=request.user, **serializer.validated_data)
+        return response.Response(ContributionExportRequestSerializer(export).data, status=status.HTTP_202_ACCEPTED)
 
 
 class ReminderRuleViewSet(viewsets.ModelViewSet):

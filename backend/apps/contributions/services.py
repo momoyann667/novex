@@ -3,13 +3,22 @@ from datetime import timedelta
 
 from django.db import transaction
 from django.db.models import Count, Q, Sum
+from django.db.models.functions import TruncDay, TruncMonth
 from django.utils import timezone
 
 from apps.audit_logs.models import AuditLog
 from apps.members.models import Member
 from apps.workspaces.models import Workspace
-from .models import Contribution, ContributionCampaign
-from .statuses import CampaignStatus, CampaignTargetMode, ContributionStatus
+from .models import Contribution, ContributionCampaign, ContributionExportRequest, ContributionRecoverySettings, ContributionReminder
+from .statuses import (
+    CampaignStatus,
+    CampaignTargetMode,
+    ContributionExportFormat,
+    ContributionReminderChannel,
+    ContributionReminderKind,
+    ContributionReminderStatus,
+    ContributionStatus,
+)
 
 
 @transaction.atomic
@@ -232,11 +241,274 @@ def contribution_stats(workspace: Workspace) -> dict:
     return {
         "expected": expected,
         "collected": collected,
-        "remaining": max(expected - collected, Decimal("0.00")),
+        "remaining": max(expected - collected - (queryset.aggregate(waived=Sum("waived_amount"))["waived"] or Decimal("0.00")), Decimal("0.00")),
         "recovery_rate": recovery_rate,
         "late_members": queryset.filter(status=ContributionStatus.OVERDUE).values("member_id").distinct().count(),
         "current_members": queryset.filter(status__in=[ContributionStatus.PAID, ContributionStatus.WAIVED]).values("member_id").distinct().count(),
     }
+
+
+def recovery_settings(workspace: Workspace) -> ContributionRecoverySettings:
+    settings, _created = ContributionRecoverySettings.objects.get_or_create(workspace=workspace)
+    return settings
+
+
+def period_bounds(period: str | None) -> tuple:
+    today = timezone.localdate()
+    now = timezone.now()
+    if period == "today":
+        start = today
+    elif period == "week":
+        start = today - timedelta(days=today.weekday())
+    elif period == "month":
+        start = today.replace(day=1)
+    elif period == "quarter":
+        start = today.replace(month=((today.month - 1) // 3) * 3 + 1, day=1)
+    elif period == "year":
+        start = today.replace(month=1, day=1)
+    else:
+        return None, None, None, None
+    days = max((today - start).days + 1, 1)
+    previous_end = start - timedelta(days=1)
+    previous_start = previous_end - timedelta(days=days - 1)
+    return start, now.date(), previous_start, previous_end
+
+
+def contribution_queryset_for_period(workspace: Workspace, period: str | None):
+    queryset = Contribution.objects.filter(workspace=workspace)
+    start, end, _previous_start, _previous_end = period_bounds(period)
+    if start and end:
+        queryset = queryset.filter(created_at__date__gte=start, created_at__date__lte=end)
+    return queryset
+
+
+def totals_for_queryset(queryset) -> dict:
+    totals = queryset.aggregate(expected=Sum("amount_due"), collected=Sum("amount_paid"), waived=Sum("waived_amount"))
+    expected = totals["expected"] or Decimal("0.00")
+    collected = totals["collected"] or Decimal("0.00")
+    waived = totals["waived"] or Decimal("0.00")
+    remaining = max(expected - collected - waived, Decimal("0.00"))
+    return {
+        "expected": expected,
+        "collected": collected,
+        "waived": waived,
+        "remaining": remaining,
+        "collection_rate": round((collected / expected) * 100, 2) if expected else 0,
+    }
+
+
+def variation(current, previous) -> dict:
+    if previous in (0, Decimal("0.00")):
+        return {"value": None, "direction": "flat"} if current else {"value": 0, "direction": "flat"}
+    value = round(((current - previous) / previous) * 100, 2)
+    return {"value": value, "direction": "up" if value > 0 else "down" if value < 0 else "flat"}
+
+
+def overdue_days(contribution: Contribution) -> int:
+    if not contribution.due_date or contribution.remaining_amount == Decimal("0.00"):
+        return 0
+    return max((timezone.localdate() - contribution.due_date).days, 0)
+
+
+def overdue_queryset(workspace: Workspace):
+    return Contribution.objects.select_related("member", "campaign").filter(
+        workspace=workspace,
+        due_date__lt=timezone.localdate(),
+    ).exclude(status__in=[ContributionStatus.PAID, ContributionStatus.WAIVED, ContributionStatus.CANCELLED])
+
+
+def overdue_segments(workspace: Workspace) -> list[dict]:
+    segments = [
+        ("1-7 jours", 1, 7),
+        ("8-30 jours", 8, 30),
+        ("31-60 jours", 31, 60),
+        ("61-90 jours", 61, 90),
+        ("90+ jours", 91, None),
+    ]
+    rows = []
+    for label, start, end in segments:
+        qs = overdue_queryset(workspace).filter(due_date__lte=timezone.localdate() - timedelta(days=start))
+        if end:
+            qs = qs.filter(due_date__gte=timezone.localdate() - timedelta(days=end))
+        rows.append({"label": label, "count": qs.count(), "amount": sum((item.remaining_amount for item in qs), Decimal("0.00"))})
+    return rows
+
+
+def top_unpaid_members(workspace: Workspace, limit: int = 10) -> list[dict]:
+    totals: dict[int, dict] = {}
+    for contribution in overdue_queryset(workspace):
+        member_id = contribution.member_id
+        if member_id not in totals:
+            totals[member_id] = {"member_id": member_id, "member_name": str(contribution.member), "phone": contribution.member.phone, "amount_remaining": Decimal("0.00")}
+        totals[member_id]["amount_remaining"] += contribution.remaining_amount
+    return sorted(totals.values(), key=lambda item: item["amount_remaining"], reverse=True)[:limit]
+
+
+def upcoming_due(workspace: Workspace, days: int = 7, campaign_id: int | None = None) -> dict:
+    today = timezone.localdate()
+    queryset = Contribution.objects.filter(workspace=workspace, due_date__gte=today, due_date__lte=today + timedelta(days=days))
+    if campaign_id:
+        queryset = queryset.filter(campaign_id=campaign_id)
+    totals = totals_for_queryset(queryset)
+    return {"days": days, "members": queryset.values("member_id").distinct().count(), "amount_expected": totals["expected"], "items": queryset.count()}
+
+
+def member_recovery_summary(workspace: Workspace) -> list[dict]:
+    rows = []
+    member_ids = Contribution.objects.filter(workspace=workspace).values_list("member_id", flat=True).distinct()
+    members = Member.objects.filter(workspace=workspace, id__in=member_ids)
+    for member in members:
+        qs = Contribution.objects.filter(workspace=workspace, member=member)
+        totals = totals_for_queryset(qs)
+        has_overdue = qs.filter(status=ContributionStatus.OVERDUE).exists()
+        status = "EN_RETARD" if has_overdue else "A_JOUR" if totals["remaining"] == Decimal("0.00") else "PARTIEL" if totals["collected"] else "NON_PAYE"
+        next_due = qs.filter(due_date__gte=timezone.localdate()).order_by("due_date").values_list("due_date", flat=True).first()
+        rows.append({**totals, "member_id": member.id, "member_name": str(member), "phone": member.phone, "status": status, "next_due": next_due})
+    return rows
+
+
+def campaign_performance(workspace: Workspace) -> list[dict]:
+    rows = []
+    for campaign in ContributionCampaign.objects.filter(workspace=workspace).order_by("-created_at"):
+        stats = campaign_contribution_stats(campaign)
+        rows.append({"campaign_id": campaign.id, "campaign_name": campaign.name, **stats})
+    return rows
+
+
+def type_performance(workspace: Workspace) -> list[dict]:
+    rows = []
+    for contribution_type, label in ContributionCampaign._meta.get_field("contribution_type").choices:
+        qs = Contribution.objects.filter(workspace=workspace, campaign__contribution_type=contribution_type)
+        totals = totals_for_queryset(qs)
+        rows.append({"type": contribution_type, "label": label, **totals})
+    return rows
+
+
+def collection_series(workspace: Workspace, range_code: str | None = "30d") -> list[dict]:
+    days_by_range = {"7d": 7, "30d": 30, "3m": 90, "6m": 180, "12m": 365}
+    days = days_by_range.get(range_code or "30d", 30)
+    start = timezone.now() - timedelta(days=days)
+    trunc = TruncMonth("created_at") if days > 90 else TruncDay("created_at")
+    rows = (
+        Contribution.objects.filter(workspace=workspace, created_at__gte=start)
+        .annotate(bucket=trunc)
+        .values("bucket")
+        .annotate(expected=Sum("amount_due"), collected=Sum("amount_paid"))
+        .order_by("bucket")
+    )
+    return [{"period": row["bucket"].date().isoformat(), "expected": row["expected"] or Decimal("0.00"), "collected": row["collected"] or Decimal("0.00")} for row in rows]
+
+
+def contribution_analytics(*, workspace: Workspace, period: str | None = "month", range_code: str | None = "30d") -> dict:
+    current_qs = contribution_queryset_for_period(workspace, period)
+    start, _end, previous_start, previous_end = period_bounds(period)
+    previous_qs = Contribution.objects.filter(workspace=workspace)
+    if previous_start and previous_end:
+        previous_qs = previous_qs.filter(created_at__date__gte=previous_start, created_at__date__lte=previous_end)
+    current = totals_for_queryset(current_qs)
+    previous = totals_for_queryset(previous_qs)
+    overdue = overdue_queryset(workspace)
+    overdue_totals = totals_for_queryset(overdue)
+    settings = recovery_settings(workspace)
+    return {
+        "expected_amount": current["expected"],
+        "collected_amount": current["collected"],
+        "remaining_amount": current["remaining"],
+        "collection_rate": current["collection_rate"],
+        "collection_goal": settings.collection_goal_percent,
+        "overdue_amount": overdue_totals["remaining"],
+        "overdue_members": overdue.values("member_id").distinct().count(),
+        "paid_members": current_qs.filter(status=ContributionStatus.PAID).values("member_id").distinct().count(),
+        "partial_members": current_qs.filter(status=ContributionStatus.PARTIALLY_PAID).values("member_id").distinct().count(),
+        "unpaid_members": current_qs.filter(status=ContributionStatus.PENDING).values("member_id").distinct().count(),
+        "trend": {
+            "expected": variation(current["expected"], previous["expected"]),
+            "collected": variation(current["collected"], previous["collected"]),
+            "collection_rate": variation(Decimal(str(current["collection_rate"])), Decimal(str(previous["collection_rate"]))),
+        },
+        "series": collection_series(workspace, range_code),
+        "overdue_segments": overdue_segments(workspace),
+        "top_unpaid": top_unpaid_members(workspace),
+        "upcoming": {
+            "week": upcoming_due(workspace, 7),
+            "month": upcoming_due(workspace, 30),
+            "next_month": upcoming_due(workspace, 60),
+        },
+        "campaign_performance": campaign_performance(workspace),
+        "type_performance": type_performance(workspace),
+    }
+
+
+def render_reminder_template(*, contribution: Contribution) -> dict:
+    member_name = str(contribution.member)
+    association_name = contribution.workspace.name
+    contribution_name = contribution.campaign.name
+    return {
+        "subject": f"Rappel de cotisation - {contribution_name}",
+        "message": (
+            f"Bonjour {member_name}, votre cotisation {contribution_name} pour {association_name} presente un reste "
+            f"a payer de {contribution.remaining_amount} {contribution.currency}. Echeance: {contribution.due_date or 'non definie'}. "
+            "Le lien de paiement NOVEX sera disponible apres activation du paiement en ligne."
+        ),
+        "variables": {
+            "member_name": member_name,
+            "association_name": association_name,
+            "contribution_name": contribution_name,
+            "amount_due": str(contribution.amount_due),
+            "amount_remaining": str(contribution.remaining_amount),
+            "due_date": str(contribution.due_date or ""),
+            "payment_link": "",
+        },
+    }
+
+
+@transaction.atomic
+def create_manual_reminder(*, contribution: Contribution, actor, channel: str = ContributionReminderChannel.IN_APP, reminder_kind: str = ContributionReminderKind.REMINDER, send_now: bool = False) -> ContributionReminder:
+    rendered = render_reminder_template(contribution=contribution)
+    status = ContributionReminderStatus.SENT if send_now and channel == ContributionReminderChannel.IN_APP else ContributionReminderStatus.QUEUED
+    reminder = ContributionReminder.objects.create(
+        workspace=contribution.workspace,
+        contribution=contribution,
+        campaign=contribution.campaign,
+        member=contribution.member,
+        reminder_kind=reminder_kind,
+        channel=channel,
+        status=status,
+        subject=rendered["subject"],
+        message=rendered["message"],
+        sent_at=timezone.now() if status == ContributionReminderStatus.SENT else None,
+        result={"delivery": "in_app_recorded" if status == ContributionReminderStatus.SENT else "queued_for_provider"},
+        created_by=actor,
+    )
+    AuditLog.objects.create(
+        workspace=contribution.workspace,
+        actor=actor,
+        action="reminder.sent" if status == ContributionReminderStatus.SENT else "reminder.created",
+        resource="contribution_reminder",
+        resource_id=str(reminder.id),
+        metadata={"channel": channel, "contribution_id": contribution.id},
+    )
+    return reminder
+
+
+def bulk_reminder_preview(workspace: Workspace, *, days_overdue: int | None = None, campaign_id: int | None = None) -> dict:
+    queryset = overdue_queryset(workspace)
+    if days_overdue:
+        queryset = queryset.filter(due_date__lte=timezone.localdate() - timedelta(days=days_overdue))
+    if campaign_id:
+        queryset = queryset.filter(campaign_id=campaign_id)
+    return {"recipients": queryset.values("member_id").distinct().count(), "contributions": queryset.count(), "amount_remaining": totals_for_queryset(queryset)["remaining"]}
+
+
+@transaction.atomic
+def create_export_request(*, workspace: Workspace, actor, export_type: str, export_format: str = ContributionExportFormat.CSV, filters: dict | None = None) -> ContributionExportRequest:
+    request = ContributionExportRequest.objects.create(workspace=workspace, requested_by=actor, export_type=export_type, export_format=export_format, filters=filters or {})
+    AuditLog.objects.create(workspace=workspace, actor=actor, action="contribution.export_requested", resource="contribution_export", resource_id=str(request.id), metadata={"export_type": export_type, "format": export_format})
+    return request
+
+
+def cache_key_for_contribution_analytics(workspace: Workspace, period: str | None, range_code: str | None) -> str:
+    return f"workspace:{workspace.id}:contributions:analytics:{period or 'all'}:{range_code or '30d'}"
 
 
 def contribution_dashboard(*, workspace: Workspace, period: str | None = None) -> dict:
