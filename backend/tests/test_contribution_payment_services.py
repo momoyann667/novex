@@ -1,3 +1,6 @@
+import hashlib
+import hmac
+import json
 from decimal import Decimal
 
 import pytest
@@ -25,7 +28,8 @@ from apps.contributions.statuses import ContributionStatus
 from apps.audit_logs.models import AuditLog
 from apps.members.models import Member
 from apps.payments.models import Payment
-from apps.payments.services import record_manual_payment, register_webhook_event
+from apps.payments.services import initialize_contribution_payment, process_payment_webhook, record_manual_payment, register_webhook_event
+from apps.payments.statuses import PaymentMethod, PaymentStatus
 from apps.workspaces.models import Workspace
 
 
@@ -69,6 +73,118 @@ def test_webhook_event_is_idempotent():
     assert first.id == second.id
     assert created_first is True
     assert created_second is False
+
+
+@pytest.mark.django_db
+def test_online_payment_initialization_is_idempotent_and_blocks_overpayment(django_user_model):
+    owner = django_user_model.objects.create_user(username="online@example.com", email="online@example.com", password="pass")
+    workspace = Workspace.objects.create(name="Association Online", slug="association-online", organization_type="association", owner=owner)
+    member = Member.objects.create(workspace=workspace, membership_number="A-000010", first_name="Nadia", last_name="Kone")
+    campaign = create_campaign(workspace=workspace, actor=owner, name="Avril 2026", amount=Decimal("5000.00"))
+    contribution = Contribution.objects.create(workspace=workspace, campaign=campaign, member=member, amount_due=Decimal("5000.00"))
+
+    first = initialize_contribution_payment(
+        workspace=workspace,
+        actor=owner,
+        contribution=contribution,
+        amount=Decimal("2000.00"),
+        payment_method=PaymentMethod.MOBILE_MONEY,
+        idempotency_key="online-1",
+    )
+    second = initialize_contribution_payment(
+        workspace=workspace,
+        actor=owner,
+        contribution=contribution,
+        amount=Decimal("2000.00"),
+        payment_method=PaymentMethod.MOBILE_MONEY,
+        idempotency_key="online-1",
+    )
+
+    assert first.id == second.id
+    assert first.status == PaymentStatus.PROCESSING
+    assert first.reference.startswith("NOVEX-")
+
+    with pytest.raises(ValueError):
+        initialize_contribution_payment(
+            workspace=workspace,
+            actor=owner,
+            contribution=contribution,
+            amount=Decimal("6000.00"),
+            payment_method=PaymentMethod.MOBILE_MONEY,
+            idempotency_key="online-too-high",
+        )
+
+
+@pytest.mark.django_db
+def test_signed_webhook_confirms_payment_once(monkeypatch, django_user_model):
+    monkeypatch.setenv("NOVEX_PAYMENT_WEBHOOK_SECRET", "unit-secret")
+    owner = django_user_model.objects.create_user(username="webhook@example.com", email="webhook@example.com", password="pass")
+    workspace = Workspace.objects.create(name="Association Webhook", slug="association-webhook", organization_type="association", owner=owner)
+    member = Member.objects.create(workspace=workspace, membership_number="A-000011", first_name="Ami", last_name="Yao")
+    campaign = create_campaign(workspace=workspace, actor=owner, name="Mai 2026", amount=Decimal("5000.00"))
+    contribution = Contribution.objects.create(workspace=workspace, campaign=campaign, member=member, amount_due=Decimal("5000.00"))
+    payment = initialize_contribution_payment(
+        workspace=workspace,
+        actor=owner,
+        contribution=contribution,
+        amount=Decimal("5000.00"),
+        payment_method=PaymentMethod.MOBILE_MONEY,
+        idempotency_key="online-2",
+    )
+    payload = {
+        "reference": payment.reference,
+        "provider_transaction_id": "txn-001",
+        "status": "success",
+        "amount": "5000.00",
+        "currency": "XOF",
+    }
+    body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    signature = hmac.new(b"unit-secret", body, hashlib.sha256).hexdigest()
+
+    event, confirmed_payment, processed = process_payment_webhook(provider_code="env_hmac", event_id="evt-001", payload=payload, signature=signature)
+    duplicate_event, duplicate_payment, duplicate_processed = process_payment_webhook(provider_code="env_hmac", event_id="evt-001", payload=payload, signature=signature)
+    contribution.refresh_from_db()
+
+    assert event.signature_valid is True
+    assert processed is True
+    assert confirmed_payment.status == PaymentStatus.SUCCESS
+    assert contribution.amount_paid == Decimal("5000.00")
+    assert duplicate_event.id == event.id
+    assert duplicate_payment is None
+    assert duplicate_processed is False
+
+
+@pytest.mark.django_db
+def test_webhook_with_invalid_signature_does_not_update_payment(monkeypatch, django_user_model):
+    monkeypatch.setenv("NOVEX_PAYMENT_WEBHOOK_SECRET", "unit-secret")
+    owner = django_user_model.objects.create_user(username="bad-webhook@example.com", email="bad-webhook@example.com", password="pass")
+    workspace = Workspace.objects.create(name="Association Bad Webhook", slug="association-bad-webhook", organization_type="association", owner=owner)
+    member = Member.objects.create(workspace=workspace, membership_number="A-000012", first_name="Koffi", last_name="Kouame")
+    campaign = create_campaign(workspace=workspace, actor=owner, name="Juin 2026", amount=Decimal("5000.00"))
+    contribution = Contribution.objects.create(workspace=workspace, campaign=campaign, member=member, amount_due=Decimal("5000.00"))
+    payment = initialize_contribution_payment(
+        workspace=workspace,
+        actor=owner,
+        contribution=contribution,
+        amount=Decimal("5000.00"),
+        payment_method=PaymentMethod.MOBILE_MONEY,
+        idempotency_key="online-3",
+    )
+
+    event, confirmed_payment, processed = process_payment_webhook(
+        provider_code="env_hmac",
+        event_id="evt-bad-001",
+        payload={"reference": payment.reference, "status": "success", "amount": "5000.00", "currency": "XOF"},
+        signature="invalid",
+    )
+    payment.refresh_from_db()
+    contribution.refresh_from_db()
+
+    assert event.signature_valid is False
+    assert confirmed_payment is None
+    assert processed is False
+    assert payment.status == PaymentStatus.PROCESSING
+    assert contribution.amount_paid == Decimal("0.00")
 
 
 @pytest.mark.django_db

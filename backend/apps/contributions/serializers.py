@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from apps.members.models import Member
+from apps.payments.statuses import PaymentMethod
 from .models import Contribution, ContributionCampaign, ContributionCategoryAmount, ContributionExportRequest, ContributionRecoverySettings, ContributionReminder, ReminderRule
 from .statuses import CampaignTargetMode, ContributionExportFormat, ContributionReminderChannel, ContributionReminderKind
 
@@ -118,7 +119,22 @@ class ContributionManualPaymentSerializer(serializers.Serializer):
     amount = serializers.DecimalField(max_digits=14, decimal_places=2)
     idempotency_key = serializers.CharField(max_length=160)
     paid_at = serializers.DateTimeField(required=False)
-    payment_method = serializers.ChoiceField(choices=["cash", "external_mobile_money", "bank_transfer", "check", "other"], required=False)
+    payment_method = serializers.ChoiceField(
+        choices=[
+            ("cash", "Especes"),
+            ("external_mobile_money", "Mobile Money externe"),
+            ("bank_transfer", "Virement"),
+            ("check", "Cheque"),
+            ("other", "Autre"),
+            (PaymentMethod.MANUAL, "Manuel"),
+            (PaymentMethod.CASH, "Especes"),
+            (PaymentMethod.EXTERNAL_MOBILE_MONEY, "Mobile Money externe"),
+            (PaymentMethod.BANK_TRANSFER, "Virement"),
+            (PaymentMethod.CHECK, "Cheque"),
+            (PaymentMethod.OTHER, "Autre"),
+        ],
+        required=False,
+    )
     document_reference = serializers.CharField(max_length=180, required=False, allow_blank=True)
 
     def validate_amount(self, value):

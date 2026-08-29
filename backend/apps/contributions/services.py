@@ -205,10 +205,20 @@ def record_manual_contribution_payment(
     amount: Decimal,
     idempotency_key: str,
     paid_at=None,
-    payment_method: str = "manual",
+    payment_method: str = "MANUAL",
     document_reference: str = "",
 ):
     from apps.payments.services import record_manual_payment
+    from apps.payments.statuses import PaymentMethod
+
+    method_map = {
+        "manual": PaymentMethod.MANUAL,
+        "cash": PaymentMethod.CASH,
+        "external_mobile_money": PaymentMethod.EXTERNAL_MOBILE_MONEY,
+        "bank_transfer": PaymentMethod.BANK_TRANSFER,
+        "check": PaymentMethod.CHECK,
+        "other": PaymentMethod.OTHER,
+    }
 
     payment = record_manual_payment(
         workspace=contribution.workspace,
@@ -218,7 +228,7 @@ def record_manual_contribution_payment(
         amount=amount,
         paid_at=paid_at,
         idempotency_key=idempotency_key,
-        payment_method=payment_method,
+        payment_method=method_map.get(payment_method, payment_method),
         metadata={"document_reference": document_reference},
     )
     AuditLog.objects.create(

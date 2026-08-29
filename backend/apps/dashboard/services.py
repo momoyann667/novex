@@ -54,10 +54,7 @@ def get_dashboard_overview(*, workspace: Workspace, period_code: str | None, use
 
     zero = Decimal("0")
     contribution_totals = contribution_stats(workspace)
-    successful_payments = (
-        Payment.objects.filter(workspace=workspace, status=Payment.Status.SUCCESSFUL).aggregate(total=Sum("amount"))["total"]
-        or zero
-    )
+    successful_payments = Payment.objects.filter(workspace=workspace, status=Payment.Status.SUCCESS).aggregate(total=Sum("amount"))["total"] or zero
     expenses = zero
     project_totals = workspace_project_stats(workspace)
     event_totals = workspace_event_stats(workspace)

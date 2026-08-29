@@ -54,7 +54,12 @@ GET  /api/v1/contributions/reminder-history/
 GET  /api/v1/contributions/exports/
 POST /api/v1/contributions/exports/
 GET  /api/v1/payments/
+GET  /api/v1/payments/:id/
+GET  /api/v1/payments/dashboard/
+GET  /api/v1/payments/result/?reference=:reference
+POST /api/v1/payments/initialize/
 POST /api/v1/payments/manual/
+POST /api/v1/payments/:id/refund/
 POST /api/v1/payments/webhooks/:provider/
 GET  /api/v1/projects/
 POST /api/v1/projects/
