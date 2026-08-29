@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.db import transaction
 from django.utils import timezone
 from django.utils.text import slugify
@@ -35,5 +37,5 @@ def create_workspace_for_owner(*, owner, name: str, organization_type: str, **at
     WorkspaceMembership.objects.create(user=owner, workspace=workspace, role=roles["OWNER"], status=WorkspaceMembership.Status.ACTIVE, joined_at=timezone.now())
     plan, _ = Plan.objects.get_or_create(code=Plan.Code.FREEMIUM, defaults={"name": "Freemium"})
     now = timezone.now()
-    Subscription.objects.create(workspace=workspace, plan=plan, status=Subscription.Status.TRIAL, trial_started_at=now, trial_ends_at=now + timezone.timedelta(days=14))
+    Subscription.objects.create(workspace=workspace, plan=plan, status=Subscription.Status.TRIAL, trial_started_at=now, trial_ends_at=now + timedelta(days=14))
     return workspace

@@ -22,6 +22,7 @@ POST /api/v1/workspaces/
 GET  /api/v1/workspaces/:slug/
 GET  /api/v1/members/
 POST /api/v1/members/
+GET  /api/v1/dashboard/overview/
 ```
 
 Les endpoints workspace doivent recevoir un contexte workspace fiable, puis le backend doit verifier le membership actif. Le frontend ne prouve jamais seul l'autorisation.

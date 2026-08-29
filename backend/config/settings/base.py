@@ -22,6 +22,7 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "apps.users",
     "apps.workspaces",
+    "apps.dashboard",
     "apps.members",
     "apps.subscriptions",
     "apps.audit_logs",
