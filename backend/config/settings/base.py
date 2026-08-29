@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     "apps.contributions",
     "apps.payments",
     "apps.projects",
+    "apps.events",
     "apps.subscriptions",
     "apps.audit_logs",
 ]

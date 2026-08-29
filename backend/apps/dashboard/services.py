@@ -7,6 +7,7 @@ from django.utils import timezone
 from apps.members.models import Member
 from apps.contributions.models import Contribution
 from apps.contributions.services import contribution_stats
+from apps.events.services import workspace_event_stats
 from apps.payments.models import Payment
 from apps.projects.services import workspace_project_stats
 from apps.workspaces.models import Workspace
@@ -59,6 +60,7 @@ def get_dashboard_overview(*, workspace: Workspace, period_code: str | None, use
     )
     expenses = zero
     project_totals = workspace_project_stats(workspace)
+    event_totals = workspace_event_stats(workspace)
     net_flow = successful_payments - expenses
     finance = {
         "current_balance": format_money(zero, workspace.currency),
@@ -97,7 +99,7 @@ def get_dashboard_overview(*, workspace: Workspace, period_code: str | None, use
                 "at_risk": project_totals["delayed_projects"],
                 "late": project_totals["delayed_projects"],
             },
-            "events": {"upcoming": 0},
+            "events": {"upcoming": event_totals["upcoming_events"]},
             "documents": {"recent": 0},
         },
         "series": {

@@ -43,6 +43,26 @@ GET  /api/v1/projects/:id/documents/
 POST /api/v1/projects/:id/documents/
 GET  /api/v1/projects/:id/activity/
 GET  /api/v1/projects/:id/reports/
+GET  /api/v1/events/
+POST /api/v1/events/
+GET  /api/v1/events/:id/
+PATCH /api/v1/events/:id/
+DELETE /api/v1/events/:id/
+GET  /api/v1/events/overview/
+GET  /api/v1/events/calendar/?start=:date&end=:date
+GET  /api/v1/events/:id/stats/
+GET  /api/v1/events/:id/participants/
+POST /api/v1/events/:id/participants/
+POST /api/v1/events/:id/rsvp/
+POST /api/v1/events/:id/attendance/
+GET  /api/v1/events/:id/expenses/
+POST /api/v1/events/:id/expenses/
+GET  /api/v1/events/:id/revenues/
+POST /api/v1/events/:id/revenues/
+GET  /api/v1/events/:id/documents/
+POST /api/v1/events/:id/documents/
+GET  /api/v1/events/:id/activity/
+GET  /api/v1/events/:id/report/
 ```
 
 Les endpoints workspace doivent recevoir un contexte workspace fiable, puis le backend doit verifier le membership actif. Le frontend ne prouve jamais seul l'autorisation.

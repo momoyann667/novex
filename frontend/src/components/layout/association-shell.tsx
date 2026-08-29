@@ -11,7 +11,7 @@ const nav = [
   { label: "Recettes", path: "revenues", icon: Wallet, permission: "revenues.view" },
   { label: "Depenses", path: "expenses", icon: Wallet, permission: "expenses.view" },
   { label: "Projets", path: "projects", icon: FolderKanban, permission: "projects.view", plan: "NOVEX_START" },
-  { label: "Evenements", path: "events", icon: Calendar, permission: "events.view" },
+  { label: "Evenements", path: "events", icon: Calendar, permission: "events.view", plan: "NOVEX_START" },
   { label: "Documents", path: "documents", icon: FileText, permission: "documents.view" },
   { label: "Rapports", path: "reports", icon: FileText, permission: "reports.view", plan: "NOVEX_PRO" },
   { label: "Assistant IA", path: "assistant", icon: Bot, permission: "assistant.view", plan: "NOVEX_PRO" },
