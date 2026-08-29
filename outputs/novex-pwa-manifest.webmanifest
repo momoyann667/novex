@@ -1,0 +1,48 @@
+{
+  "name": "NOVEX",
+  "short_name": "NOVEX",
+  "description": "NOVEX - gestion moderne des associations, syndicats, ONG et organisations communautaires.",
+  "start_url": "./novex-pwa-app-shell.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#0b4ed8",
+  "background_color": "#f6f8fb",
+  "categories": ["business", "finance", "productivity"],
+  "lang": "fr-CI",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "./novex-icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./novex-icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./novex-icon-maskable.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "Ouvrir le tableau de bord",
+      "url": "./novex-pwa-app-shell.html?route=dashboard"
+    },
+    {
+      "name": "Cotisations",
+      "short_name": "Cotisations",
+      "description": "Ouvrir les cotisations",
+      "url": "./novex-pwa-app-shell.html?route=contributions"
+    }
+  ]
+}

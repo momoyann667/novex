@@ -1,0 +1,49 @@
+{
+  "association": {
+    "basePath": "/app/:workspace",
+    "desktop": [
+      { "key": "dashboard", "label": "Dashboard", "path": "dashboard", "permission": "workspace.view", "icon": "home" },
+      { "key": "members", "label": "Membres", "path": "members", "permission": "members.view", "icon": "users" },
+      { "key": "contributions", "label": "Cotisations", "path": "contributions", "permission": "contributions.view", "icon": "credit-card" },
+      { "key": "revenues", "label": "Recettes", "path": "revenues", "permission": "revenues.view", "icon": "arrow-down" },
+      { "key": "expenses", "label": "Depenses", "path": "expenses", "permission": "expenses.view", "icon": "arrow-up" },
+      { "key": "projects", "label": "Projets", "path": "projects", "permission": "projects.view", "icon": "folder" },
+      { "key": "events", "label": "Evenements", "path": "events", "permission": "events.view", "icon": "calendar" },
+      { "key": "documents", "label": "Documents", "path": "documents", "permission": "documents.view", "icon": "file" },
+      { "key": "reports", "label": "Rapports", "path": "reports", "permission": "reports.view", "icon": "chart" },
+      { "key": "ai", "label": "Assistant IA", "path": "assistant", "permission": "ai_assistant", "entitlement": "ai_assistant", "icon": "spark" },
+      { "key": "settings", "label": "Parametres", "path": "settings", "permission": "settings.view", "icon": "settings" }
+    ],
+    "mobilePrimary": [
+      { "key": "dashboard", "label": "Accueil", "path": "dashboard", "permission": "workspace.view", "icon": "home" },
+      { "key": "members", "label": "Membres", "path": "members", "permission": "members.view", "icon": "users" },
+      { "key": "contributions", "label": "Cotisations", "path": "contributions", "permission": "contributions.view", "icon": "credit-card" },
+      { "key": "finance", "label": "Finance", "path": "finance", "permission": "revenues.view", "icon": "wallet" },
+      { "key": "more", "label": "Plus", "path": "more", "permission": "workspace.view", "icon": "more" }
+    ],
+    "mobileMore": ["projects", "events", "documents", "reports", "ai", "settings"],
+    "quickActions": [
+      { "key": "member.create", "label": "Ajouter un membre", "permission": "members.create" },
+      { "key": "expense.create", "label": "Ajouter une depense", "permission": "expenses.create" },
+      { "key": "revenue.create", "label": "Ajouter une recette", "permission": "revenues.create" },
+      { "key": "contribution.record", "label": "Enregistrer une cotisation", "permission": "contributions.create" },
+      { "key": "project.create", "label": "Creer un projet", "permission": "projects.create" },
+      { "key": "event.create", "label": "Creer un evenement", "permission": "events.create" }
+    ]
+  },
+  "admin": {
+    "basePath": "/admin",
+    "desktop": [
+      { "key": "dashboard", "label": "Dashboard", "path": "dashboard", "permission": "admin.dashboard.view" },
+      { "key": "associations", "label": "Associations", "path": "associations", "permission": "admin.associations.view" },
+      { "key": "users", "label": "Utilisateurs", "path": "users", "permission": "admin.users.view" },
+      { "key": "subscriptions", "label": "Abonnements", "path": "subscriptions", "permission": "admin.subscriptions.view" },
+      { "key": "payments", "label": "Paiements", "path": "payments", "permission": "admin.payments.view" },
+      { "key": "revenues", "label": "Revenus", "path": "revenues", "permission": "admin.revenues.view" },
+      { "key": "analytics", "label": "Analytics", "path": "analytics", "permission": "admin.analytics.view" },
+      { "key": "support", "label": "Support", "path": "support", "permission": "admin.support.view" },
+      { "key": "notifications", "label": "Notifications", "path": "notifications", "permission": "admin.notifications.manage" },
+      { "key": "configuration", "label": "Configuration", "path": "configuration", "permission": "admin.configuration.view" }
+    ]
+  }
+}

@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NOVEX - UI Foundation Preview</title>
+    <link rel="stylesheet" href="./novex-design-system.css">
+    <style>
+      .preview-page {
+        display: grid;
+        gap: var(--nx-space-10);
+        padding: var(--nx-space-8);
+      }
+
+      .preview-section {
+        display: grid;
+        gap: var(--nx-space-5);
+      }
+
+      .preview-row {
+        align-items: start;
+        display: grid;
+        gap: var(--nx-space-5);
+        grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
+      }
+
+      .preview-chip {
+        background: var(--nx-surface-muted);
+        border-radius: var(--nx-radius-pill);
+        color: var(--nx-text-muted);
+        display: inline-flex;
+        font-size: 12px;
+        font-weight: 700;
+        padding: var(--nx-space-1) var(--nx-space-3);
+        width: fit-content;
+      }
+
+      .preview-admin {
+        border: 1px solid var(--nx-border-subtle);
+        border-radius: var(--nx-radius-lg);
+        box-shadow: var(--nx-shadow-sm);
+        overflow: hidden;
+      }
+
+      .preview-chart {
+        align-items: end;
+        display: flex;
+        gap: var(--nx-space-2);
+        height: 180px;
+        padding-top: var(--nx-space-6);
+      }
+
+      .preview-chart span {
+        background: linear-gradient(180deg, var(--nx-primary-500), var(--nx-info-500));
+        border-radius: var(--nx-radius-sm) var(--nx-radius-sm) 0 0;
+        flex: 1;
+        min-width: 20px;
+      }
+
+      @media (max-width: 980px) {
+        .preview-page {
+          padding: var(--nx-space-4);
+        }
+
+        .preview-row {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="preview-page">
+      <section class="preview-section">
+        <span class="preview-chip">Design System 02</span>
+        <div>
+          <h1 class="nx-display">NOVEX UI Foundation</h1>
+          <p class="nx-body">Base visuelle premium, tech, data et simple pour les espaces Association et NOVEX Admin.</p>
+        </div>
+      </section>
+
+      <section class="preview-row">
+        <article class="nx-mobile-frame" aria-label="Apercu mobile association">
+          <header class="nx-mobile-header">
+            <div>
+              <strong>NOVEX</strong>
+              <div class="nx-caption">Association Lumiere</div>
+            </div>
+            <button class="nx-button nx-button-ghost" aria-label="Notifications">Alertes</button>
+          </header>
+          <div class="nx-main">
+            <div class="nx-pwa-banner">
+              <span>Donnees a jour</span>
+              <button class="nx-button nx-button-link">Details</button>
+            </div>
+            <section class="nx-card nx-kpi">
+              <div class="nx-kpi-head">
+                <span class="nx-kpi-title">Solde</span>
+                <span class="nx-badge nx-badge-active">Actif</span>
+              </div>
+              <div class="nx-money">12 500 000 FCFA</div>
+              <div class="nx-small nx-trend-up">+8,4 % vs mois precedent</div>
+              <div class="nx-sparkline" aria-hidden="true"></div>
+            </section>
+            <section class="nx-card">
+              <h2 class="nx-h3">Actions rapides</h2>
+              <div class="nx-control-row" style="flex-wrap: wrap; margin-top: var(--nx-space-4);">
+                <button class="nx-button nx-button-primary">Membre</button>
+                <button class="nx-button nx-button-outline">Depense</button>
+                <button class="nx-button nx-button-outline">Recette</button>
+              </div>
+            </section>
+            <section class="nx-empty">
+              <strong>Aucun projet</strong>
+              <span class="nx-caption">Vous n'avez encore cree aucun projet.</span>
+              <button class="nx-button nx-button-primary">Creer un projet</button>
+            </section>
+          </div>
+          <nav class="nx-bottom-nav" aria-label="Navigation mobile association">
+            <a class="is-active" href="#">Accueil</a>
+            <a href="#">Membres</a>
+            <a href="#">Cotisations</a>
+            <a href="#">Finance</a>
+            <a href="#">Plus</a>
+          </nav>
+        </article>
+
+        <article class="preview-admin" aria-label="Apercu desktop admin">
+          <div class="nx-admin-shell">
+            <aside class="nx-sidebar">
+              <strong>NOVEX ADMIN</strong>
+              <nav class="nx-nav" aria-label="Navigation admin">
+                <a class="nx-nav-item is-active" href="#">Dashboard</a>
+                <a class="nx-nav-item" href="#">Associations</a>
+                <a class="nx-nav-item" href="#">Utilisateurs</a>
+                <a class="nx-nav-item" href="#">Abonnements</a>
+                <a class="nx-nav-item" href="#">Paiements</a>
+                <a class="nx-nav-item" href="#">Analytics</a>
+                <a class="nx-nav-item" href="#">Support</a>
+              </nav>
+            </aside>
+            <section>
+              <header class="nx-header">
+                <div>
+                  <h2 class="nx-h2">Dashboard</h2>
+                  <span class="nx-caption">Pilotage interne NOVEX</span>
+                </div>
+                <button class="nx-button nx-button-outline">Exporter</button>
+              </header>
+              <div class="nx-main">
+                <div class="nx-dashboard-grid">
+                  <div class="nx-card nx-kpi nx-col-3">
+                    <span class="nx-kpi-title">MRR</span>
+                    <span class="nx-money">8 240 000 FCFA</span>
+                    <span class="nx-small nx-trend-up">+12,1 %</span>
+                  </div>
+                  <div class="nx-card nx-kpi nx-col-3">
+                    <span class="nx-kpi-title">Associations</span>
+                    <span class="nx-money">418</span>
+                    <span class="nx-small nx-trend-up">+28 ce mois</span>
+                  </div>
+                  <div class="nx-card nx-kpi nx-col-3">
+                    <span class="nx-kpi-title">Paiements</span>
+                    <span class="nx-money">96,2 %</span>
+                    <span class="nx-small nx-trend-up">Taux de succes</span>
+                  </div>
+                  <div class="nx-card nx-kpi nx-col-3">
+                    <span class="nx-kpi-title">Support</span>
+                    <span class="nx-money">14</span>
+                    <span class="nx-small nx-trend-down">Tickets ouverts</span>
+                  </div>
+                  <div class="nx-card nx-col-8">
+                    <h3 class="nx-h3">Evolution des revenus</h3>
+                    <div class="preview-chart" aria-label="Graphique revenus">
+                      <span style="height: 42%;"></span>
+                      <span style="height: 58%;"></span>
+                      <span style="height: 49%;"></span>
+                      <span style="height: 72%;"></span>
+                      <span style="height: 65%;"></span>
+                      <span style="height: 86%;"></span>
+                    </div>
+                  </div>
+                  <div class="nx-table-wrap nx-col-4">
+                    <div class="nx-table-toolbar">
+                      <strong>Abonnements</strong>
+                      <span class="nx-badge nx-badge-pending">A surveiller</span>
+                    </div>
+                    <table class="nx-table">
+                      <thead>
+                        <tr>
+                          <th>Plan</th>
+                          <th>Clients</th>
+                          <th>Statut</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td data-label="Plan">Freemium</td>
+                          <td data-label="Clients">126</td>
+                          <td data-label="Statut"><span class="nx-badge nx-badge-pending">Trial</span></td>
+                        </tr>
+                        <tr>
+                          <td data-label="Plan">Start</td>
+                          <td data-label="Clients">204</td>
+                          <td data-label="Statut"><span class="nx-badge nx-badge-paid">Actif</span></td>
+                        </tr>
+                        <tr>
+                          <td data-label="Plan">Pro</td>
+                          <td data-label="Clients">88</td>
+                          <td data-label="Statut"><span class="nx-badge nx-badge-paid">Actif</span></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </article>
+      </section>
+
+      <section class="preview-section">
+        <h2 class="nx-h2">Composants de base</h2>
+        <div class="nx-dashboard-grid">
+          <div class="nx-card nx-col-4">
+            <h3 class="nx-h3">Buttons</h3>
+            <div class="nx-control-row" style="flex-wrap: wrap; margin-top: var(--nx-space-4);">
+              <button class="nx-button nx-button-primary">Primary</button>
+              <button class="nx-button nx-button-outline">Outline</button>
+              <button class="nx-button nx-button-ghost">Ghost</button>
+              <button class="nx-button nx-button-destructive">Danger</button>
+            </div>
+          </div>
+          <div class="nx-card nx-col-4">
+            <h3 class="nx-h3">Form</h3>
+            <label class="nx-field">
+              <span class="nx-label">Nom du membre</span>
+              <input class="nx-input" placeholder="Ex. Awa Kouame">
+              <span class="nx-helper">Texte d'aide ou message de validation.</span>
+            </label>
+          </div>
+          <div class="nx-card nx-col-4">
+            <h3 class="nx-h3">Loading</h3>
+            <div style="display: grid; gap: var(--nx-space-3); margin-top: var(--nx-space-4);">
+              <div class="nx-skeleton" style="height: 16px; width: 80%;"></div>
+              <div class="nx-skeleton" style="height: 16px; width: 64%;"></div>
+              <div class="nx-spinner" aria-label="Chargement"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

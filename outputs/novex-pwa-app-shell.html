@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0b4ed8">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="NOVEX">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="description" content="NOVEX - gestion moderne des associations.">
+    <link rel="manifest" href="./novex-pwa-manifest.webmanifest">
+    <link rel="icon" href="./novex-icon-192.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="./novex-icon-192.svg">
+    <link rel="stylesheet" href="./novex-design-system.css">
+    <title>NOVEX - PWA App Shell</title>
+    <style>
+      body {
+        min-height: 100vh;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      }
+
+      .pwa-shell {
+        display: grid;
+        min-height: 100vh;
+      }
+
+      .pwa-desktop {
+        display: grid;
+        grid-template-columns: 260px minmax(0, 1fr);
+        min-height: 100vh;
+      }
+
+      .pwa-mobile-bar {
+        display: none;
+      }
+
+      .pwa-status-row {
+        align-items: center;
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--nx-space-3);
+      }
+
+      .pwa-safe-bottom {
+        padding-bottom: calc(var(--nx-space-4) + env(safe-area-inset-bottom));
+      }
+
+      .pwa-more-grid {
+        display: grid;
+        gap: var(--nx-space-3);
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .pwa-module-link {
+        background: var(--nx-surface-panel);
+        border: 1px solid var(--nx-border-subtle);
+        border-radius: var(--nx-radius-md);
+        color: var(--nx-text-body);
+        padding: var(--nx-space-4);
+        text-decoration: none;
+      }
+
+      @media (max-width: 767px) {
+        .pwa-desktop {
+          grid-template-columns: 1fr;
+          padding-bottom: 76px;
+        }
+
+        .pwa-desktop .nx-sidebar {
+          display: none;
+        }
+
+        .pwa-mobile-bar {
+          background: rgba(255, 255, 255, 0.94);
+          border-top: 1px solid var(--nx-border-subtle);
+          bottom: 0;
+          display: block;
+          left: 0;
+          padding-bottom: env(safe-area-inset-bottom);
+          position: fixed;
+          right: 0;
+          z-index: 20;
+        }
+
+        .pwa-more-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="pwa-shell">
+      <div class="pwa-desktop">
+        <aside class="nx-sidebar" aria-label="Navigation association">
+          <strong>NOVEX</strong>
+          <button class="nx-button nx-button-outline" type="button">Association Lumiere</button>
+          <nav class="nx-nav">
+            <a class="nx-nav-item is-active" href="#">Dashboard</a>
+            <a class="nx-nav-item" href="#">Membres</a>
+            <a class="nx-nav-item" href="#">Cotisations</a>
+            <a class="nx-nav-item" href="#">Recettes</a>
+            <a class="nx-nav-item" href="#">Depenses</a>
+            <a class="nx-nav-item" href="#">Projets</a>
+            <a class="nx-nav-item" href="#">Evenements</a>
+            <a class="nx-nav-item" href="#">Documents</a>
+            <a class="nx-nav-item" href="#">Rapports</a>
+            <a class="nx-nav-item" href="#">Assistant IA</a>
+            <a class="nx-nav-item" href="#">Parametres</a>
+          </nav>
+        </aside>
+
+        <section>
+          <header class="nx-header">
+            <div>
+              <h1 class="nx-h2">Dashboard</h1>
+              <span class="nx-caption">App Shell PWA Association</span>
+            </div>
+            <div class="pwa-status-row">
+              <span class="nx-badge nx-badge-late" data-pwa-offline hidden>Hors connexion</span>
+              <span class="nx-badge nx-badge-pending" data-pwa-sync hidden>Synchronisation...</span>
+              <button class="nx-button nx-button-outline" type="button">Profil</button>
+            </div>
+          </header>
+
+          <main class="nx-main pwa-safe-bottom">
+            <section class="nx-card nx-card-action" data-pwa-install hidden>
+              <div class="nx-kpi-head">
+                <div>
+                  <h2 class="nx-h3">Installez NOVEX</h2>
+                  <p class="nx-body">Accedez rapidement a votre espace NOVEX depuis votre appareil.</p>
+                </div>
+                <div class="nx-control-row">
+                  <button class="nx-button nx-button-primary" type="button" data-pwa-install-button>Installer NOVEX</button>
+                  <button class="nx-button nx-button-ghost" type="button" data-pwa-install-later>Plus tard</button>
+                </div>
+              </div>
+            </section>
+
+            <section class="nx-card nx-card-warning" data-pwa-update hidden>
+              <div class="nx-kpi-head">
+                <div>
+                  <h2 class="nx-h3">Nouvelle version disponible</h2>
+                  <p class="nx-body">Une nouvelle version de NOVEX est disponible.</p>
+                </div>
+                <button class="nx-button nx-button-primary" type="button" data-pwa-update-button>Mettre a jour</button>
+              </div>
+            </section>
+
+            <section class="nx-pwa-banner">
+              <span data-pwa-status>Initialisation PWA...</span>
+              <span>NOVEX v1.0.0</span>
+            </section>
+
+            <section class="nx-dashboard-grid">
+              <article class="nx-card nx-kpi nx-col-3">
+                <span class="nx-kpi-title">Membres</span>
+                <span class="nx-money">0</span>
+                <button class="nx-button nx-button-outline" type="button">Ajouter</button>
+              </article>
+              <article class="nx-card nx-kpi nx-col-3">
+                <span class="nx-kpi-title">Cotisations</span>
+                <span class="nx-money">0 FCFA</span>
+                <button class="nx-button nx-button-outline" type="button">Creer</button>
+              </article>
+              <article class="nx-card nx-kpi nx-col-3">
+                <span class="nx-kpi-title">Projets</span>
+                <span class="nx-money">0</span>
+                <button class="nx-button nx-button-outline" type="button">Creer</button>
+              </article>
+              <article class="nx-card nx-kpi nx-col-3">
+                <span class="nx-kpi-title">Evenements</span>
+                <span class="nx-money">0</span>
+                <button class="nx-button nx-button-outline" type="button">Planifier</button>
+              </article>
+              <article class="nx-card nx-col-7">
+                <h2 class="nx-h3">Chargement progressif</h2>
+                <p class="nx-body">L'App Shell charge la navigation et la structure. Les donnees dynamiques doivent ensuite etre recuperees par API avec guards workspace.</p>
+                <div style="display: grid; gap: var(--nx-space-3); margin-top: var(--nx-space-5);">
+                  <div class="nx-skeleton" style="height: 18px; width: 84%;"></div>
+                  <div class="nx-skeleton" style="height: 18px; width: 66%;"></div>
+                  <div class="nx-skeleton" style="height: 18px; width: 74%;"></div>
+                </div>
+              </article>
+              <article class="nx-card nx-col-5">
+                <h2 class="nx-h3">Mode hors connexion</h2>
+                <p class="nx-body">Les assets et l'App Shell sont caches. Les API et donnees financieres sensibles ne sont pas mises en cache aveuglement.</p>
+                <div class="pwa-more-grid" style="margin-top: var(--nx-space-5);">
+                  <a class="pwa-module-link" href="#">Projets</a>
+                  <a class="pwa-module-link" href="#">Documents</a>
+                  <a class="pwa-module-link" href="#">Rapports</a>
+                </div>
+              </article>
+            </section>
+          </main>
+        </section>
+      </div>
+
+      <button class="nx-fab" type="button" aria-label="Actions rapides">+</button>
+
+      <nav class="pwa-mobile-bar" aria-label="Navigation mobile">
+        <div class="nx-bottom-nav">
+          <a class="is-active" href="#">Accueil</a>
+          <a href="#">Membres</a>
+          <a href="#">Cotisations</a>
+          <a href="#">Finance</a>
+          <a href="#">Plus</a>
+        </div>
+      </nav>
+    </div>
+
+    <script src="./novex-pwa-client.js"></script>
+  </body>
+</html>

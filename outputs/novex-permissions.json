@@ -1,0 +1,194 @@
+{
+  "roles": {
+    "OWNER": {
+      "label": "Proprietaire",
+      "description": "Acces complet au workspace, abonnement, utilisateurs, permissions et parametres.",
+      "permissions": ["*"]
+    },
+    "ADMIN": {
+      "label": "Administrateur",
+      "description": "Gestion generale du workspace hors transfert de propriete et facturation critique.",
+      "permissions": [
+        "workspace.view",
+        "members.view",
+        "members.create",
+        "members.update",
+        "contributions.view",
+        "contributions.create",
+        "contributions.update",
+        "revenues.view",
+        "revenues.create",
+        "expenses.view",
+        "expenses.create",
+        "expenses.approve",
+        "projects.view",
+        "projects.create",
+        "projects.update",
+        "events.view",
+        "events.create",
+        "documents.view",
+        "documents.upload",
+        "reports.view",
+        "reports.create",
+        "settings.view",
+        "settings.update",
+        "workspace_users.view",
+        "workspace_users.invite",
+        "workspace_users.update_role",
+        "audit_logs.view"
+      ]
+    },
+    "PRESIDENT": {
+      "label": "President",
+      "description": "Acces strategique, supervision et rapports.",
+      "permissions": [
+        "workspace.view",
+        "members.view",
+        "contributions.view",
+        "revenues.view",
+        "expenses.view",
+        "projects.view",
+        "events.view",
+        "documents.view",
+        "reports.view",
+        "reports.export",
+        "settings.view",
+        "audit_logs.view"
+      ]
+    },
+    "TREASURER": {
+      "label": "Tresorier",
+      "description": "Gestion financiere du workspace.",
+      "permissions": [
+        "workspace.view",
+        "members.view",
+        "contributions.view",
+        "contributions.create",
+        "contributions.update",
+        "revenues.view",
+        "revenues.create",
+        "expenses.view",
+        "expenses.create",
+        "expenses.approve",
+        "reports.view",
+        "reports.create",
+        "reports.export"
+      ]
+    },
+    "SECRETARY": {
+      "label": "Secretaire",
+      "description": "Gestion des membres, evenements, documents et communications.",
+      "permissions": [
+        "workspace.view",
+        "members.view",
+        "members.create",
+        "members.update",
+        "events.view",
+        "events.create",
+        "documents.view",
+        "documents.upload",
+        "reports.view"
+      ]
+    },
+    "PROJECT_MANAGER": {
+      "label": "Responsable projet",
+      "description": "Gestion des projets et suivi operationnel.",
+      "permissions": [
+        "workspace.view",
+        "members.view",
+        "projects.view",
+        "projects.create",
+        "projects.update",
+        "expenses.view",
+        "revenues.view",
+        "reports.view"
+      ]
+    },
+    "MEMBER": {
+      "label": "Membre utilisateur",
+      "description": "Acces limite a son espace utilisateur.",
+      "permissions": [
+        "workspace.view",
+        "members.view:self",
+        "contributions.view:self",
+        "events.view",
+        "documents.view"
+      ]
+    }
+  },
+  "admin_roles": {
+    "SUPER_ADMIN": ["*"],
+    "ADMIN": [
+      "admin.dashboard.view",
+      "admin.associations.view",
+      "admin.users.view",
+      "admin.subscriptions.view",
+      "admin.payments.view",
+      "admin.analytics.view",
+      "admin.support.view",
+      "admin.notifications.manage",
+      "admin.configuration.view"
+    ],
+    "SUPPORT": [
+      "admin.dashboard.view",
+      "admin.associations.view",
+      "admin.users.view",
+      "admin.support.view"
+    ],
+    "FINANCE": [
+      "admin.dashboard.view",
+      "admin.subscriptions.view",
+      "admin.payments.view",
+      "admin.revenues.view",
+      "admin.analytics.view"
+    ],
+    "ANALYST": [
+      "admin.dashboard.view",
+      "admin.analytics.view",
+      "admin.associations.view:readonly"
+    ]
+  },
+  "entitlements": {
+    "online_contributions": ["NOVEX_PRO"],
+    "advanced_reports": ["NOVEX_PRO"],
+    "ai_assistant": ["NOVEX_PRO"],
+    "advanced_analytics": ["NOVEX_PRO"],
+    "automations": ["NOVEX_PRO"],
+    "payment_integrations": ["NOVEX_PRO"]
+  },
+  "plan_limits": {
+    "FREEMIUM": {
+      "trial_days": 14,
+      "max_members": 50,
+      "max_users": 2,
+      "max_projects": 2,
+      "max_documents": 25,
+      "storage_limit_mb": 100,
+      "ai_requests_per_month": 0,
+      "payment_features": false,
+      "advanced_reports": false
+    },
+    "NOVEX_START": {
+      "trial_days": 0,
+      "max_members": 500,
+      "max_users": 5,
+      "max_projects": 10,
+      "max_documents": 500,
+      "storage_limit_mb": 2048,
+      "ai_requests_per_month": 50,
+      "payment_features": false,
+      "advanced_reports": false
+    },
+    "NOVEX_PRO": {
+      "trial_days": 0,
+      "max_members": 5000,
+      "max_users": 25,
+      "max_projects": 100,
+      "max_documents": 10000,
+      "storage_limit_mb": 51200,
+      "ai_requests_per_month": 1000,
+      "payment_features": true,
+      "advanced_reports": true
+    }
+  }
+}

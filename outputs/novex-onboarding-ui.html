@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NOVEX - Auth & Onboarding Preview</title>
+    <link rel="stylesheet" href="./novex-design-system.css">
+    <style>
+      body {
+        background:
+          linear-gradient(180deg, rgba(20, 99, 255, 0.08), transparent 340px),
+          var(--nx-surface-page);
+      }
+
+      .auth-preview {
+        display: grid;
+        gap: var(--nx-space-8);
+        padding: var(--nx-space-8);
+      }
+
+      .auth-grid {
+        align-items: start;
+        display: grid;
+        gap: var(--nx-space-6);
+        grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+      }
+
+      .auth-panel {
+        display: grid;
+        gap: var(--nx-space-5);
+      }
+
+      .onboarding-shell {
+        background: var(--nx-surface-panel);
+        border: 1px solid var(--nx-border-subtle);
+        border-radius: var(--nx-radius-lg);
+        box-shadow: var(--nx-shadow-sm);
+        display: grid;
+        grid-template-columns: 260px minmax(0, 1fr);
+        min-height: 620px;
+        overflow: hidden;
+      }
+
+      .step-list {
+        background: var(--nx-neutral-900);
+        color: var(--nx-text-inverse);
+        display: grid;
+        gap: var(--nx-space-3);
+        align-content: start;
+        padding: var(--nx-space-6);
+      }
+
+      .step-item {
+        align-items: center;
+        border-radius: var(--nx-radius-md);
+        color: rgba(255, 255, 255, 0.72);
+        display: flex;
+        gap: var(--nx-space-3);
+        min-height: 42px;
+        padding: 0 var(--nx-space-3);
+      }
+
+      .step-item.is-active {
+        background: rgba(255, 255, 255, 0.12);
+        color: #fff;
+        font-weight: 720;
+      }
+
+      .step-dot {
+        align-items: center;
+        border: 1px solid currentColor;
+        border-radius: 50%;
+        display: inline-flex;
+        height: 24px;
+        justify-content: center;
+        width: 24px;
+      }
+
+      .onboarding-content {
+        display: grid;
+        gap: var(--nx-space-6);
+        padding: var(--nx-space-8);
+      }
+
+      .activation-checklist {
+        display: grid;
+        gap: var(--nx-space-3);
+      }
+
+      .check-row {
+        align-items: center;
+        display: flex;
+        gap: var(--nx-space-3);
+      }
+
+      @media (max-width: 900px) {
+        .auth-preview {
+          padding: var(--nx-space-4);
+        }
+
+        .auth-grid,
+        .onboarding-shell {
+          grid-template-columns: 1fr;
+        }
+
+        .step-list {
+          display: flex;
+          overflow-x: auto;
+          padding: var(--nx-space-4);
+        }
+
+        .step-item {
+          min-width: 160px;
+        }
+
+        .onboarding-content {
+          padding: var(--nx-space-5);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="auth-preview">
+      <section>
+        <h1 class="nx-display">Acces NOVEX</h1>
+        <p class="nx-body">Inscription, verification, onboarding et activation Freemium 14 jours.</p>
+      </section>
+
+      <section class="auth-grid">
+        <form class="nx-card auth-panel">
+          <div>
+            <h2 class="nx-h2">Creer mon compte</h2>
+            <p class="nx-caption">Les champs sont concus pour une PWA mobile et une validation serveur.</p>
+          </div>
+          <label class="nx-field">
+            <span class="nx-label">Prenom</span>
+            <input class="nx-input" autocomplete="given-name" placeholder="Awa">
+          </label>
+          <label class="nx-field">
+            <span class="nx-label">Nom</span>
+            <input class="nx-input" autocomplete="family-name" placeholder="Kouame">
+          </label>
+          <label class="nx-field">
+            <span class="nx-label">Email</span>
+            <input class="nx-input" type="email" autocomplete="email" placeholder="awa@example.com">
+          </label>
+          <label class="nx-field">
+            <span class="nx-label">Telephone</span>
+            <input class="nx-input" type="tel" autocomplete="tel" placeholder="+225 07 00 00 00 00">
+          </label>
+          <label class="nx-field">
+            <span class="nx-label">Mot de passe</span>
+            <input class="nx-input" type="password" autocomplete="new-password">
+            <span class="nx-helper">8 caracteres minimum, au moins une lettre et un chiffre.</span>
+          </label>
+          <label class="nx-control-row nx-small">
+            <input class="nx-checkbox" type="checkbox">
+            <span>J'accepte les Conditions d'utilisation et la Politique de confidentialite de NOVEX.</span>
+          </label>
+          <button class="nx-button nx-button-primary" type="button">Creer mon compte</button>
+        </form>
+
+        <section class="onboarding-shell" aria-label="Apercu onboarding">
+          <aside class="step-list">
+            <strong>NOVEX</strong>
+            <div class="step-item is-active"><span class="step-dot">1</span>Bienvenue</div>
+            <div class="step-item"><span class="step-dot">2</span>Organisation</div>
+            <div class="step-item"><span class="step-dot">3</span>Profil</div>
+            <div class="step-item"><span class="step-dot">4</span>Configuration</div>
+            <div class="step-item"><span class="step-dot">5</span>Membres</div>
+            <div class="step-item"><span class="step-dot">6</span>Finalisation</div>
+          </aside>
+          <div class="onboarding-content">
+            <span class="nx-badge nx-badge-pending">Etape 2 sur 6</span>
+            <div>
+              <h2 class="nx-h1">Creer votre organisation</h2>
+              <p class="nx-body">Une configuration progressive, sans grand formulaire bloqueur.</p>
+            </div>
+            <div class="nx-dashboard-grid">
+              <label class="nx-field nx-col-7">
+                <span class="nx-label">Nom de l'organisation</span>
+                <input class="nx-input" placeholder="Association des Jeunes Entrepreneurs de Cocody">
+              </label>
+              <label class="nx-field nx-col-5">
+                <span class="nx-label">Type</span>
+                <select class="nx-select">
+                  <option>Association</option>
+                  <option>Syndicat</option>
+                  <option>ONG</option>
+                  <option>Mutuelle</option>
+                  <option>Cooperative</option>
+                  <option>Fondation</option>
+                </select>
+              </label>
+              <label class="nx-field nx-col-7">
+                <span class="nx-label">Ville</span>
+                <input class="nx-input" placeholder="Abidjan">
+              </label>
+              <label class="nx-field nx-col-5">
+                <span class="nx-label">Devise</span>
+                <input class="nx-input" value="XOF - FCFA">
+              </label>
+            </div>
+            <section class="nx-card nx-card-action">
+              <div class="nx-kpi-head">
+                <div>
+                  <h3 class="nx-h3">Freemium active automatiquement</h3>
+                  <p class="nx-caption">Le serveur cree le trial de 14 jours lors de la creation du workspace.</p>
+                </div>
+                <span class="nx-badge nx-badge-active">14 jours</span>
+              </div>
+            </section>
+            <section class="nx-card">
+              <div class="nx-kpi-head">
+                <h3 class="nx-h3">Votre organisation est configuree a 40 %</h3>
+                <button class="nx-button nx-button-link">Masquer</button>
+              </div>
+              <div class="nx-progress" aria-label="Progression onboarding"><span style="width: 40%;"></span></div>
+              <div class="activation-checklist">
+                <div class="check-row"><span class="nx-badge nx-badge-active">fait</span> Organisation creee</div>
+                <div class="check-row"><span class="nx-badge nx-badge-active">fait</span> Profil complete</div>
+                <div class="check-row"><span class="nx-badge nx-badge-draft">a faire</span> Ajouter des membres</div>
+                <div class="check-row"><span class="nx-badge nx-badge-draft">a faire</span> Configurer les cotisations</div>
+              </div>
+            </section>
+            <div class="nx-control-row" style="justify-content: flex-end;">
+              <button class="nx-button nx-button-outline">Retour</button>
+              <button class="nx-button nx-button-primary">Continuer</button>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

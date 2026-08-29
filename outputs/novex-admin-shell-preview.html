@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="./novex-design-system.css">
+    <link rel="stylesheet" href="./novex-app-shell.css">
+    <title>NOVEX ADMIN - Shell</title>
+  </head>
+  <body>
+    <section class="nx-admin-app-shell">
+      <aside class="nx-sidebar" aria-label="Navigation NOVEX ADMIN">
+        <div class="nx-brand-lockup">
+          <span class="nx-brand-mark">N</span>
+          <strong>NOVEX ADMIN</strong>
+        </div>
+        <nav class="nx-nav">
+          <a class="nx-nav-item is-active" href="#">Dashboard</a>
+          <a class="nx-nav-item" href="#">Associations</a>
+          <a class="nx-nav-item" href="#">Utilisateurs</a>
+          <a class="nx-nav-item" href="#">Abonnements</a>
+          <a class="nx-nav-item" href="#">Paiements</a>
+          <a class="nx-nav-item" href="#">Revenus</a>
+          <a class="nx-nav-item" href="#">Analytics</a>
+          <a class="nx-nav-item" href="#">Support</a>
+          <a class="nx-nav-item" href="#">Notifications</a>
+          <a class="nx-nav-item" href="#">Configuration</a>
+        </nav>
+      </aside>
+      <section>
+        <header class="nx-admin-header-v2">
+          <div>
+            <h1 class="nx-h2">NOVEX ADMIN</h1>
+            <span class="nx-caption">Back-office interne, separe des workspaces association.</span>
+          </div>
+          <button class="nx-global-search" type="button">
+            <span>Rechercher associations, utilisateurs, paiements...</span>
+            <span class="nx-kbd">Ctrl K</span>
+          </button>
+          <div class="nx-header-actions">
+            <button class="nx-icon-button" type="button" aria-label="Notifications">!</button>
+            <button class="nx-icon-button" type="button" aria-label="Compte admin">SA</button>
+          </div>
+        </header>
+        <main class="nx-shell-content">
+          <section class="nx-page-header">
+            <div>
+              <h2 class="nx-h1">Pilotage interne</h2>
+              <p class="nx-body">Layout desktop-first pour KPI, tableaux, analytics et support.</p>
+            </div>
+            <div class="nx-control-row">
+              <button class="nx-button nx-button-outline" type="button">Exporter</button>
+              <button class="nx-button nx-button-primary" type="button">Filtrer</button>
+            </div>
+          </section>
+          <section class="nx-dashboard-grid">
+            <article class="nx-card nx-kpi nx-col-3"><span class="nx-kpi-title">Associations</span><span class="nx-money">418</span><span class="nx-caption">Total clients</span></article>
+            <article class="nx-card nx-kpi nx-col-3"><span class="nx-kpi-title">MRR</span><span class="nx-money">8 240 000 FCFA</span><span class="nx-caption">Revenus mensuels</span></article>
+            <article class="nx-card nx-kpi nx-col-3"><span class="nx-kpi-title">Paiements</span><span class="nx-money">96,2 %</span><span class="nx-caption">Taux de succes</span></article>
+            <article class="nx-card nx-kpi nx-col-3"><span class="nx-kpi-title">Support</span><span class="nx-money">14</span><span class="nx-caption">Tickets ouverts</span></article>
+            <section class="nx-table-wrap nx-col-12">
+              <div class="nx-table-toolbar">
+                <strong>Associations recentes</strong>
+                <span class="nx-badge nx-badge-active">Admin uniquement</span>
+              </div>
+              <table class="nx-table">
+                <thead><tr><th>Association</th><th>Plan</th><th>Statut</th><th>Pays</th><th>Derniere activite</th></tr></thead>
+                <tbody>
+                  <tr><td data-label="Association">Association Lumiere</td><td data-label="Plan">Freemium</td><td data-label="Statut"><span class="nx-badge nx-badge-pending">Trial</span></td><td data-label="Pays">CI</td><td data-label="Activite">Il y a 20 secondes</td></tr>
+                  <tr><td data-label="Association">Syndicat Horizon</td><td data-label="Plan">Start</td><td data-label="Statut"><span class="nx-badge nx-badge-active">Actif</span></td><td data-label="Pays">CI</td><td data-label="Activite">Il y a 4 minutes</td></tr>
+                </tbody>
+              </table>
+            </section>
+          </section>
+        </main>
+      </section>
+    </section>
+  </body>
+</html>

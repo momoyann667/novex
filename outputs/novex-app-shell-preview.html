@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0b4ed8">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="NOVEX">
+    <link rel="manifest" href="./novex-pwa-manifest.webmanifest">
+    <link rel="stylesheet" href="./novex-design-system.css">
+    <link rel="stylesheet" href="./novex-app-shell.css">
+    <title>NOVEX - App Shell Association</title>
+  </head>
+  <body>
+    <div class="nx-shell-root">
+      <section class="nx-association-app" data-association-shell>
+        <aside class="nx-association-sidebar" aria-label="Navigation association">
+          <div class="nx-brand-lockup">
+            <span class="nx-brand-mark">N</span>
+            <strong class="nx-brand-name">NOVEX</strong>
+            <button class="nx-icon-button nx-sidebar-collapse" type="button" data-sidebar-collapse aria-label="Reduire la navigation">&lt;</button>
+          </div>
+
+          <button class="nx-workspace-switcher" type="button" data-workspace-button aria-haspopup="menu">
+            <span class="nx-workspace-avatar">AL</span>
+            <span class="nx-workspace-meta">
+              <strong>Association Lumiere</strong>
+              <span class="nx-caption">President</span>
+            </span>
+            <span class="nx-sidebar-label" aria-hidden="true">v</span>
+          </button>
+
+          <div class="nx-workspace-menu" data-workspace-menu hidden>
+            <strong class="nx-small">Mes organisations</strong>
+            <button class="nx-menu-item is-active" type="button" data-switch-workspace="Association Lumiere">OK Association Lumiere <span class="nx-caption">President</span></button>
+            <button class="nx-menu-item" type="button" data-switch-workspace="Syndicat Horizon">Syndicat Horizon <span class="nx-caption">Tresorier</span></button>
+            <button class="nx-menu-item" type="button" data-switch-workspace="ONG Espoir">ONG Espoir <span class="nx-caption">Membre</span></button>
+            <hr style="border: 0; border-top: 1px solid var(--nx-border-subtle); width: 100%;">
+            <button class="nx-menu-item" type="button">+ Creer une organisation</button>
+          </div>
+
+          <nav class="nx-nav">
+            <a class="nx-nav-item is-active" href="#" title="Dashboard"><span class="nx-nav-icon">H</span><span class="nx-sidebar-label">Dashboard</span></a>
+            <a class="nx-nav-item" href="#" title="Membres"><span class="nx-nav-icon">M</span><span class="nx-sidebar-label">Membres</span></a>
+            <a class="nx-nav-item" href="#" title="Cotisations"><span class="nx-nav-icon">$</span><span class="nx-sidebar-label">Cotisations</span></a>
+            <a class="nx-nav-item" href="#" title="Recettes"><span class="nx-nav-icon">R</span><span class="nx-sidebar-label">Recettes</span></a>
+            <a class="nx-nav-item" href="#" title="Depenses"><span class="nx-nav-icon">D</span><span class="nx-sidebar-label">Depenses</span></a>
+            <a class="nx-nav-item" href="#" title="Projets"><span class="nx-nav-icon">P</span><span class="nx-sidebar-label">Projets</span></a>
+            <a class="nx-nav-item" href="#" title="Evenements"><span class="nx-nav-icon">E</span><span class="nx-sidebar-label">Evenements</span></a>
+            <a class="nx-nav-item" href="#" title="Documents"><span class="nx-nav-icon">Doc</span><span class="nx-sidebar-label">Documents</span></a>
+            <a class="nx-nav-item" href="#" title="Rapports"><span class="nx-nav-icon">Rp</span><span class="nx-sidebar-label">Rapports</span></a>
+            <a class="nx-nav-item" href="#" title="Assistant IA"><span class="nx-nav-icon">AI</span><span class="nx-sidebar-label">Assistant IA</span></a>
+            <a class="nx-nav-item" href="#" title="Parametres"><span class="nx-nav-icon">Set</span><span class="nx-sidebar-label">Parametres</span></a>
+          </nav>
+        </aside>
+
+        <section>
+          <header class="nx-shell-header">
+            <div class="nx-page-title-block">
+              <h1 class="nx-h2" data-page-title>Dashboard</h1>
+              <span class="nx-caption" data-page-description>Association Lumiere - donnees du workspace actif uniquement.</span>
+            </div>
+            <button class="nx-global-search" type="button" data-command-open>
+              <span>Rechercher dans NOVEX...</span>
+              <span class="nx-kbd">Ctrl K</span>
+            </button>
+            <div class="nx-header-actions">
+              <button class="nx-icon-button" type="button" aria-label="Aide">?</button>
+              <button class="nx-icon-button" type="button" data-notifications-button aria-label="Notifications">
+                !
+                <span class="nx-notification-count">3</span>
+              </button>
+              <button class="nx-button nx-button-outline" type="button">Installer NOVEX</button>
+              <button class="nx-icon-button" type="button" data-profile-button aria-label="Profil">JK</button>
+            </div>
+          </header>
+
+          <header class="nx-mobile-header-v2">
+            <button class="nx-icon-button" type="button" data-command-open aria-label="Recherche">S</button>
+            <div>
+              <strong>NOVEX</strong>
+              <div class="nx-caption">Association Lumiere</div>
+            </div>
+            <button class="nx-icon-button" type="button" data-notifications-button aria-label="Notifications">!</button>
+          </header>
+
+          <main class="nx-shell-content">
+            <section class="nx-card nx-card-warning">
+              <div class="nx-kpi-head">
+                <div>
+                  <strong>Votre essai Freemium expire dans 5 jours.</strong>
+                  <p class="nx-caption">Cette zone est conditionnelle selon les regles d'abonnement serveur.</p>
+                </div>
+                <button class="nx-button nx-button-primary" type="button">Voir les offres</button>
+              </div>
+            </section>
+
+            <section class="nx-page-header">
+              <div>
+                <div class="nx-breadcrumbs">Workspace / Dashboard</div>
+                <h2 class="nx-h1">Dashboard</h2>
+                <p class="nx-body">Vue initiale du workspace avec chargement progressif des donnees.</p>
+              </div>
+              <div class="nx-control-row">
+                <button class="nx-button nx-button-outline" type="button">Importer</button>
+                <button class="nx-button nx-button-primary" type="button" data-quick-open>+ Action rapide</button>
+              </div>
+            </section>
+
+            <section class="nx-filter-bar">
+              <input class="nx-search" placeholder="Filtrer..." style="max-width: 260px;">
+              <select class="nx-select" style="max-width: 180px;"><option>Ce mois</option><option>Ce trimestre</option></select>
+              <select class="nx-select" style="max-width: 180px;"><option>Tous statuts</option><option>Actif</option></select>
+            </section>
+
+            <div class="nx-refresh-line">
+              <span>Derniere mise a jour : il y a 20 secondes</span>
+              <button class="nx-button nx-button-link" type="button">Actualiser</button>
+            </div>
+
+            <section class="nx-card" data-loading-region hidden>
+              <h3 class="nx-h3" data-loading-title>Chargement</h3>
+              <div style="display: grid; gap: var(--nx-space-3); margin-top: var(--nx-space-4);">
+                <div class="nx-skeleton" style="height: 18px; width: 82%;"></div>
+                <div class="nx-skeleton" style="height: 18px; width: 64%;"></div>
+                <div class="nx-skeleton" style="height: 18px; width: 72%;"></div>
+              </div>
+            </section>
+
+            <section class="nx-dashboard-grid">
+              <article class="nx-card nx-kpi nx-col-3">
+                <span class="nx-kpi-title">Membres</span>
+                <span class="nx-money">0</span>
+                <span class="nx-caption">Aucune donnee fictive persistante</span>
+              </article>
+              <article class="nx-card nx-kpi nx-col-3">
+                <span class="nx-kpi-title">Cotisations</span>
+                <span class="nx-money">0 FCFA</span>
+                <span class="nx-caption">Aucune campagne</span>
+              </article>
+              <article class="nx-card nx-kpi nx-col-3">
+                <span class="nx-kpi-title">Projets</span>
+                <span class="nx-money">0</span>
+                <span class="nx-caption">Aucun projet</span>
+              </article>
+              <article class="nx-card nx-kpi nx-col-3">
+                <span class="nx-kpi-title">Evenements</span>
+                <span class="nx-money">0</span>
+                <span class="nx-caption">Aucun evenement</span>
+              </article>
+              <article class="nx-card nx-col-7">
+                <h3 class="nx-h3">Page Container</h3>
+                <p class="nx-body">Chaque module doit suivre PageHeader, filtres/actions, puis contenu. Les tableaux desktop peuvent devenir cartes/listes sur mobile.</p>
+              </article>
+              <article class="nx-card nx-col-5">
+                <h3 class="nx-h3">Etat global</h3>
+                <div class="nx-empty">
+                  <strong>Cette page est prete.</strong>
+                  <span class="nx-caption">Les donnees metier seront chargees par workspace autorise.</span>
+                </div>
+              </article>
+            </section>
+          </main>
+        </section>
+      </section>
+
+      <nav class="nx-mobile-bottom-v2" aria-label="Navigation mobile association">
+        <div class="nx-bottom-nav">
+          <a class="is-active" href="#">Accueil</a>
+          <a href="#">Membres</a>
+          <a href="#">Cotisations</a>
+          <a href="#" data-finance-open>Finance</a>
+          <a href="#" data-more-open>Plus</a>
+        </div>
+      </nav>
+
+      <button class="nx-fab" type="button" data-quick-open aria-label="Actions rapides">+</button>
+
+      <section class="nx-floating-menu" data-notifications-menu hidden style="position: fixed; right: 88px; top: 72px; width: min(360px, calc(100vw - 32px));">
+        <strong>Notifications</strong>
+        <button class="nx-menu-item" type="button"><span class="nx-badge nx-badge-pending">Cotisations</span> 3 paiements a verifier</button>
+        <button class="nx-menu-item" type="button"><span class="nx-badge nx-badge-active">Systeme</span> Donnees a jour</button>
+        <button class="nx-menu-item" type="button"><span class="nx-badge nx-badge-late">Finance</span> Validation requise</button>
+      </section>
+
+      <section class="nx-floating-menu" data-profile-menu hidden style="position: fixed; right: 24px; top: 72px; width: min(320px, calc(100vw - 32px));">
+        <div>
+          <strong>Jean Kouassi</strong>
+          <div class="nx-caption">President</div>
+        </div>
+        <button class="nx-menu-item" type="button">Mon profil</button>
+        <button class="nx-menu-item" type="button">Mon organisation</button>
+        <button class="nx-menu-item" type="button">Preferences</button>
+        <button class="nx-menu-item" type="button">Securite</button>
+        <hr style="border: 0; border-top: 1px solid var(--nx-border-subtle); width: 100%;">
+        <button class="nx-menu-item" type="button">Aide</button>
+        <button class="nx-menu-item" type="button">Se deconnecter</button>
+      </section>
+
+      <div class="nx-command-backdrop" data-command-backdrop></div>
+      <section class="nx-command-palette" data-command-palette role="dialog" aria-label="Command palette">
+        <input class="nx-search" placeholder="Rechercher une action ou une donnee...">
+        <div class="nx-command-list">
+          <button class="nx-menu-item" type="button">Rechercher un membre</button>
+          <button class="nx-menu-item" type="button">Ajouter une depense</button>
+          <button class="nx-menu-item" type="button">Creer une recette</button>
+          <button class="nx-menu-item" type="button">Creer un evenement</button>
+          <button class="nx-menu-item" type="button">Creer un projet</button>
+          <button class="nx-menu-item" type="button">Ouvrir les parametres</button>
+          <button class="nx-menu-item" type="button">Changer de Workspace</button>
+        </div>
+      </section>
+
+      <section class="nx-mobile-sheet" data-quick-sheet aria-label="Actions rapides">
+        <div class="nx-kpi-head"><strong>Actions rapides</strong><button class="nx-button nx-button-link" type="button" data-close-sheet>Fermer</button></div>
+        <button class="nx-menu-item" type="button">Ajouter un membre</button>
+        <button class="nx-menu-item" type="button">Ajouter une depense</button>
+        <button class="nx-menu-item" type="button">Ajouter une recette</button>
+        <button class="nx-menu-item" type="button">Enregistrer une cotisation</button>
+        <button class="nx-menu-item" type="button">Creer un projet</button>
+        <button class="nx-menu-item" type="button">Creer un evenement</button>
+      </section>
+
+      <section class="nx-mobile-sheet" data-finance-sheet aria-label="Finance">
+        <div class="nx-kpi-head"><strong>Finance</strong><button class="nx-button nx-button-link" type="button" data-close-sheet>Fermer</button></div>
+        <button class="nx-menu-item" type="button">Recettes</button>
+        <button class="nx-menu-item" type="button">Depenses</button>
+      </section>
+
+      <section class="nx-mobile-sheet" data-more-sheet aria-label="Plus">
+        <div class="nx-kpi-head"><strong>Plus</strong><button class="nx-button nx-button-link" type="button" data-close-sheet>Fermer</button></div>
+        <button class="nx-menu-item" type="button">Projets</button>
+        <button class="nx-menu-item" type="button">Evenements</button>
+        <button class="nx-menu-item" type="button">Documents</button>
+        <button class="nx-menu-item" type="button">Rapports</button>
+        <button class="nx-menu-item" type="button">Assistant IA</button>
+        <button class="nx-menu-item" type="button">Parametres</button>
+      </section>
+    </div>
+
+    <script src="./novex-pwa-client.js"></script>
+    <script src="./novex-app-shell-client.js"></script>
+  </body>
+</html>

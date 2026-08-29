@@ -1,0 +1,16 @@
+{
+  "name": "NOVEX",
+  "short_name": "NOVEX",
+  "description": "NOVEX - gestion moderne des associations.",
+  "start_url": "/auth/login",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#0b4ed8",
+  "background_color": "#f6f8fb",
+  "icons": [
+    { "src": "/icons/icon-192.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icons/icon-512.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icons/icon-maskable.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
