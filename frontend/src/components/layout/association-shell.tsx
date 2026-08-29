@@ -8,6 +8,7 @@ const nav = [
   { label: "Membres", path: "members", icon: Users, permission: "members.view" },
   { label: "Cotisations", path: "contributions", icon: CreditCard, permission: "contributions.view" },
   { label: "Paiements", path: "payments", icon: CreditCard, permission: "payments.view", plan: "NOVEX_START" },
+  { label: "Historique finance", path: "finance/history", icon: Wallet, permission: "financial_history.view", plan: "NOVEX_START" },
   { label: "Recettes", path: "revenues", icon: Wallet, permission: "revenues.view" },
   { label: "Depenses", path: "expenses", icon: Wallet, permission: "expenses.view" },
   { label: "Projets", path: "projects", icon: FolderKanban, permission: "projects.view", plan: "NOVEX_START" },

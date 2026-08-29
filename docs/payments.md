@@ -56,3 +56,59 @@ Prepare le remboursement complet ou partiel. Aucun remboursement provider reel n
 ## Audit
 
 Chaque changement metier cree un `PaymentEvent` et un `AuditLog`. Les metadata sont expurgees des cles contenant `secret`.
+
+## Recus
+
+Un paiement confirme genere un `Receipt` idempotent. Le numero metier suit la convention `NVX-YYYY-000001`, est produit cote backend, puis un PDF A4 est stocke via `FileField` hors base de donnees.
+
+Endpoints :
+
+```text
+GET  /api/v1/receipts/
+GET  /api/v1/receipts/:id/
+GET  /api/v1/receipts/:id/download/
+POST /api/v1/receipts/:id/send/
+```
+
+Le telechargement passe par une vue authentifiee avec verification du workspace. Une URL directe de stockage ne doit pas etre consideree publique; pour S3, brancher des URLs signees a expiration dans le service de stockage.
+
+## Justificatifs
+
+Les justificatifs de paiement manuel sont portes par `PaymentDocument`.
+
+Types :
+
+```text
+RECEIPT
+PROOF_OF_PAYMENT
+BANK_TRANSFER
+MOBILE_MONEY_PROOF
+OTHER
+```
+
+Validations upload :
+
+- taille maximale 10 Mo ;
+- extensions `.pdf`, `.jpg`, `.jpeg`, `.png`, `.webp` ;
+- MIME types `application/pdf`, `image/jpeg`, `image/png`, `image/webp` ;
+- permission et workspace controles par l'API.
+
+Le champ `scan_status` prepare l'integration antivirus. Tant qu'aucun scanner n'est configure, la valeur reste `NOT_CONFIGURED`.
+
+## Historique financier
+
+`GET /api/v1/finance/history/` expose le journal association extensible : cotisations, paiements, remboursements et ajustements. Les filtres disponibles sont `date_from`, `date_to`, `member`, `reference` et `status`.
+
+`GET /api/v1/members/:id/financial-history/` donne l'historique financier d'un membre avec `Total cotisations`, `Total paye`, `Reste a payer`, nombre de paiements, retards et dernier paiement.
+
+## Rapprochement et ajustements
+
+`Payment.reconciliation_status` prepare le rapprochement avec contribution puis transaction bancaire future :
+
+```text
+UNMATCHED
+MATCHED
+REVIEW_REQUIRED
+```
+
+`FinancialAdjustment` prepare les corrections futures. La creation est auditee via `financial_adjustment.created` et valide explicitement que payment, contribution et membre appartiennent au workspace courant.

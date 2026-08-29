@@ -34,6 +34,52 @@ class PaymentEventType(models.TextChoices):
     REFUNDED = "payment.refunded", "Rembourse"
     WEBHOOK_RECEIVED = "payment.webhook_received", "Webhook recu"
     WEBHOOK_REJECTED = "payment.webhook_rejected", "Webhook rejete"
+    REFUND_REQUESTED = "payment.refund_requested", "Remboursement demande"
+    RECEIPT_CREATED = "receipt.created", "Recu cree"
+    RECEIPT_GENERATED = "receipt.generated", "Recu genere"
+    RECEIPT_DOWNLOADED = "receipt.downloaded", "Recu telecharge"
+    RECEIPT_SENT = "receipt.sent", "Recu envoye"
+    PAYMENT_DOCUMENT_UPLOADED = "payment_document.uploaded", "Justificatif ajoute"
+    PAYMENT_DOCUMENT_DELETED = "payment_document.deleted", "Justificatif supprime"
+    FINANCIAL_ADJUSTMENT_CREATED = "financial_adjustment.created", "Ajustement financier cree"
+
+
+class ReceiptStatus(models.TextChoices):
+    GENERATED = "GENERATED", "Genere"
+    SENT = "SENT", "Envoye"
+    CANCELLED = "CANCELLED", "Annule"
+
+
+class PaymentDocumentType(models.TextChoices):
+    RECEIPT = "RECEIPT", "Recu"
+    PROOF_OF_PAYMENT = "PROOF_OF_PAYMENT", "Preuve de paiement"
+    BANK_TRANSFER = "BANK_TRANSFER", "Virement bancaire"
+    MOBILE_MONEY_PROOF = "MOBILE_MONEY_PROOF", "Preuve Mobile Money"
+    OTHER = "OTHER", "Autre"
+
+
+class ScanStatus(models.TextChoices):
+    NOT_CONFIGURED = "NOT_CONFIGURED", "Scan non configure"
+    PENDING = "PENDING", "Scan en attente"
+    CLEAN = "CLEAN", "Fichier sain"
+    INFECTED = "INFECTED", "Fichier infecte"
+
+
+class ReconciliationStatus(models.TextChoices):
+    UNMATCHED = "UNMATCHED", "Non rapproche"
+    MATCHED = "MATCHED", "Rapproche"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED", "Revue requise"
+
+
+class FinancialAdjustmentStatus(models.TextChoices):
+    DRAFT = "DRAFT", "Brouillon"
+    POSTED = "POSTED", "Comptabilise"
+    CANCELLED = "CANCELLED", "Annule"
+
+
+class FinancialAdjustmentDirection(models.TextChoices):
+    IN = "IN", "Entree"
+    OUT = "OUT", "Sortie"
 
 
 TERMINAL_PAYMENT_STATUSES = {

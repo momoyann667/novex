@@ -4,10 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
 
 const kpis = [
-  ["0 XOF", "Encaissements reussis"],
-  ["0 XOF", "En attente provider"],
+  ["0", "Paiements aujourd'hui"],
+  ["0 XOF", "Montant aujourd'hui"],
+  ["0", "Paiements ce mois"],
+  ["0 XOF", "Montant ce mois"],
+  ["0", "Paiements reussis"],
   ["0", "Paiements echoues"],
-  ["0%", "Taux de succes"],
+  ["0", "Paiements en attente"],
+  ["0%", "Taux de reussite"],
 ];
 
 const methods = [
@@ -55,6 +59,25 @@ export function PaymentsView() {
               <div className="flex items-start gap-3 text-sm text-slate-600">
                 <ShieldCheck className="size-5 text-blue-700" />
                 <p>Un paiement ne passe a reussi qu'apres verification backend: reference, montant, devise, signature HMAC et transition autorisee.</p>
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+              <div className="rounded-md border border-border p-4">
+                <div className="mb-4 flex items-center justify-between">
+                  <strong>Montants encaisses</strong>
+                  <select className="min-h-9 rounded-md border border-border px-2 text-sm"><option>30 jours</option><option>7 jours</option><option>3 mois</option><option>6 mois</option><option>12 mois</option></select>
+                </div>
+                <div className="flex h-40 items-end gap-2">
+                  {[20, 55, 35, 70, 45, 88, 62].map((height) => <div key={height} className="flex-1 rounded-t bg-blue-700/80" style={{ height: `${height}%` }} />)}
+                </div>
+              </div>
+              <div className="rounded-md border border-border p-4">
+                <strong>Par moyen</strong>
+                <div className="mt-4 grid gap-3 text-sm">
+                  {methods.map((item) => <div key={item.label} className="flex justify-between gap-3"><span>{item.label}</span><span className="text-slate-500">0 - 0%</span></div>)}
+                  <div className="flex justify-between gap-3"><span>Paiement manuel</span><span className="text-slate-500">0 - 0%</span></div>
+                  <div className="flex justify-between gap-3"><span>Autre</span><span className="text-slate-500">0 - 0%</span></div>
+                </div>
               </div>
             </div>
           </CardContent>

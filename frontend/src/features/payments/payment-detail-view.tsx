@@ -1,4 +1,4 @@
-import { Clock, CreditCard, FileText, RotateCcw, ShieldCheck } from "lucide-react";
+import { Clock, CreditCard, Download, Eye, FileText, RotateCcw, Send, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
@@ -20,7 +20,14 @@ export function PaymentDetailView({ paymentId }: Readonly<{ paymentId: string }>
       <PageHeader
         title={`Paiement #${paymentId}`}
         description="Reference, frais, recu et journal de confirmation."
-        actions={<Button type="button" variant="outline"><RotateCcw className="size-4" /> Rembourser</Button>}
+        actions={
+          <>
+            <Button type="button" variant="outline"><Eye className="size-4" /> Voir le recu</Button>
+            <Button type="button" variant="outline"><Download className="size-4" /> Telecharger</Button>
+            <Button type="button" variant="outline"><Send className="size-4" /> Envoyer</Button>
+            <Button type="button" variant="outline"><RotateCcw className="size-4" /> Rembourser</Button>
+          </>
+        }
       />
       <Card>
         <CardContent className="grid gap-4 p-6 md:grid-cols-2 xl:grid-cols-4">

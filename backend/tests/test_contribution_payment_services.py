@@ -7,6 +7,7 @@ import pytest
 
 pytest.importorskip("pytest_django")
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from apps.contributions.models import Contribution
 from datetime import timedelta
 
@@ -27,9 +28,9 @@ from apps.contributions.services import (
 from apps.contributions.statuses import ContributionStatus
 from apps.audit_logs.models import AuditLog
 from apps.members.models import Member
-from apps.payments.models import Payment
-from apps.payments.services import initialize_contribution_payment, process_payment_webhook, record_manual_payment, register_webhook_event
-from apps.payments.statuses import PaymentMethod, PaymentStatus
+from apps.payments.models import Payment, Receipt
+from apps.payments.services import attach_payment_document, financial_history, initialize_contribution_payment, member_financial_history, process_payment_webhook, record_manual_payment, register_webhook_event
+from apps.payments.statuses import PaymentDocumentType, PaymentMethod, PaymentStatus
 from apps.workspaces.models import Workspace
 
 
@@ -152,6 +153,7 @@ def test_signed_webhook_confirms_payment_once(monkeypatch, django_user_model):
     assert duplicate_event.id == event.id
     assert duplicate_payment is None
     assert duplicate_processed is False
+    assert Receipt.objects.filter(payment=payment).count() == 1
 
 
 @pytest.mark.django_db
@@ -185,6 +187,49 @@ def test_webhook_with_invalid_signature_does_not_update_payment(monkeypatch, dja
     assert processed is False
     assert payment.status == PaymentStatus.PROCESSING
     assert contribution.amount_paid == Decimal("0.00")
+
+
+@pytest.mark.django_db
+def test_receipt_is_idempotent_for_manual_payment(django_user_model):
+    owner = django_user_model.objects.create_user(username="receipt@example.com", email="receipt@example.com", password="pass")
+    workspace = Workspace.objects.create(name="Association Receipt", slug="association-receipt", organization_type="association", owner=owner)
+    member = Member.objects.create(workspace=workspace, membership_number="A-000013", first_name="Sara", last_name="Bamba")
+    campaign = create_campaign(workspace=workspace, actor=owner, name="Juillet 2026", amount=Decimal("10000.00"))
+    contribution = Contribution.objects.create(workspace=workspace, campaign=campaign, member=member, amount_due=Decimal("10000.00"))
+
+    first = record_manual_payment(workspace=workspace, actor=owner, member=member, contribution=contribution, amount=Decimal("10000.00"), idempotency_key="receipt-1")
+    second = record_manual_payment(workspace=workspace, actor=owner, member=member, contribution=contribution, amount=Decimal("10000.00"), idempotency_key="receipt-1")
+    receipt = Receipt.objects.get(payment=first)
+
+    assert first.id == second.id
+    assert Receipt.objects.filter(payment=first).count() == 1
+    assert receipt.receipt_number.startswith("NVX-")
+    assert receipt.pdf_file.name.endswith(".pdf")
+
+
+@pytest.mark.django_db
+def test_payment_document_upload_validation_and_financial_history(django_user_model):
+    owner = django_user_model.objects.create_user(username="history@example.com", email="history@example.com", password="pass")
+    workspace = Workspace.objects.create(name="Association History", slug="association-history", organization_type="association", owner=owner)
+    other_workspace = Workspace.objects.create(name="Other", slug="other-history", organization_type="association", owner=owner)
+    member = Member.objects.create(workspace=workspace, membership_number="A-000014", first_name="Jean", last_name="Kouassi")
+    other_member = Member.objects.create(workspace=other_workspace, membership_number="B-000014", first_name="Bad", last_name="Tenant")
+    campaign = create_campaign(workspace=workspace, actor=owner, name="Aout 2026", amount=Decimal("25000.00"))
+    contribution = Contribution.objects.create(workspace=workspace, campaign=campaign, member=member, amount_due=Decimal("25000.00"))
+    payment = record_manual_payment(workspace=workspace, actor=owner, member=member, contribution=contribution, amount=Decimal("10000.00"), idempotency_key="history-1")
+    upload = SimpleUploadedFile("proof.pdf", b"%PDF-1.4\n", content_type="application/pdf")
+
+    document = attach_payment_document(payment=payment, actor=owner, title="Recu papier", file=upload, document_type=PaymentDocumentType.PROOF_OF_PAYMENT)
+    member_history = member_financial_history(workspace=workspace, member=member)
+    rows = financial_history(workspace=workspace, filters={"reference": payment.reference})
+
+    assert document.size_bytes > 0
+    assert member_history["total_due"] == Decimal("25000.00")
+    assert member_history["total_paid"] == Decimal("10000.00")
+    assert member_history["remaining_to_pay"] == Decimal("15000.00")
+    assert rows[0]["reference"] == payment.reference
+    with pytest.raises(ValueError):
+        member_financial_history(workspace=workspace, member=other_member)
 
 
 @pytest.mark.django_db
