@@ -25,6 +25,8 @@ def record_manual_payment(
     contribution: Contribution | None = None,
     paid_at=None,
     idempotency_key: str,
+    payment_method: str = "manual",
+    metadata: dict | None = None,
 ) -> Payment:
     if member.workspace_id != workspace.id:
         raise ValueError("Le membre appartient a un autre workspace.")
@@ -40,9 +42,10 @@ def record_manual_payment(
             "amount": amount,
             "currency": workspace.currency,
             "provider": "manual",
-            "payment_method": "manual",
+            "payment_method": payment_method,
             "status": Payment.Status.SUCCESSFUL,
             "paid_at": paid_at or timezone.now(),
+            "metadata": metadata or {},
         },
     )
     if not created:

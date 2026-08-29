@@ -72,7 +72,7 @@ Statuts cotisation :
 - due
 - pending
 - paid
-- partially_paid
+- PARTIALLY_PAID
 - overdue
 - cancelled
 

@@ -68,7 +68,7 @@ Logique :
 - montants par categorie prepares ;
 - generation des cotisations dues pour membres actifs ;
 - paiement partiel via `amount_paid` et `remaining_amount` ;
-- statut recalcule : due, paid, partially_paid, overdue ;
+- statut recalcule : PENDING, PARTIALLY_PAID, PAID, OVERDUE, CANCELLED, WAIVED ;
 - stats de recouvrement pour dashboard.
 
 API :
