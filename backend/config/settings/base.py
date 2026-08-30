@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     "apps.dashboard",
     "apps.members",
     "apps.contributions",
+    "apps.finance",
     "apps.payments",
     "apps.projects",
     "apps.events",

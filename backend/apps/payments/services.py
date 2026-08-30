@@ -251,6 +251,9 @@ def apply_successful_payment(*, payment: Payment, actor=None, metadata: dict | N
     payment.reconciliation_status = ReconciliationStatus.MATCHED if payment.contribution_id else ReconciliationStatus.REVIEW_REQUIRED
     payment.save(update_fields=["reconciliation_status", "updated_at"])
     create_receipt_for_payment(payment, actor=actor)
+    from apps.finance.services import sync_payment_to_finance
+
+    sync_payment_to_finance(payment=payment, actor=actor)
     return payment
 
 
