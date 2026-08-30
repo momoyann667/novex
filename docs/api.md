@@ -225,3 +225,22 @@ Les endpoints workspace doivent recevoir un contexte workspace fiable, puis le b
 - `GET /api/v1/documents/export/` - export CSV des metadonnees.
 - `GET|POST /api/v1/documents/folders/` - dossiers documentaires.
 - `GET|POST /api/v1/documents/tags/` - tags documentaires.
+
+## Rapports & Analytics
+
+- `GET /api/v1/analytics/overview/` - dashboard global: finances, membres, cotisations, projets, evenements, documents, performance et alertes.
+- `GET /api/v1/analytics/finance/` - recettes, depenses, resultat, budget, cash flow et repartitions.
+- `GET /api/v1/analytics/members/` - total, actifs, nouveaux, sortis, croissance et retention.
+- `GET /api/v1/analytics/contributions/` - attendu, encaisse, impayes, recouvrement et retards.
+- `GET /api/v1/analytics/projects/` - projets, budget, depenses, progression et risques.
+- `GET /api/v1/analytics/events/` - evenements, participants, presence, budget, recettes et depenses.
+- `GET /api/v1/analytics/documents/` - volumes documentaires, stockage et validations.
+- `GET /api/v1/analytics/performance/` - scores de sante et formules.
+- `GET /api/v1/analytics/alerts/` - alertes analytics consolidees.
+- `GET /api/v1/analytics/annual/` - rapport annuel consolide.
+- `GET|POST /api/v1/reports/dashboards/` - dashboards personnalisables et widgets.
+- `GET|POST /api/v1/reports/saved/` - rapports sauvegardes.
+- `GET|POST /api/v1/reports/saved/{id}/shares/` - partage de rapport.
+- `GET|POST /api/v1/reports/scheduled/` - rapports programmes.
+- `POST /api/v1/reports/export/` - demande d'export.
+- `GET|POST /api/v1/reports/exports/` - liste et creation d'exports.
