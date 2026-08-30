@@ -38,4 +38,7 @@ def create_workspace_for_owner(*, owner, name: str, organization_type: str, **at
     plan, _ = Plan.objects.get_or_create(code=Plan.Code.FREEMIUM, defaults={"name": "Freemium"})
     now = timezone.now()
     Subscription.objects.create(workspace=workspace, plan=plan, status=Subscription.Status.TRIAL, trial_started_at=now, trial_ends_at=now + timedelta(days=14))
+    from apps.documents.services import ensure_default_folders
+
+    ensure_default_folders(workspace, actor=owner)
     return workspace

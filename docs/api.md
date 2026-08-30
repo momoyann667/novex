@@ -202,3 +202,26 @@ Les endpoints workspace doivent recevoir un contexte workspace fiable, puis le b
 - `GET|POST /api/v1/events/{id}/announcements/` - annonces et canaux prepares.
 - `GET /api/v1/events/{id}/report/` - rapport evenement.
 - `POST /api/v1/events/{id}/report/export/` - preparation export PDF/XLSX via Celery.
+
+## Documents & Archives
+
+- `GET|POST /api/v1/documents/` - liste paginee, recherche, filtres et creation de documents GED.
+- `GET|PATCH|DELETE /api/v1/documents/{id}/` - detail, modification et suppression logique vers corbeille.
+- `GET /api/v1/documents/{id}/download/` - telechargement controle par workspace, visibilite et permission.
+- `POST /api/v1/documents/{id}/archive/` - archivage logique.
+- `POST /api/v1/documents/{id}/restore/` - restauration depuis archive ou corbeille.
+- `POST /api/v1/documents/{id}/move/` - deplacement vers un dossier du meme workspace.
+- `GET|POST /api/v1/documents/{id}/versions/` - historique et nouvelle version.
+- `POST /api/v1/documents/{id}/versions/{version_id}/restore/` - restauration non destructive d'une ancienne version.
+- `GET|POST /api/v1/documents/{id}/shares/` - partages membre, role ou equipe.
+- `GET|POST /api/v1/documents/{id}/share-links/` - liens securises optionnels.
+- `POST /api/v1/documents/{id}/favorite/` - ajout favori.
+- `DELETE /api/v1/documents/{id}/unfavorite/` - retrait favori.
+- `GET|POST /api/v1/documents/{id}/approvals/` - demandes de validation.
+- `POST /api/v1/documents/{id}/approve/` - approbation.
+- `POST /api/v1/documents/{id}/reject/` - rejet.
+- `GET /api/v1/documents/search/` - recherche documentaire paginee.
+- `GET /api/v1/documents/analytics/` - KPI, stockage, categories, types, recents et validations.
+- `GET /api/v1/documents/export/` - export CSV des metadonnees.
+- `GET|POST /api/v1/documents/folders/` - dossiers documentaires.
+- `GET|POST /api/v1/documents/tags/` - tags documentaires.

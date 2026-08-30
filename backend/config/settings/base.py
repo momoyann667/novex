@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     "apps.projects",
     "apps.events",
     "apps.budgets",
+    "apps.documents",
     "apps.subscriptions",
     "apps.audit_logs",
 ]
@@ -82,6 +83,8 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
+MAX_DOCUMENT_SIZE = int(os.environ.get("MAX_DOCUMENT_SIZE", str(25 * 1024 * 1024)))
+DOCUMENT_STORAGE_QUOTA = int(os.environ.get("DOCUMENT_STORAGE_QUOTA", str(10 * 1024 * 1024 * 1024)))
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
