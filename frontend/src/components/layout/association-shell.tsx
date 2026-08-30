@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { Bell, Bot, Calendar, CreditCard, FileText, FolderKanban, Home, Menu, Search, Settings, Users, Wallet } from "lucide-react";
+import { Bell, Bot, Calendar, CreditCard, FileText, FolderKanban, Home, Landmark, Menu, Search, Settings, Users, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const nav = [
@@ -9,6 +9,7 @@ const nav = [
   { label: "Cotisations", path: "contributions", icon: CreditCard, permission: "contributions.view" },
   { label: "Paiements", path: "payments", icon: CreditCard, permission: "payments.view", plan: "NOVEX_START" },
   { label: "Finances", path: "finance", icon: Wallet, permission: "finance.view", plan: "NOVEX_START" },
+  { label: "Budgets", path: "budgets", icon: Landmark, permission: "budgets.view", plan: "NOVEX_START" },
   { label: "Transactions", path: "finance/transactions", icon: Wallet, permission: "finance.view", plan: "NOVEX_START" },
   { label: "Recettes", path: "finance/income", icon: Wallet, permission: "finance.create_income" },
   { label: "Depenses", path: "finance/expenses", icon: Wallet, permission: "finance.create_expense" },

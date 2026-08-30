@@ -3,6 +3,7 @@ from decimal import Decimal
 from rest_framework import serializers
 
 from apps.events.models import Event
+from apps.budgets.models import BudgetLine
 from apps.projects.models import Project
 from .models import CostCenter, FinancialCategory, FinancialSettings, FinancialTransaction, FinancialTransactionDocument, FiscalPeriod
 from .statuses import FinancialCategoryKind, FinancialTransactionSource, FinancialTransactionStatus, FinancialTransactionType
@@ -51,6 +52,7 @@ class CostCenterSerializer(serializers.ModelSerializer):
 
 class FinancialTransactionSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source="category.name", read_only=True)
+    budget_line = serializers.PrimaryKeyRelatedField(queryset=BudgetLine.objects.none(), required=False, allow_null=True, write_only=True)
 
     class Meta:
         model = FinancialTransaction
@@ -74,6 +76,7 @@ class FinancialTransactionSerializer(serializers.ModelSerializer):
             "invoice_reference",
             "payment_method",
             "requires_receipt",
+            "budget_line",
             "notes",
             "cancellation_reason",
             "cancelled_at",
@@ -90,6 +93,7 @@ class FinancialTransactionSerializer(serializers.ModelSerializer):
             self.fields["project"].queryset = Project.objects.filter(workspace=workspace)
             self.fields["event"].queryset = Event.objects.filter(workspace=workspace)
             self.fields["cost_center"].queryset = CostCenter.objects.filter(workspace=workspace, is_active=True)
+            self.fields["budget_line"].queryset = BudgetLine.objects.filter(workspace=workspace, is_active=True)
 
     def validate_amount(self, value):
         if value <= Decimal("0.00"):
@@ -108,7 +112,7 @@ class FinancialTransactionSerializer(serializers.ModelSerializer):
         if transaction_type not in FinancialTransactionType.values:
             raise serializers.ValidationError({"transaction_type": "Type de transaction invalide."})
         if workspace:
-            for field in ["category", "project", "event", "cost_center"]:
+            for field in ["category", "project", "event", "cost_center", "budget_line"]:
                 item = attrs.get(field)
                 if item and item.workspace_id != workspace.id:
                     raise serializers.ValidationError({field: "Cette ressource appartient a un autre workspace."})

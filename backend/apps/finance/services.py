@@ -70,6 +70,7 @@ def build_transaction_reference(prefix: str = "FIN") -> str:
 
 @transaction.atomic
 def create_financial_transaction(*, workspace: Workspace, actor, transaction_type: str, **data) -> FinancialTransaction:
+    budget_line = data.pop("budget_line", None)
     category = data.get("category")
     project = data.get("project")
     event = data.get("event")
@@ -98,6 +99,13 @@ def create_financial_transaction(*, workspace: Workspace, actor, transaction_typ
     data.setdefault("currency", workspace.currency)
     data.setdefault("reference", build_transaction_reference("INC" if transaction_type == FinancialTransactionType.INCOME else "EXP"))
     transaction_obj = FinancialTransaction.objects.create(workspace=workspace, created_by=actor, transaction_type=transaction_type, **data)
+    if transaction_type == FinancialTransactionType.EXPENSE:
+        from apps.budgets.services import assign_expense_to_budget, auto_assign_expense
+
+        if budget_line:
+            assign_expense_to_budget(transaction_obj=transaction_obj, actor=actor, budget_line=budget_line, is_manual=True)
+        else:
+            auto_assign_expense(transaction_obj=transaction_obj, actor=actor)
     action = "income.created" if transaction_type == FinancialTransactionType.INCOME else "expense.created"
     AuditLog.objects.create(workspace=workspace, actor=actor, action=action, resource="financial_transaction", resource_id=str(transaction_obj.id), metadata={"amount": str(amount)})
     return transaction_obj

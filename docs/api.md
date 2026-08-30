@@ -134,3 +134,18 @@ GET  /api/v1/events/:id/report/
 ```
 
 Les endpoints workspace doivent recevoir un contexte workspace fiable, puis le backend doit verifier le membership actif. Le frontend ne prouve jamais seul l'autorisation.
+## Budgets
+
+- `GET /api/v1/budgets/dashboard/` - KPI globaux: budget total, engage, consomme, restant, taux, risques, depassements et depenses non budgetisees.
+- `GET|PATCH /api/v1/budgets/settings/` - configuration des seuils et de la regle `allow_over_budget_expense`.
+- `GET|POST /api/v1/budgets/` - liste et creation des budgets.
+- `GET|PATCH /api/v1/budgets/{id}/` - detail et modification.
+- `POST /api/v1/budgets/{id}/activate/` - activation apres controle des lignes.
+- `POST /api/v1/budgets/{id}/close/` - cloture, sans nouvelle depense affectable.
+- `POST /api/v1/budgets/{id}/archive/` - archivage d'un budget cloture.
+- `GET|POST /api/v1/budgets/{id}/lines/` - lecture et ajout des lignes budgetaires.
+- `PATCH|DELETE /api/v1/budgets/{id}/lines/{line_id}/` - mise a jour ou archivage/suppression securisee.
+- `POST /api/v1/budgets/{id}/assign-expense/` - affectation ou reaffectation manuelle d'une depense.
+- `GET /api/v1/budgets/{id}/analytics/` - planned, committed, actual, remaining, consumption_rate, variance, series et transactions.
+- `GET /api/v1/budgets/{id}/export/` - payload exportable PDF/XLSX/CSV.
+- `GET /api/v1/budgets/alerts/` - alertes filtrees par statut, budget, date et severite.
