@@ -149,3 +149,27 @@ Les endpoints workspace doivent recevoir un contexte workspace fiable, puis le b
 - `GET /api/v1/budgets/{id}/analytics/` - planned, committed, actual, remaining, consumption_rate, variance, series et transactions.
 - `GET /api/v1/budgets/{id}/export/` - payload exportable PDF/XLSX/CSV.
 - `GET /api/v1/budgets/alerts/` - alertes filtrees par statut, budget, date et severite.
+
+## Projets operationnels
+
+- `GET|POST /api/v1/projects/` - liste et creation des projets.
+- `GET|PATCH /api/v1/projects/{id}/` - detail et modification.
+- `POST /api/v1/projects/{id}/activate/` - passage en projet actif.
+- `POST /api/v1/projects/{id}/pause/` - mise en pause.
+- `POST /api/v1/projects/{id}/complete/` - cloture operationnelle.
+- `POST /api/v1/projects/{id}/archive/` - archivage sans suppression des donnees.
+- `GET /api/v1/projects/stats/` - dashboard portfolio.
+- `GET /api/v1/projects/{id}/analytics/` - progression, budget, taches, milestones, risques.
+- `GET|POST /api/v1/projects/{id}/members/` - equipe projet.
+- `PATCH|DELETE /api/v1/projects/{id}/members/{member_id}/` - mise a jour ou retrait logique d'un membre projet.
+- `GET|POST /api/v1/projects/{id}/tasks/` - taches projet pour kanban/liste/calendrier.
+- `PATCH /api/v1/projects/{id}/tasks/{task_id}/` - transition ou edition d'une tache.
+- `POST /api/v1/projects/{id}/tasks/{task_id}/complete/` - terminer une tache.
+- `GET|POST /api/v1/projects/{id}/objectives/` - objectifs et KPI projet.
+- `PATCH /api/v1/projects/{id}/objectives/{objective_id}/` - mise a jour d'objectif.
+- `GET|POST /api/v1/projects/{id}/milestones/` - jalons.
+- `PATCH /api/v1/projects/{id}/milestones/{milestone_id}/` - mise a jour d'un jalon.
+- `GET|POST /api/v1/projects/{id}/comments/` - commentaires et mentions preparees.
+- `GET /api/v1/projects/{id}/activity/` - timeline operationnelle.
+- `GET /api/v1/projects/{id}/report/` - rapport consolide.
+- `POST /api/v1/projects/{id}/report/export/` - preparation export PDF/XLSX via Celery.

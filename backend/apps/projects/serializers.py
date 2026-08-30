@@ -3,9 +3,9 @@ from rest_framework import serializers
 
 from apps.members.models import Member
 from apps.workspaces.models import WorkspaceMembership
-from .models import Project, ProjectActivity, ProjectBudgetCategory, ProjectDocument, ProjectExpenseAllocation
-from .services import budget_category_summary, project_budget_summary
-from .statuses import ProjectPriority, ProjectStatus
+from .models import Project, ProjectActivity, ProjectBudgetCategory, ProjectComment, ProjectDocument, ProjectExpenseAllocation, ProjectMember, ProjectMilestone, ProjectObjective, ProjectTask
+from .services import budget_category_summary, objective_progress, project_analytics, project_budget_summary, project_risk_score
+from .statuses import ProjectMilestoneStatus, ProjectObjectiveStatus, ProjectPriority, ProjectRole, ProjectStatus, ProjectTaskStatus, ProjectVisibility
 
 
 class ProjectBudgetCategorySerializer(serializers.ModelSerializer):
@@ -64,16 +64,136 @@ class ProjectActivitySerializer(serializers.ModelSerializer):
         fields = ["id", "action", "metadata", "created_at"]
 
 
+class ProjectMemberSerializer(serializers.ModelSerializer):
+    member_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProjectMember
+        fields = ["id", "project", "member", "member_name", "role", "is_active", "joined_at", "created_at", "updated_at"]
+        read_only_fields = ["id", "project", "member_name", "joined_at", "created_at", "updated_at"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        workspace = self.context.get("workspace")
+        if workspace:
+            self.fields["member"].queryset = Member.objects.filter(workspace=workspace)
+
+    def get_member_name(self, obj):
+        return str(obj.member)
+
+    def validate_role(self, value):
+        if value not in ProjectRole.values:
+            raise serializers.ValidationError("Role projet invalide.")
+        return value
+
+
+class ProjectObjectiveSerializer(serializers.ModelSerializer):
+    progress = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProjectObjective
+        fields = ["id", "project", "name", "description", "target", "unit", "current_value", "status", "progress", "created_at", "updated_at"]
+        read_only_fields = ["id", "project", "progress", "created_at", "updated_at"]
+
+    def get_progress(self, obj):
+        return objective_progress(obj)
+
+    def validate_status(self, value):
+        if value not in ProjectObjectiveStatus.values:
+            raise serializers.ValidationError("Statut objectif invalide.")
+        return value
+
+
+class ProjectMilestoneSerializer(serializers.ModelSerializer):
+    is_delayed = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProjectMilestone
+        fields = ["id", "project", "name", "description", "due_date", "status", "is_delayed", "completed_at", "created_at", "updated_at"]
+        read_only_fields = ["id", "project", "is_delayed", "completed_at", "created_at", "updated_at"]
+
+    def get_is_delayed(self, obj):
+        from django.utils import timezone
+
+        return obj.due_date < timezone.localdate() and obj.status != ProjectMilestoneStatus.COMPLETED
+
+    def validate_status(self, value):
+        if value not in ProjectMilestoneStatus.values:
+            raise serializers.ValidationError("Statut jalon invalide.")
+        return value
+
+
+class ProjectTaskSerializer(serializers.ModelSerializer):
+    assignee_name = serializers.SerializerMethodField()
+    dependency_ids = serializers.PrimaryKeyRelatedField(queryset=ProjectTask.objects.all(), many=True, required=False, write_only=True)
+    dependencies = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    is_overdue = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = ProjectTask
+        fields = [
+            "id",
+            "project",
+            "title",
+            "description",
+            "assignee",
+            "assignee_name",
+            "milestone",
+            "priority",
+            "status",
+            "start_date",
+            "due_date",
+            "completed_at",
+            "dependency_ids",
+            "dependencies",
+            "is_overdue",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "project", "assignee_name", "completed_at", "dependencies", "is_overdue", "created_at", "updated_at"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        project = self.context.get("project")
+        workspace = self.context.get("workspace")
+        if workspace:
+            self.fields["assignee"].queryset = Member.objects.filter(workspace=workspace)
+        if project:
+            self.fields["milestone"].queryset = ProjectMilestone.objects.filter(project=project)
+            self.fields["dependency_ids"].queryset = ProjectTask.objects.filter(project=project)
+
+    def get_assignee_name(self, obj):
+        return str(obj.assignee) if obj.assignee_id else ""
+
+    def validate_status(self, value):
+        if value not in ProjectTaskStatus.values:
+            raise serializers.ValidationError("Statut tache invalide.")
+        return value
+
+
+class ProjectCommentSerializer(serializers.ModelSerializer):
+    author_name = serializers.CharField(source="author.__str__", read_only=True)
+
+    class Meta:
+        model = ProjectComment
+        fields = ["id", "project", "author_name", "content", "mentions", "created_at", "updated_at"]
+        read_only_fields = ["id", "project", "author_name", "created_at", "updated_at"]
+
+
 class ProjectSerializer(serializers.ModelSerializer):
     status_label = serializers.CharField(source="get_status_display", read_only=True)
     priority_label = serializers.CharField(source="get_priority_display", read_only=True)
     budget_summary = serializers.SerializerMethodField()
+    analytics = serializers.SerializerMethodField()
+    risk = serializers.SerializerMethodField()
     is_delayed = serializers.BooleanField(read_only=True)
+    planned_budget = serializers.DecimalField(source="budget", max_digits=14, decimal_places=2, read_only=True)
 
     class Meta:
         model = Project
         fields = [
             "id",
+            "code",
             "name",
             "description",
             "objectives",
@@ -81,22 +201,31 @@ class ProjectSerializer(serializers.ModelSerializer):
             "status_label",
             "priority",
             "priority_label",
+            "visibility",
+            "parent",
             "start_date",
             "end_date",
+            "owner",
             "responsible_user",
             "responsible_member",
+            "planned_budget",
             "budget",
+            "currency",
             "budget_summary",
+            "analytics",
+            "risk",
             "progress",
+            "progress_mode",
             "category",
             "image",
             "partners",
             "notes",
             "is_delayed",
+            "completed_at",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "budget_summary", "is_delayed", "created_at", "updated_at"]
+        read_only_fields = ["id", "code", "currency", "planned_budget", "budget_summary", "analytics", "risk", "is_delayed", "completed_at", "created_at", "updated_at"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -105,13 +234,26 @@ class ProjectSerializer(serializers.ModelSerializer):
             user_ids = WorkspaceMembership.objects.filter(workspace=workspace, status="active").values_list("user_id", flat=True)
             self.fields["responsible_user"].queryset = get_user_model().objects.filter(id__in=user_ids)
             self.fields["responsible_member"].queryset = Member.objects.filter(workspace=workspace)
+            self.fields["owner"].queryset = Member.objects.filter(workspace=workspace)
+            self.fields["parent"].queryset = Project.objects.filter(workspace=workspace)
 
     def get_budget_summary(self, obj):
         return project_budget_summary(obj)
 
+    def get_analytics(self, obj):
+        return project_analytics(obj)
+
+    def get_risk(self, obj):
+        return project_risk_score(obj)
+
     def validate_status(self, value):
         if value not in ProjectStatus.values:
             raise serializers.ValidationError("Statut projet invalide.")
+        return value
+
+    def validate_visibility(self, value):
+        if value not in ProjectVisibility.values:
+            raise serializers.ValidationError("Visibilite projet invalide.")
         return value
 
     def validate_priority(self, value):
@@ -137,6 +279,12 @@ class ProjectSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"responsible_user": "Le responsable doit appartenir au workspace."})
         if responsible_member and not Member.objects.filter(workspace=workspace, id=responsible_member.id).exists():
             raise serializers.ValidationError({"responsible_member": "Le membre responsable doit appartenir au workspace."})
+        owner = attrs.get("owner") or getattr(self.instance, "owner", None)
+        if owner and not Member.objects.filter(workspace=workspace, id=owner.id).exists():
+            raise serializers.ValidationError({"owner": "Le proprietaire projet doit appartenir au workspace."})
+        parent = attrs.get("parent") or getattr(self.instance, "parent", None)
+        if parent and parent.workspace_id != workspace.id:
+            raise serializers.ValidationError({"parent": "Le projet parent doit appartenir au workspace."})
         start_date = attrs.get("start_date") or getattr(self.instance, "start_date", None)
         end_date = attrs.get("end_date") or getattr(self.instance, "end_date", None)
         if start_date and end_date and end_date < start_date:

@@ -49,3 +49,31 @@ Les permissions sont appliquees par action dans le viewset backend.
 ## Isolation workspace
 
 Toutes les requetes filtrent par `X-Workspace`, membership actif et `workspace_id`. Les responsables utilisateur ou membre sont valides contre le meme workspace.
+# Module projets operationnel
+
+Le module projets connecte planification, equipe, taches, objectifs, milestones, budget, finances, documents, evenements, activite et rapports.
+
+## Socle metier
+
+- `Project`: code serveur `PRJ-YYYY-NNN`, statut, priorite, visibilite, parent, owner membre, budget, devise, progression et cloture.
+- `ProjectMember`: equipe projet avec roles locaux `PROJECT_MANAGER`, `MEMBER`, `FINANCE`, `OBSERVER`.
+- `ProjectObjective`: objectifs mesurables avec cible, valeur actuelle, unite et progression.
+- `ProjectMilestone`: jalons avec detection de retard.
+- `ProjectTask`: taches kanban/liste/calendrier, assigne, milestone, dependances et blocage des cycles.
+- `ProjectComment`: commentaires avec mentions preparees.
+- `ProjectAlert`: alertes projet pour taches, deadline, budget et milestones.
+
+## Integrations NOVEX
+
+Les depenses projet sont consolidees depuis `FinancialTransaction.project` et les anciennes allocations projet. Les budgets projet restent geres par `apps.budgets` via `Budget.scope_type=PROJECT`.
+
+## Calculs
+
+- Avancement automatique: moyenne des taches terminees, objectifs et milestones.
+- Budget consomme: depenses finance validees + allocations projet existantes.
+- Risque: retard, budget superieur a 90%, taches bloquees et milestones en retard.
+- Rapport: presentation, objectifs, analytics, budget, equipe, activite et formats d'export prepares.
+
+## Permissions
+
+Les vues utilisent `projects.view`, `projects.create`, `projects.update`, `projects.archive`, `projects.manage_members`, `projects.manage_tasks`, `projects.manage_budget`, `projects.manage_documents`, `projects.manage_objectives`, `projects.manage_reports` et `projects.export`.
