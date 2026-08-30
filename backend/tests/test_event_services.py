@@ -12,14 +12,20 @@ from apps.events.services import (
     add_expense_allocation,
     add_participant,
     add_revenue_allocation,
+    checkin_ticket,
     create_event,
+    create_ticket_order,
+    create_ticket_type,
     event_stats,
+    register_member,
     update_attendance,
     update_event,
     update_rsvp,
     workspace_event_stats,
 )
 from apps.events.statuses import EventParticipantStatus, EventStatus, EventType
+from apps.finance.services import create_expense, create_income, default_category, financial_settings
+from apps.finance.statuses import FinancialCategoryKind
 from apps.members.models import Member
 from apps.projects.services import create_project
 from apps.workspaces.models import Role, Workspace, WorkspaceMembership
@@ -54,6 +60,7 @@ def test_event_creation_update_and_cancel_audit(django_user_model):
 
     updated = update_event(event=event, actor=owner, status=EventStatus.CANCELLED, title="AG reportee")
 
+    assert event.code.startswith("EVT-")
     assert updated.status == EventStatus.CANCELLED
     assert updated.activities.filter(action="event.created").exists()
     assert updated.activities.filter(action="event.cancelled").exists()
@@ -71,7 +78,7 @@ def test_participants_rsvp_attendance_and_stats(django_user_model):
     stats = event_stats(event)
 
     assert stats["participants"] == 1
-    assert stats["confirmed"] == 0
+    assert stats["confirmed"] == 1
     assert stats["attended"] == 1
     assert stats["attendance_rate"] == 100
 
@@ -88,6 +95,58 @@ def test_event_budget_expenses_revenues_and_balance(django_user_model):
     assert stats["expenses"] == Decimal("325000.00")
     assert stats["revenues"] == Decimal("1200000.00")
     assert stats["balance"] == Decimal("875000.00")
+
+
+@pytest.mark.django_db
+def test_registration_capacity_waitlist_and_attendance_rate(django_user_model):
+    workspace, owner = make_workspace(django_user_model, "capacity")
+    event = make_event(workspace, owner, capacity=1, status=EventStatus.REGISTRATION_OPEN)
+    first = Member.objects.create(workspace=workspace, membership_number="CAP-001", first_name="Awa", last_name="Kouame")
+    second = Member.objects.create(workspace=workspace, membership_number="CAP-002", first_name="Yao", last_name="Kone")
+
+    first_participant = register_member(event=event, member=first, actor=owner)
+    second_participant = register_member(event=event, member=second, actor=owner)
+    update_rsvp(participant=first_participant, status=EventParticipantStatus.CONFIRMED, actor=owner)
+    update_attendance(participant=first_participant, attended=True, actor=owner)
+    stats = event_stats(event)
+
+    assert first_participant.status == EventParticipantStatus.REGISTERED
+    assert second_participant.status == EventParticipantStatus.WAITLISTED
+    assert stats["attendance_rate"] == 100
+
+
+@pytest.mark.django_db
+def test_ticket_checkin_is_single_use(django_user_model):
+    workspace, owner = make_workspace(django_user_model, "tickets")
+    event = make_event(workspace, owner)
+    ticket_type = create_ticket_type(event=event, actor=owner, name="Membre", price=Decimal("500.00"), quantity=1)
+    order = create_ticket_order(event=event, ticket_type=ticket_type, quantity=1, actor=owner)
+    ticket = order.tickets.first()
+
+    checked = checkin_ticket(ticket=ticket, actor=owner)
+
+    assert checked.checked_in_at is not None
+    with pytest.raises(ValueError):
+        checkin_ticket(ticket=checked, actor=owner)
+
+
+@pytest.mark.django_db
+def test_event_finance_uses_financial_transactions(django_user_model):
+    workspace, owner = make_workspace(django_user_model, "event-finance")
+    finance_settings = financial_settings(workspace)
+    finance_settings.expense_validation_threshold = Decimal("9999999.00")
+    finance_settings.save()
+    event = make_event(workspace, owner, budget=Decimal("1000000.00"))
+    expense_category = default_category(workspace, kind=FinancialCategoryKind.EXPENSE_CATEGORY, name="Logistique", actor=owner)
+    income_category = default_category(workspace, kind=FinancialCategoryKind.INCOME_CATEGORY, name="Sponsors", actor=owner)
+
+    create_expense(workspace=workspace, actor=owner, event=event, amount=Decimal("700000.00"), category=expense_category, description="Salle")
+    create_income(workspace=workspace, actor=owner, event=event, amount=Decimal("900000.00"), category=income_category, description="Sponsor")
+    stats = event_stats(event)
+
+    assert stats["expenses"] == Decimal("700000.00")
+    assert stats["revenues"] == Decimal("900000.00")
+    assert stats["balance"] == Decimal("200000.00")
 
 
 @pytest.mark.django_db

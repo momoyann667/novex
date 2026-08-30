@@ -173,3 +173,32 @@ Les endpoints workspace doivent recevoir un contexte workspace fiable, puis le b
 - `GET /api/v1/projects/{id}/activity/` - timeline operationnelle.
 - `GET /api/v1/projects/{id}/report/` - rapport consolide.
 - `POST /api/v1/projects/{id}/report/export/` - preparation export PDF/XLSX via Celery.
+
+## Evenements
+
+- `GET|POST /api/v1/events/` - liste et creation des evenements.
+- `GET|PATCH /api/v1/events/{id}/` - detail et modification.
+- `POST /api/v1/events/{id}/cancel/` - annulation auditee.
+- `POST /api/v1/events/{id}/complete/` - cloture evenement.
+- `GET /api/v1/events/overview/` - dashboard evenements.
+- `GET /api/v1/events/calendar/?start=&end=` - calendrier global NOVEX.
+- `GET /api/v1/events/{id}/analytics/` - participants, presence, capacity, finance, feedback.
+- `GET|POST /api/v1/events/{id}/participants/` - invitations et participants.
+- `POST /api/v1/events/{id}/register/` - inscription PWA avec waitlist si complet.
+- `POST /api/v1/events/{id}/unregister/` - annulation d'inscription avec controle deadline.
+- `PATCH /api/v1/events/{id}/participants/{participant_id}/` - mise a jour participant.
+- `GET|POST /api/v1/events/{id}/attendance/` - liste et mise a jour de presence.
+- `POST /api/v1/events/{id}/checkin/` - check-in QR participant.
+- `POST /api/v1/events/{id}/attendance/manual/` - presence manuelle auditee.
+- `GET|POST /api/v1/events/{id}/organizers/` - equipe organisatrice.
+- `GET|POST /api/v1/events/{id}/tickets/` - types de tickets.
+- `POST /api/v1/events/{id}/tickets/orders/` - commande ticket, prete pour Payments.
+- `GET /api/v1/events/{id}/tickets/{ticket_id}/` - detail ticket.
+- `POST /api/v1/events/{id}/tickets/{ticket_id}/checkin/` - validation ticket anti-double scan.
+- `GET|POST /api/v1/events/{id}/sponsors/` - sponsors.
+- `GET|POST /api/v1/events/{id}/schedule/` - programme.
+- `GET|POST /api/v1/events/{id}/speakers/` - intervenants.
+- `GET|POST /api/v1/events/{id}/feedback/` - evaluations et satisfaction.
+- `GET|POST /api/v1/events/{id}/announcements/` - annonces et canaux prepares.
+- `GET /api/v1/events/{id}/report/` - rapport evenement.
+- `POST /api/v1/events/{id}/report/export/` - preparation export PDF/XLSX via Celery.

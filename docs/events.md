@@ -66,3 +66,32 @@ Les rappels sont representes par `reminder_offsets` en minutes. Les valeurs par 
 ## QR Code
 
 La presence par QR Code est documentee comme extension future. Aucun scan fragile n'est implemente tant que l'identite membre, les tokens et la verification publique ne sont pas finalises.
+# Module evenements
+
+Le module evenements gere informations, planning, organisateurs, participants, inscriptions, presences, tickets, budget, recettes, depenses, documents, projet associe, communications, feedback et rapport.
+
+## Architecture
+
+- `Event`: code serveur `EVT-YYYY-NNN`, type, statut, visibilite, timezone, lieu, inscription, owner, projet et budget.
+- `EventParticipant`: membre existant ou participant externe prepare, statut, QR et presence.
+- `EventOrganizer`: equipe organisatrice avec roles locaux.
+- `EventTicketType`, `TicketOrder`, `EventTicket`: billetterie prete pour Payments, QR ticket et check-in anti-double scan.
+- `EventSponsor`: sponsors et contributions preparees pour Finance.
+- `EventScheduleItem`, `EventSpeaker`: programme et intervenants.
+- `EventFeedback`: note, satisfaction et commentaire.
+- `EventAnnouncement`: annonces in-app/email/WhatsApp/SMS selon integrations disponibles.
+
+## Finance, budgets et projets
+
+Les recettes et depenses evenement sont lues depuis `FinancialTransaction.event` et les allocations historiques. Les budgets evenement restent portes par `apps.budgets` via `Budget.scope_type=EVENT`. Les evenements restent lies a `Project` par la FK existante.
+
+## Calculs
+
+- Presence: presents / confirmes, avec zero protege.
+- Remplissage: inscrits / capacite, avec capacite nulle protegee.
+- Finance: recettes, depenses, resultat, budget restant et taux de consommation.
+- Rapport: resume, participants, presence, programme, budget, resultats, documents et satisfaction.
+
+## Securite
+
+Toutes les vues passent par `RequireWorkspacePermission` et filtrent via `X-Workspace` + membership actif. Les liens membre/projet/ressource verifient le workspace.
