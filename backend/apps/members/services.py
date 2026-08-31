@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Max, Q, Sum
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare, get_random_string, salted_hmac
 
@@ -23,6 +23,20 @@ from .models import Member, MemberActivity, MemberInvitation, MembershipApplicat
 ZERO = Decimal("0.00")
 
 
+DIRECTORY_SORTS = {
+    "name": ("last_name", "first_name"),
+    "-name": ("-last_name", "-first_name"),
+    "join_date": ("join_date",),
+    "-join_date": ("-join_date",),
+    "status": ("status", "last_name"),
+    "-status": ("-status", "last_name"),
+    "last_activity": ("last_activity_at",),
+    "-last_activity": ("-last_activity_at",),
+    "created_at": ("created_at",),
+    "-created_at": ("-created_at",),
+}
+
+
 def next_membership_number(workspace: Workspace) -> str:
     prefix = workspace.slug.upper().replace("-", "")[:8] or "NOVEX"
     count = Member.objects.filter(workspace=workspace).count() + 1
@@ -33,6 +47,151 @@ def member_seniority(member: Member, *, today=None) -> dict:
     current_date = today or timezone.localdate()
     days = max((current_date - member.join_date).days, 0)
     return {"days": days, "years": round(days / 365, 1)}
+
+
+def member_directory_base_queryset(workspace: Workspace):
+    return (
+        Member.objects.select_related("category", "workspace", "linked_user")
+        .prefetch_related("tags", "groups")
+        .filter(workspace=workspace)
+        .annotate(
+            last_activity_at=Max("activities__created_at"),
+            contribution_total=Count("contributions", distinct=True),
+            contribution_paid=Count("contributions", filter=Q(contributions__status__in=[ContributionStatus.PAID, ContributionStatus.WAIVED]), distinct=True),
+            contribution_partial=Count("contributions", filter=Q(contributions__status=ContributionStatus.PARTIALLY_PAID), distinct=True),
+            contribution_overdue=Count("contributions", filter=Q(contributions__status=ContributionStatus.OVERDUE), distinct=True),
+            contribution_pending=Count("contributions", filter=Q(contributions__status=ContributionStatus.PENDING), distinct=True),
+        )
+    )
+
+
+def member_contribution_status(member: Member) -> str:
+    if getattr(member, "contribution_total", 0) == 0:
+        return "none"
+    if getattr(member, "contribution_overdue", 0):
+        return "overdue"
+    if getattr(member, "contribution_partial", 0):
+        return "partial"
+    if getattr(member, "contribution_pending", 0):
+        return "pending"
+    return "up_to_date"
+
+
+def filter_member_directory(queryset, filters: dict):
+    search = (filters.get("search") or "").strip()
+    if search:
+        queryset = queryset.filter(
+            Q(first_name__icontains=search)
+            | Q(last_name__icontains=search)
+            | Q(email__icontains=search)
+            | Q(phone__icontains=search)
+            | Q(membership_number__icontains=search)
+            | Q(function__icontains=search)
+        )
+
+    direct_filters = {
+        "status": "status",
+        "role": "function__iexact",
+        "function": "function__iexact",
+        "category": "category_id",
+        "gender": "gender",
+        "city": "city__icontains",
+        "joined_from": "join_date__gte",
+        "joined_to": "join_date__lte",
+    }
+    for key, field in direct_filters.items():
+        value = filters.get(key)
+        if value:
+            queryset = queryset.filter(**{field: value})
+
+    date_preset = filters.get("date_preset")
+    today = timezone.localdate()
+    if date_preset == "today":
+        queryset = queryset.filter(join_date=today)
+    elif date_preset == "week":
+        queryset = queryset.filter(join_date__gte=today - timedelta(days=today.weekday()))
+    elif date_preset == "month":
+        queryset = queryset.filter(join_date__year=today.year, join_date__month=today.month)
+    elif date_preset == "year":
+        queryset = queryset.filter(join_date__year=today.year)
+
+    if filters.get("tag"):
+        queryset = queryset.filter(tags__id=filters["tag"])
+    if filters.get("group"):
+        queryset = queryset.filter(groups__id=filters["group"])
+
+    contribution_status = filters.get("contribution_status")
+    if contribution_status == "up_to_date":
+        queryset = queryset.filter(contribution_total__gt=0, contribution_overdue=0, contribution_partial=0, contribution_pending=0)
+    elif contribution_status == "overdue":
+        queryset = queryset.filter(contribution_overdue__gt=0)
+    elif contribution_status == "partial":
+        queryset = queryset.filter(contribution_partial__gt=0)
+    elif contribution_status == "pending":
+        queryset = queryset.filter(contribution_pending__gt=0)
+    elif contribution_status == "none":
+        queryset = queryset.filter(contribution_total=0)
+
+    return queryset.distinct()
+
+
+def sort_member_directory(queryset, sort: str | None):
+    ordering = DIRECTORY_SORTS.get(sort or "name", DIRECTORY_SORTS["name"])
+    return queryset.order_by(*ordering, "id")
+
+
+def member_directory_summary(workspace: Workspace) -> dict:
+    base = Member.objects.filter(workspace=workspace)
+    today = timezone.localdate()
+    current_start = today - timedelta(days=30)
+    previous_start = today - timedelta(days=60)
+    current_new = base.filter(join_date__gte=current_start).count()
+    previous_new = base.filter(join_date__gte=previous_start, join_date__lt=current_start).count()
+    growth_rate = round(((current_new - previous_new) / previous_new) * 100, 1) if previous_new else None
+    total = base.count()
+    contribution_members = Contribution.objects.filter(workspace=workspace).values("member_id").distinct().count()
+    paid_members = Contribution.objects.filter(workspace=workspace, status__in=[ContributionStatus.PAID, ContributionStatus.WAIVED]).values("member_id").distinct().count()
+    participant_total = EventParticipant.objects.filter(workspace=workspace).count()
+    participant_attended = EventParticipant.objects.filter(workspace=workspace, attendance_status=EventParticipantStatus.ATTENDED).count()
+    return {
+        "total": total,
+        "active": base.filter(status=Member.Status.ACTIVE).count(),
+        "pending": base.filter(status=Member.Status.PENDING).count(),
+        "inactive": base.filter(status=Member.Status.INACTIVE).count(),
+        "suspended": base.filter(status=Member.Status.SUSPENDED).count(),
+        "archived": base.filter(status=Member.Status.ARCHIVED).count(),
+        "new_30_days": current_new,
+        "growth_rate": growth_rate,
+        "contribution_rate": round((paid_members / contribution_members) * 100, 1) if contribution_members else None,
+        "participation_rate": round((participant_attended / participant_total) * 100, 1) if participant_total else None,
+    }
+
+
+def member_directory_facets(workspace: Workspace) -> dict:
+    base = Member.objects.filter(workspace=workspace)
+    return {
+        "statuses": [{"value": value, "label": label, "count": base.filter(status=value).count()} for value, label in Member.Status.choices],
+        "functions": list(base.exclude(function="").values("function").annotate(count=Count("id")).order_by("function")),
+        "cities": list(base.exclude(city="").values("city").annotate(count=Count("id")).order_by("city")),
+        "categories": list(workspace.member_categories.values("id", "name").annotate(count=Count("members")).order_by("name")),
+        "genders": [{"value": value, "label": label, "count": base.filter(gender=value).count()} for value, label in Member.Gender.choices],
+    }
+
+
+def member_directory_segments(workspace: Workspace) -> list[dict]:
+    base = member_directory_base_queryset(workspace)
+    today = timezone.localdate()
+    return [
+        {"key": "active", "name": "Membres actifs", "description": "Tous les membres actifs", "filters": {"status": Member.Status.ACTIVE}, "count": base.filter(status=Member.Status.ACTIVE).count(), "visibility": "shared"},
+        {"key": "new", "name": "Nouveaux membres", "description": "Adhesions des 30 derniers jours", "filters": {"joined_from": str(today - timedelta(days=30))}, "count": base.filter(join_date__gte=today - timedelta(days=30)).count(), "visibility": "shared"},
+        {"key": "overdue", "name": "Cotisations en retard", "description": "Membres avec cotisations en retard", "filters": {"contribution_status": "overdue"}, "count": base.filter(contribution_overdue__gt=0).count(), "visibility": "shared"},
+        {"key": "archived", "name": "Archives", "description": "Membres archives conserves pour historique", "filters": {"status": Member.Status.ARCHIVED}, "count": base.filter(status=Member.Status.ARCHIVED).count(), "visibility": "shared"},
+    ]
+
+
+def log_member_export(*, workspace: Workspace, actor, count: int, filters: dict) -> None:
+    clean_filters = {key: value for key, value in filters.items() if value not in [None, ""]}
+    AuditLog.objects.create(workspace=workspace, actor=actor, action="member.exported", resource="member", resource_id="", metadata={"count": count, "filters": clean_filters})
 
 
 def log_member_action(*, member: Member, actor, action: str, metadata: dict | None = None) -> None:

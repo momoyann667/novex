@@ -217,3 +217,26 @@ def test_self_member_profile_and_dashboard_are_limited_to_linked_member(django_u
     assert linked_member.function == "Membre"
     assert dashboard.status_code == 200
     assert dashboard.data["profile"]["id"] == linked_member.id
+
+
+@pytest.mark.django_db
+def test_member_directory_filters_export_and_audit(django_user_model):
+    workspace, owner = make_workspace(django_user_model, "directory", {"members.view", "members.create", "members.update", "members.archive", "members.restore", "members.export"})
+    create_member(workspace=workspace, actor=owner, first_name="Awa", last_name="Kone", email="awa@example.com", function="Secretaire", status=Member.Status.ACTIVE)
+    create_member(workspace=workspace, actor=owner, first_name="Yao", last_name="Koffi", email="yao@example.com", function="Tresorier", status=Member.Status.ARCHIVED)
+    api_client = APIClient()
+    api_client.force_authenticate(owner)
+
+    directory = api_client.get("/api/v1/members/directory/", {"search": "Awa", "status": Member.Status.ACTIVE}, HTTP_X_WORKSPACE=workspace.slug)
+    exported = api_client.get("/api/v1/members/directory-export/", {"search": "Awa"}, HTTP_X_WORKSPACE=workspace.slug)
+
+    assert directory.status_code == 200
+    rows = directory.data["results"] if "results" in directory.data else directory.data
+    assert len(rows) == 1
+    assert rows[0]["email"] == "awa@example.com"
+    assert "summary" in directory.data
+    assert "segments" in directory.data
+    assert exported.status_code == 200
+    assert b"awa@example.com" in exported.content
+    assert b"yao@example.com" not in exported.content
+    assert AuditLog.objects.filter(workspace=workspace, action="member.exported").exists()

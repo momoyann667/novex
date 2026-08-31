@@ -1,4 +1,7 @@
+import csv
+
 from django.core.cache import cache
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import filters, status, views, viewsets
@@ -12,6 +15,8 @@ from .serializers import (
     InvitationTokenSerializer,
     MemberCategorySerializer,
     MemberCustomFieldDefinitionSerializer,
+    MemberDirectoryBulkActionSerializer,
+    MemberDirectorySerializer,
     MemberGroupSerializer,
     MemberInvitationSerializer,
     MemberSerializer,
@@ -38,13 +43,21 @@ from .services import (
     create_membership_application,
     decline_invitation,
     expire_application,
+    filter_member_directory,
     get_invitation_by_token,
     get_membership_settings,
+    log_member_export,
+    member_directory_base_queryset,
+    member_directory_facets,
+    member_directory_segments,
+    member_directory_summary,
+    member_contribution_status,
     member_dashboard,
     member_seniority,
     reject_application,
     resend_invitation,
     restore_member,
+    sort_member_directory,
     review_application,
     self_member_for_user,
     update_self_member_profile,
@@ -54,6 +67,16 @@ from .services import (
 
 def current_workspace(request):
     return request.user.workspace_memberships.get(workspace__slug=request.headers.get("X-Workspace"), status="active").workspace
+
+
+def member_contribution_label(member):
+    return {
+        "up_to_date": "A jour",
+        "overdue": "En retard",
+        "partial": "Partiellement paye",
+        "pending": "En attente",
+        "none": "Aucune cotisation",
+    }[member_contribution_status(member)]
 
 
 class MemberViewSet(viewsets.ModelViewSet):
@@ -73,6 +96,11 @@ class MemberViewSet(viewsets.ModelViewSet):
             "archive": "members.archive",
             "restore": "members.restore",
             "summary": "members.view",
+            "directory": "members.view",
+            "directory_export": "members.export",
+            "export": "members.export",
+            "bulk_archive": "members.archive",
+            "bulk_status": "members.update",
         }
         permission_code = permission_map.get(self.action, "members.view")
         return [RequireWorkspacePermission.for_permission(permission_code)()]
@@ -92,6 +120,7 @@ class MemberViewSet(viewsets.ModelViewSet):
         filters_map = {
             "status": "status",
             "function": "function__iexact",
+            "role": "function__iexact",
             "category": "category_id",
             "city": "city__icontains",
             "joined_from": "join_date__gte",
@@ -162,11 +191,96 @@ class MemberViewSet(viewsets.ModelViewSet):
         payload = {
             "total": queryset.count(),
             "active": queryset.filter(status=Member.Status.ACTIVE).count(),
+            "pending": queryset.filter(status=Member.Status.PENDING).count(),
             "inactive": queryset.filter(status=Member.Status.INACTIVE).count(),
             "suspended": queryset.filter(status=Member.Status.SUSPENDED).count(),
             "archived": queryset.filter(status=Member.Status.ARCHIVED).count(),
         }
         return Response(MemberSummarySerializer(payload).data)
+
+    @action(detail=False, methods=["get"])
+    def directory(self, request):
+        workspace = current_workspace(request)
+        queryset = sort_member_directory(filter_member_directory(member_directory_base_queryset(workspace), request.query_params), request.query_params.get("sort") or request.query_params.get("ordering"))
+        page = self.paginate_queryset(queryset)
+        serializer = MemberDirectorySerializer(page or queryset, many=True, context=self.get_serializer_context())
+        payload = {
+            "summary": member_directory_summary(workspace),
+            "facets": member_directory_facets(workspace),
+            "segments": member_directory_segments(workspace),
+            "results": serializer.data,
+        }
+        if page is not None:
+            response = self.get_paginated_response(serializer.data)
+            response.data["summary"] = payload["summary"]
+            response.data["facets"] = payload["facets"]
+            response.data["segments"] = payload["segments"]
+            return response
+        return Response(payload)
+
+    @action(detail=False, methods=["get"], url_path="directory-export")
+    def directory_export(self, request):
+        workspace = current_workspace(request)
+        queryset = sort_member_directory(filter_member_directory(member_directory_base_queryset(workspace), request.query_params), request.query_params.get("sort") or request.query_params.get("ordering"))
+        return self.export_directory_queryset(request, workspace, queryset, request.query_params.dict())
+
+    @action(detail=False, methods=["post"], url_path="export")
+    def export(self, request):
+        workspace = current_workspace(request)
+        filters_payload = dict(request.data)
+        queryset = sort_member_directory(filter_member_directory(member_directory_base_queryset(workspace), filters_payload), filters_payload.get("sort") or filters_payload.get("ordering"))
+        return self.export_directory_queryset(request, workspace, queryset, filters_payload)
+
+    def export_directory_queryset(self, request, workspace, queryset, filters_payload):
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = 'attachment; filename="novex-membres.csv"'
+        response.write("\ufeff")
+        writer = csv.writer(response)
+        writer.writerow(["Numero", "Nom", "Prenoms", "Fonction", "Telephone", "Email", "Statut", "Categorie", "Ville", "Adhesion", "Cotisation", "Derniere activite"])
+        count = 0
+        for member in queryset.iterator(chunk_size=500):
+            count += 1
+            writer.writerow([
+                member.membership_number,
+                member.last_name,
+                member.first_name,
+                member.function,
+                member.phone,
+                member.email,
+                member.status,
+                member.category.name if member.category_id else "",
+                member.city,
+                member.join_date,
+                member_contribution_label(member),
+                getattr(member, "last_activity_at", "") or "",
+            ])
+        log_member_export(workspace=workspace, actor=request.user, count=count, filters=filters_payload)
+        return response
+
+    @action(detail=False, methods=["post"], url_path="bulk-archive")
+    def bulk_archive(self, request):
+        serializer = MemberDirectoryBulkActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        members = self.get_queryset().filter(id__in=serializer.validated_data["member_ids"]).exclude(status=Member.Status.ARCHIVED)
+        archived = 0
+        for member in members:
+            archive_member(member=member, actor=request.user)
+            archived += 1
+        return Response({"archived": archived}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["post"], url_path="bulk-status")
+    def bulk_status(self, request):
+        serializer = MemberDirectoryBulkActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        next_status = serializer.validated_data.get("status")
+        if not next_status:
+            return Response({"status": "Ce champ est requis."}, status=status.HTTP_400_BAD_REQUEST)
+        members = self.get_queryset().filter(id__in=serializer.validated_data["member_ids"])
+        updated = 0
+        for member in members:
+            update_member(member=member, actor=request.user, status=next_status)
+            updated += 1
+        return Response({"updated": updated}, status=status.HTTP_200_OK)
 
 
 class WorkspaceScopedViewSet(viewsets.ModelViewSet):

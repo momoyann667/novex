@@ -140,9 +140,61 @@ class MemberSerializer(serializers.ModelSerializer):
 class MemberSummarySerializer(serializers.Serializer):
     total = serializers.IntegerField()
     active = serializers.IntegerField()
+    pending = serializers.IntegerField(required=False)
     inactive = serializers.IntegerField()
     suspended = serializers.IntegerField()
     archived = serializers.IntegerField()
+    new_30_days = serializers.IntegerField(required=False)
+    growth_rate = serializers.FloatField(required=False, allow_null=True)
+    contribution_rate = serializers.FloatField(required=False, allow_null=True)
+    participation_rate = serializers.FloatField(required=False, allow_null=True)
+
+
+class MemberDirectorySerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source="category.name", read_only=True, allow_null=True)
+    full_name = serializers.CharField(read_only=True)
+    tags_detail = MemberTagSerializer(source="tags", many=True, read_only=True)
+    groups_detail = MemberGroupSerializer(source="groups", many=True, read_only=True)
+    last_activity_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    contribution_status = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Member
+        fields = [
+            "id",
+            "membership_number",
+            "first_name",
+            "last_name",
+            "full_name",
+            "email",
+            "phone_country_code",
+            "phone",
+            "function",
+            "gender",
+            "city",
+            "photo",
+            "join_date",
+            "status",
+            "category",
+            "category_name",
+            "tags_detail",
+            "groups_detail",
+            "last_activity_at",
+            "contribution_status",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+    def get_contribution_status(self, obj):
+        from .services import member_contribution_status
+
+        return member_contribution_status(obj)
+
+
+class MemberDirectoryBulkActionSerializer(serializers.Serializer):
+    member_ids = serializers.ListField(child=serializers.IntegerField(min_value=1), min_length=1)
+    status = serializers.ChoiceField(choices=Member.Status.choices, required=False)
 
 
 class MembershipSettingsSerializer(serializers.ModelSerializer):

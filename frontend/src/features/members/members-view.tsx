@@ -1,30 +1,63 @@
 "use client";
 
-import { type ChangeEvent, useMemo, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Bell, Bot, Download, Filter, Grid2X2, Plus, Search, SlidersHorizontal, TrendingUp, Upload, UserPlus, Users, X } from "lucide-react";
+import {
+  Archive,
+  ArrowLeft,
+  Bell,
+  Bot,
+  CheckSquare,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Filter,
+  Grid2X2,
+  Mail,
+  MoreVertical,
+  Phone,
+  Plus,
+  RotateCcw,
+  Search,
+  SlidersHorizontal,
+  TrendingUp,
+  Upload,
+  UserPlus,
+  Users,
+  X
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+type MemberStatus = "Actif" | "En attente" | "Inactif" | "Suspendu" | "Archive";
+type ContributionStatus = "A jour" | "En retard" | "Partiel" | "Aucune cotisation";
+
 type Member = {
+  id: string;
+  number: string;
   name: string;
   email: string;
   phone: string;
   function: string;
+  category: string;
+  city: string;
+  gender: string;
   joinedAt: string;
-  status: "Actif" | "Inactif" | "Suspendu" | "Archive";
+  status: MemberStatus;
+  contribution: ContributionStatus;
+  lastActivity: string;
   avatar: string;
 };
 
 const members: Member[] = [
-  { name: "Amara Diallo", email: "amara.diallo@example.com", phone: "+225 07 00 00 00 01", function: "President", joinedAt: "2024-01-15", status: "Actif", avatar: "bg-[linear-gradient(135deg,#0f172a,#64748b)]" },
-  { name: "Jean-Marc Oka", email: "jm.oka@example.com", phone: "+225 05 00 00 00 02", function: "Tresorier", joinedAt: "2024-03-22", status: "Inactif", avatar: "bg-[linear-gradient(135deg,#dbeafe,#334155)]" },
-  { name: "Koffi Kouakou", email: "k.kouakou@example.com", phone: "+225 01 00 00 00 03", function: "Secretaire general", joinedAt: "2023-11-04", status: "Actif", avatar: "bg-[linear-gradient(135deg,#ecfeff,#0f766e)]" },
-  { name: "Fatou Diop", email: "f.diop@example.com", phone: "+221 77 000 00 04", function: "Responsable communication", joinedAt: "2025-02-18", status: "Actif", avatar: "bg-[linear-gradient(135deg,#fee2e2,#7c2d12)]" },
-  { name: "Awa Traore", email: "awa.traore@example.com", phone: "+225 07 00 00 00 05", function: "Membre", joinedAt: "2025-06-09", status: "Actif", avatar: "bg-[linear-gradient(135deg,#fef3c7,#92400e)]" },
-  { name: "Serge Nguessan", email: "serge.nguessan@example.com", phone: "+225 05 00 00 00 06", function: "Commissaire aux comptes", joinedAt: "2022-09-30", status: "Inactif", avatar: "bg-[linear-gradient(135deg,#e0e7ff,#312e81)]" },
-  { name: "Nadia Bamba", email: "nadia.bamba@example.com", phone: "+225 01 00 00 00 07", function: "Membre", joinedAt: "2021-05-12", status: "Suspendu", avatar: "bg-[linear-gradient(135deg,#fef2f2,#991b1b)]" },
-  { name: "Paul Ehouman", email: "paul.ehouman@example.com", phone: "+225 07 00 00 00 08", function: "Ancien membre", joinedAt: "2020-08-18", status: "Archive", avatar: "bg-[linear-gradient(135deg,#f1f5f9,#475569)]" }
+  { id: "1", number: "NVX-2024-001", name: "Amara Diallo", email: "amara.diallo@example.com", phone: "+225 07 00 00 00 01", function: "President", category: "Bureau", city: "Abidjan", gender: "Homme", joinedAt: "2024-01-15", status: "Actif", contribution: "A jour", lastActivity: "Il y a 2 h", avatar: "bg-[linear-gradient(135deg,#0f172a,#64748b)]" },
+  { id: "2", number: "NVX-2024-014", name: "Jean-Marc Oka", email: "jm.oka@example.com", phone: "+225 05 00 00 00 02", function: "Tresorier", category: "Bureau", city: "Yamoussoukro", gender: "Homme", joinedAt: "2024-03-22", status: "Inactif", contribution: "En retard", lastActivity: "Hier", avatar: "bg-[linear-gradient(135deg,#dbeafe,#334155)]" },
+  { id: "3", number: "NVX-2023-089", name: "Koffi Kouakou", email: "k.kouakou@example.com", phone: "+225 01 00 00 00 03", function: "Secretaire general", category: "Bureau", city: "Bouake", gender: "Homme", joinedAt: "2023-11-04", status: "Actif", contribution: "Partiel", lastActivity: "12 aout", avatar: "bg-[linear-gradient(135deg,#ecfeff,#0f766e)]" },
+  { id: "4", number: "NVX-2025-021", name: "Fatou Diop", email: "f.diop@example.com", phone: "+221 77 000 00 04", function: "Responsable communication", category: "Benevole", city: "Dakar", gender: "Femme", joinedAt: "2025-02-18", status: "Actif", contribution: "A jour", lastActivity: "25 aout", avatar: "bg-[linear-gradient(135deg,#fee2e2,#7c2d12)]" },
+  { id: "5", number: "NVX-2025-048", name: "Awa Traore", email: "awa.traore@example.com", phone: "+225 07 00 00 00 05", function: "Membre", category: "Membres", city: "Abidjan", gender: "Femme", joinedAt: "2025-06-09", status: "Actif", contribution: "Aucune cotisation", lastActivity: "30 aout", avatar: "bg-[linear-gradient(135deg,#fef3c7,#92400e)]" },
+  { id: "6", number: "NVX-2022-032", name: "Serge Nguessan", email: "serge.nguessan@example.com", phone: "+225 05 00 00 00 06", function: "Commissaire aux comptes", category: "Comite", city: "San Pedro", gender: "Homme", joinedAt: "2022-09-30", status: "Inactif", contribution: "En retard", lastActivity: "4 aout", avatar: "bg-[linear-gradient(135deg,#e0e7ff,#312e81)]" },
+  { id: "7", number: "NVX-2021-117", name: "Nadia Bamba", email: "nadia.bamba@example.com", phone: "+225 01 00 00 00 07", function: "Membre", category: "Section", city: "Korhogo", gender: "Femme", joinedAt: "2021-05-12", status: "Suspendu", contribution: "Partiel", lastActivity: "1 aout", avatar: "bg-[linear-gradient(135deg,#fef2f2,#991b1b)]" },
+  { id: "8", number: "NVX-2020-004", name: "Paul Ehouman", email: "paul.ehouman@example.com", phone: "+225 07 00 00 00 08", function: "Ancien membre", category: "Archives", city: "Abidjan", gender: "Homme", joinedAt: "2020-08-18", status: "Archive", contribution: "A jour", lastActivity: "12 juin", avatar: "bg-[linear-gradient(135deg,#f1f5f9,#475569)]" }
 ];
 
 const avatarStyles = [
@@ -36,12 +69,24 @@ const avatarStyles = [
   "bg-[linear-gradient(135deg,#e0e7ff,#312e81)]"
 ];
 
-function statusClass(status: Member["status"]) {
+const pageSizeOptions = [20, 50, 100];
+
+function statusClass(status: MemberStatus) {
   return {
     Actif: "bg-emerald-50 text-emerald-700",
+    "En attente": "bg-blue-50 text-blue-700",
     Inactif: "bg-slate-100 text-slate-700",
     Suspendu: "bg-amber-50 text-amber-700",
     Archive: "bg-red-50 text-red-700"
+  }[status];
+}
+
+function contributionClass(status: ContributionStatus) {
+  return {
+    "A jour": "bg-emerald-50 text-emerald-700",
+    "En retard": "bg-red-50 text-red-700",
+    Partiel: "bg-amber-50 text-amber-700",
+    "Aucune cotisation": "bg-slate-100 text-slate-600"
   }[status];
 }
 
@@ -75,47 +120,143 @@ function parseCsvLine(line: string) {
   return values;
 }
 
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium" }).format(new Date(value));
+}
+
+function daysSince(value: string) {
+  const diff = Date.now() - new Date(value).getTime();
+  return Math.max(Math.floor(diff / 86_400_000), 0);
+}
+
 export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string }>) {
   const router = useRouter();
   const [memberRows, setMemberRows] = useState<Member[]>(members);
   const [query, setQuery] = useState("");
-  const [onlyActive, setOnlyActive] = useState(false);
-  const [sortAsc, setSortAsc] = useState(true);
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<MemberStatus | "Tous">("Tous");
+  const [functionFilter, setFunctionFilter] = useState("Toutes");
+  const [categoryFilter, setCategoryFilter] = useState("Toutes");
+  const [cityFilter, setCityFilter] = useState("Toutes");
+  const [datePreset, setDatePreset] = useState("Tous");
+  const [contributionFilter, setContributionFilter] = useState<ContributionStatus | "Toutes">("Toutes");
+  const [sort, setSort] = useState("name");
+  const [pageSize, setPageSize] = useState(20);
+  const [page, setPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   const [importNotice, setImportNotice] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [quickMember, setQuickMember] = useState<Member | null>(null);
   const [fullName, setFullName] = useState("");
   const [memberFunction, setMemberFunction] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [joinedAt, setJoinedAt] = useState(new Date().toISOString().slice(0, 10));
-  const [status, setStatus] = useState<Member["status"]>("Actif");
+  const [status, setStatus] = useState<MemberStatus>("Actif");
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebouncedQuery(query), 350);
+    return () => window.clearTimeout(timeout);
+  }, [query]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedQuery, statusFilter, functionFilter, categoryFilter, cityFilter, datePreset, contributionFilter, sort, pageSize]);
+
+  const functions = useMemo(() => ["Toutes", ...Array.from(new Set(memberRows.map((member) => member.function))).sort()], [memberRows]);
+  const categories = useMemo(() => ["Toutes", ...Array.from(new Set(memberRows.map((member) => member.category))).sort()], [memberRows]);
+  const cities = useMemo(() => ["Toutes", ...Array.from(new Set(memberRows.map((member) => member.city))).sort()], [memberRows]);
+
+  const summary = useMemo(() => {
+    const active = memberRows.filter((member) => member.status === "Actif").length;
+    const pending = memberRows.filter((member) => member.status === "En attente").length;
+    const inactive = memberRows.filter((member) => member.status === "Inactif").length;
+    const archived = memberRows.filter((member) => member.status === "Archive").length;
+    const newMembers = memberRows.filter((member) => daysSince(member.joinedAt) <= 30).length;
+    const paidMembers = memberRows.filter((member) => member.contribution === "A jour").length;
+    return {
+      total: memberRows.length,
+      active,
+      pending,
+      inactive,
+      archived,
+      newMembers,
+      growthRate: memberRows.length ? Math.round((newMembers / memberRows.length) * 1000) / 10 : 0,
+      contributionRate: memberRows.length ? Math.round((paidMembers / memberRows.length) * 1000) / 10 : 0
+    };
+  }, [memberRows]);
+
+  const segments = [
+    { label: "Actifs", count: summary.active, apply: () => setStatusFilter("Actif") },
+    { label: "Nouveaux", count: summary.newMembers, apply: () => setDatePreset("30 derniers jours") },
+    { label: "Cotisations en retard", count: memberRows.filter((member) => member.contribution === "En retard").length, apply: () => setContributionFilter("En retard") },
+    { label: "Bureau", count: memberRows.filter((member) => member.category === "Bureau").length, apply: () => setCategoryFilter("Bureau") }
+  ];
 
   const visibleMembers = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
+    const normalizedQuery = debouncedQuery.trim().toLowerCase();
     return memberRows
       .filter((member) => {
-        const matchesQuery = !normalizedQuery || `${member.name} ${member.email} ${member.phone} ${member.function}`.toLowerCase().includes(normalizedQuery);
-        const matchesStatus = !onlyActive || member.status === "Actif";
-        return matchesQuery && matchesStatus;
+        const haystack = `${member.name} ${member.email} ${member.phone} ${member.number} ${member.function}`.toLowerCase();
+        const matchesQuery = !normalizedQuery || haystack.includes(normalizedQuery);
+        const matchesStatus = statusFilter === "Tous" || member.status === statusFilter;
+        const matchesFunction = functionFilter === "Toutes" || member.function === functionFilter;
+        const matchesCategory = categoryFilter === "Toutes" || member.category === categoryFilter;
+        const matchesCity = cityFilter === "Toutes" || member.city === cityFilter;
+        const matchesContribution = contributionFilter === "Toutes" || member.contribution === contributionFilter;
+        const matchesDate =
+          datePreset === "Tous" ||
+          (datePreset === "Aujourd'hui" && daysSince(member.joinedAt) === 0) ||
+          (datePreset === "Cette semaine" && daysSince(member.joinedAt) <= 7) ||
+          (datePreset === "Ce mois" && daysSince(member.joinedAt) <= 31) ||
+          (datePreset === "Cette annee" && new Date(member.joinedAt).getFullYear() === new Date().getFullYear()) ||
+          (datePreset === "30 derniers jours" && daysSince(member.joinedAt) <= 30);
+        return matchesQuery && matchesStatus && matchesFunction && matchesCategory && matchesCity && matchesContribution && matchesDate;
       })
-      .sort((first, second) => (sortAsc ? first.name.localeCompare(second.name) : second.name.localeCompare(first.name)));
-  }, [memberRows, onlyActive, query, sortAsc]);
+      .sort((first, second) => {
+        if (sort === "join_date") return new Date(second.joinedAt).getTime() - new Date(first.joinedAt).getTime();
+        if (sort === "status") return first.status.localeCompare(second.status);
+        if (sort === "last_activity") return first.lastActivity.localeCompare(second.lastActivity);
+        return first.name.localeCompare(second.name);
+      });
+  }, [categoryFilter, cityFilter, contributionFilter, datePreset, debouncedQuery, functionFilter, memberRows, sort, statusFilter]);
+
+  const totalPages = Math.max(Math.ceil(visibleMembers.length / pageSize), 1);
+  const pagedMembers = visibleMembers.slice((page - 1) * pageSize, page * pageSize);
+
+  function resetFilters() {
+    setQuery("");
+    setDebouncedQuery("");
+    setStatusFilter("Tous");
+    setFunctionFilter("Toutes");
+    setCategoryFilter("Toutes");
+    setCityFilter("Toutes");
+    setDatePreset("Tous");
+    setContributionFilter("Toutes");
+    setSort("name");
+  }
 
   function addMember() {
     const cleanName = fullName.trim();
     const cleanFunction = memberFunction.trim();
-    if (!cleanName || !cleanFunction) {
-      return;
-    }
+    if (!cleanName || !cleanFunction) return;
 
     setMemberRows((current) => [
       {
+        id: `${Date.now()}`,
+        number: `NVX-${new Date().getFullYear()}-${String(current.length + 1).padStart(3, "0")}`,
         name: cleanName,
         email: email.trim() || `${cleanName.toLowerCase().replace(/[^a-z0-9]+/g, ".").replace(/^\.+|\.+$/g, "") || "membre"}@example.com`,
         phone: phone.trim(),
         function: cleanFunction,
+        category: "Membres",
+        city: "Abidjan",
+        gender: "Non precise",
         joinedAt,
         status,
+        contribution: "Aucune cotisation",
+        lastActivity: "Maintenant",
         avatar: avatarStyles[current.length % avatarStyles.length]
       },
       ...current
@@ -129,31 +270,38 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
     setShowForm(false);
   }
 
-  function changeStatus(emailAddress: string, nextStatus: Member["status"]) {
-    setMemberRows((current) => current.map((member) => (member.email === emailAddress ? { ...member, status: nextStatus } : member)));
+  function changeStatus(memberId: string, nextStatus: MemberStatus) {
+    setMemberRows((current) => current.map((member) => (member.id === memberId ? { ...member, status: nextStatus } : member)));
+  }
+
+  function archiveSelected() {
+    const count = selectedIds.length;
+    if (!count) return;
+    const confirmed = window.confirm(`Archiver ${count} membre(s) selectionne(s) ?`);
+    if (!confirmed) return;
+    setMemberRows((current) => current.map((member) => (selectedIds.includes(member.id) ? { ...member, status: "Archive" } : member)));
+    setSelectedIds([]);
   }
 
   function exportMembers() {
-    const header = ["Nom et prenoms", "Email", "Telephone", "Role", "Date adhesion", "Statut"];
-    const rows = visibleMembers.map((member) => [member.name, member.email, member.phone, member.function, member.joinedAt, member.status]);
+    const header = ["Numero", "Nom et prenoms", "Email", "Telephone", "Role", "Categorie", "Ville", "Date adhesion", "Statut", "Cotisation", "Derniere activite"];
+    const rows = visibleMembers.map((member) => [member.number, member.name, member.email, member.phone, member.function, member.category, member.city, member.joinedAt, member.status, member.contribution, member.lastActivity]);
     const csvContent = [header, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `novex-membres-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `novex-annuaire-${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    setImportNotice(`${visibleMembers.length} membre(s) exporte(s).`);
+    setImportNotice(`${visibleMembers.length} membre(s) exporte(s) avec les filtres actifs.`);
   }
 
   function importMembers(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
+    if (!file) return;
 
     const reader = new FileReader();
     reader.onload = () => {
@@ -165,17 +313,22 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
           const [name, emailAddress, phoneNumber, role, date, importedStatus] = parseCsvLine(line);
           const cleanName = name?.trim();
           const cleanRole = role?.trim() || "Membre";
-          if (!cleanName) {
-            return null;
-          }
-          const nextStatus = ["Actif", "Inactif", "Suspendu", "Archive"].includes(importedStatus) ? importedStatus as Member["status"] : "Actif";
+          if (!cleanName) return null;
+          const nextStatus = ["Actif", "En attente", "Inactif", "Suspendu", "Archive"].includes(importedStatus) ? importedStatus as MemberStatus : "Actif";
           return {
+            id: `${Date.now()}-${index}`,
+            number: `NVX-IMP-${String(index + 1).padStart(3, "0")}`,
             name: cleanName,
             email: emailAddress?.trim() || `${cleanName.toLowerCase().replace(/[^a-z0-9]+/g, ".").replace(/^\.+|\.+$/g, "") || "membre"}@example.com`,
             phone: phoneNumber?.trim() || "",
             function: cleanRole,
+            category: "Membres",
+            city: "Abidjan",
+            gender: "Non precise",
             joinedAt: date?.trim() || new Date().toISOString().slice(0, 10),
             status: nextStatus,
+            contribution: "Aucune cotisation" as ContributionStatus,
+            lastActivity: "Import CSV",
             avatar: avatarStyles[index % avatarStyles.length]
           };
         })
@@ -188,19 +341,87 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
       }
 
       setMemberRows((current) => [...importedMembers, ...current]);
-      setImportNotice(`${importedMembers.length} membre(s) importe(s).`);
+      setImportNotice(`${importedMembers.length} membre(s) importe(s). Preview: ${importedMembers.length} valides, 0 erreur.`);
       event.target.value = "";
     };
     reader.readAsText(file);
   }
 
+  function toggleSelected(memberId: string) {
+    setSelectedIds((current) => (current.includes(memberId) ? current.filter((id) => id !== memberId) : [...current, memberId]));
+  }
+
+  const filterControls = (
+    <div className="grid gap-3">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <label className="grid gap-1 text-xs font-black text-slate-600">
+          Statut
+          <select className="min-h-11 rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-slate-900 outline-none" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as MemberStatus | "Tous")}>
+            {["Tous", "Actif", "En attente", "Inactif", "Suspendu", "Archive"].map((option) => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+        <label className="grid gap-1 text-xs font-black text-slate-600">
+          Fonction
+          <select className="min-h-11 rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-slate-900 outline-none" value={functionFilter} onChange={(event) => setFunctionFilter(event.target.value)}>
+            {functions.map((option) => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+        <label className="grid gap-1 text-xs font-black text-slate-600">
+          Categorie
+          <select className="min-h-11 rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-slate-900 outline-none" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+            {categories.map((option) => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+        <label className="grid gap-1 text-xs font-black text-slate-600">
+          Ville
+          <select className="min-h-11 rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-slate-900 outline-none" value={cityFilter} onChange={(event) => setCityFilter(event.target.value)}>
+            {cities.map((option) => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <label className="grid gap-1 text-xs font-black text-slate-600">
+          Adhesion
+          <select className="min-h-11 rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-slate-900 outline-none" value={datePreset} onChange={(event) => setDatePreset(event.target.value)}>
+            {["Tous", "Aujourd'hui", "Cette semaine", "Ce mois", "Cette annee", "30 derniers jours"].map((option) => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+        <label className="grid gap-1 text-xs font-black text-slate-600">
+          Cotisation
+          <select className="min-h-11 rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-slate-900 outline-none" value={contributionFilter} onChange={(event) => setContributionFilter(event.target.value as ContributionStatus | "Toutes")}>
+            {["Toutes", "A jour", "En retard", "Partiel", "Aucune cotisation"].map((option) => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+        <label className="grid gap-1 text-xs font-black text-slate-600">
+          Trier par
+          <select className="min-h-11 rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-slate-900 outline-none" value={sort} onChange={(event) => setSort(event.target.value)}>
+            <option value="name">Nom</option>
+            <option value="join_date">Date d'adhesion</option>
+            <option value="status">Statut</option>
+            <option value="last_activity">Derniere activite</option>
+          </select>
+        </label>
+        <label className="grid gap-1 text-xs font-black text-slate-600">
+          Page
+          <select className="min-h-11 rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-slate-900 outline-none" value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
+            {pageSizeOptions.map((option) => <option key={option} value={option}>{option} lignes</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="rounded-lg border border-dashed border-slate-300 bg-white p-3 text-xs font-bold text-slate-600">
+        Filtres avances prepares: Champ + Operateur + Valeur. Exemple actif: Cotisation = {contributionFilter}.
+      </div>
+    </div>
+  );
+
   return (
-    <main className="min-h-screen bg-[#f5f7f8] px-4 pb-28 pt-4 text-slate-950 md:rounded-[28px]">
+    <main className="min-h-screen bg-[#f5f7f8] px-4 pb-28 pt-4 text-slate-950 md:rounded-[28px] md:px-6">
       <button className="mb-4 inline-flex min-h-10 items-center gap-2 rounded-md bg-white px-3 text-sm font-black text-slate-700 shadow-sm" type="button" onClick={() => router.back()}>
         <ArrowLeft className="size-4" />
         Retour
       </button>
-      <header className="mb-6 flex items-center justify-between">
+
+      <header className="mb-5 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Grid2X2 className="size-6" />
           <strong className="text-sm">NOVEX</strong>
@@ -210,64 +431,101 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
         </button>
       </header>
 
-      <section>
-        <h1 className="text-3xl font-black leading-tight tracking-normal">Gestion des Membres</h1>
-        <p className="mt-2 text-sm font-medium leading-5 text-slate-600">Gerez votre communaute et suivez l'engagement.</p>
+      <section className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h1 className="text-3xl font-black leading-tight tracking-normal">Membres</h1>
+          <p className="mt-2 text-sm font-medium leading-5 text-slate-600">Annuaire de votre association.</p>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <Button className="min-h-11 px-3" type="button" onClick={() => setShowForm(true)}>
+            <Plus className="size-4" />
+            Ajouter
+          </Button>
+          <Button asChild className="min-h-11 px-3" variant="outline">
+            <Link href={`/app/${workspaceSlug}/members/invitations`}>
+              <UserPlus className="size-4" />
+              Inviter
+            </Link>
+          </Button>
+          <Button className="min-h-11 px-3" type="button" variant="outline" onClick={exportMembers}>
+            <Download className="size-4" />
+            Exporter
+          </Button>
+        </div>
       </section>
 
-      <section className="mt-5 grid grid-cols-2 gap-3">
-        <div className="min-h-28 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-start justify-between">
-            <span className="text-xs font-bold text-slate-600">Total Membres</span>
-            <Users className="size-8 text-slate-200" />
+      <section className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-6">
+        {[
+          ["Total membres", summary.total.toLocaleString("fr-FR"), Users, "text-slate-950"],
+          ["Membres actifs", summary.active.toLocaleString("fr-FR"), Users, "text-emerald-600"],
+          ["En attente", summary.pending.toLocaleString("fr-FR"), UserPlus, "text-blue-700"],
+          ["Nouveaux", `+${summary.newMembers}`, TrendingUp, "text-blue-700"],
+          ["Inactifs", summary.inactive.toLocaleString("fr-FR"), Users, "text-slate-600"],
+          ["Archives", summary.archived.toLocaleString("fr-FR"), Archive, "text-red-600"]
+        ].map(([label, value, Icon, color]) => (
+          <div className="min-h-28 rounded-lg border border-slate-200 bg-white p-4 shadow-sm" key={label as string}>
+            <div className="flex items-start justify-between">
+              <span className="text-xs font-bold text-slate-600">{label as string}</span>
+              <Icon className="size-7 text-slate-200" />
+            </div>
+            <div className={`mt-3 text-3xl font-black tracking-normal ${color as string}`}>{value as string}</div>
           </div>
-          <div className="mt-3 text-3xl font-black tracking-normal">{memberRows.length.toLocaleString("fr-FR")}</div>
+        ))}
+      </section>
+
+      <section className="mt-3 grid grid-cols-2 gap-3">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-black text-slate-500">Taux de croissance</p>
+          <p className="mt-2 text-2xl font-black text-slate-950">+{summary.growthRate}%</p>
+          <div className="mt-3 flex h-10 items-end gap-1" aria-label="Croissance des membres">
+            {[30, 45, 38, 70, 52, 90, 76].map((height, index) => <span className="w-full rounded-t bg-blue-600" style={{ height: `${height}%` }} key={index} />)}
+          </div>
         </div>
-        <div className="min-h-28 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-start justify-between">
-            <span className="text-xs font-bold text-slate-600">Actifs</span>
-            <Users className="size-8 text-slate-200" />
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-black text-slate-500">Taux de cotisation</p>
+          <p className="mt-2 text-2xl font-black text-emerald-600">{summary.contributionRate}%</p>
+          <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-100">
+            <span className="block h-full rounded-full bg-emerald-500" style={{ width: `${summary.contributionRate}%` }} />
           </div>
-          <div className="mt-3 text-3xl font-black tracking-normal text-emerald-600">{memberRows.filter((member) => member.status === "Actif").length}</div>
-        </div>
-        <div className="min-h-28 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-start justify-between">
-            <span className="text-xs font-bold text-slate-600">Nouveaux (30j)</span>
-            <UserPlus className="size-8 text-slate-200" />
-          </div>
-          <div className="mt-3 text-3xl font-black tracking-normal text-blue-700">+48</div>
-        </div>
-        <div className="min-h-28 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-start justify-between">
-            <span className="text-xs font-bold text-slate-600">Croissance</span>
-            <TrendingUp className="size-8 text-slate-200" />
-          </div>
-          <div className="mt-3 text-3xl font-black tracking-normal">+4.2%</div>
         </div>
       </section>
 
       <label className="mt-5 flex min-h-12 items-center gap-3 rounded-md border border-slate-300 bg-white px-4 shadow-sm">
         <Search className="size-5 text-slate-500" />
-        <input
-          className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-slate-500"
-          placeholder="Rechercher par nom, email..."
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
+        <input className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-slate-500" placeholder="Rechercher nom, email, telephone, numero..." value={query} onChange={(event) => setQuery(event.target.value)} />
       </label>
 
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <Button className={`min-h-10 px-4 ${onlyActive ? "bg-blue-700 text-white hover:bg-blue-800" : ""}`} type="button" variant={onlyActive ? "default" : "outline"} onClick={() => setOnlyActive((value) => !value)}>
+      <div className="mt-4 grid grid-cols-2 gap-3 md:hidden">
+        <Button className="min-h-10 px-4" type="button" variant="outline" onClick={() => setShowFilters(true)}>
           <Filter className="size-4" />
-          Filtres
+          Filtrer
         </Button>
-        <Button className="min-h-10 px-4" type="button" variant="outline" onClick={() => setSortAsc((value) => !value)}>
-          <SlidersHorizontal className="size-4" />
-          Trier
+        <Button className="min-h-10 px-4" type="button" variant="outline" onClick={resetFilters}>
+          <RotateCcw className="size-4" />
+          Reinitialiser
         </Button>
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-3">
+      <section className="mt-4 hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm md:block">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-black">Recherche et filtres</h2>
+          <Button className="min-h-9 px-3 text-xs" type="button" variant="outline" onClick={resetFilters}>
+            <RotateCcw className="size-4" />
+            Reinitialiser
+          </Button>
+        </div>
+        {filterControls}
+      </section>
+
+      <section className="mt-4 flex gap-2 overflow-x-auto pb-1">
+        {segments.map((segment) => (
+          <button className="min-w-fit rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-black text-slate-700 shadow-sm" type="button" key={segment.label} onClick={segment.apply}>
+            {segment.label} <span className="text-blue-700">{segment.count}</span>
+          </button>
+        ))}
+      </section>
+
+      <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
         <label className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold shadow-sm transition-colors hover:bg-slate-50">
           <Upload className="size-4" />
           Importer
@@ -275,93 +533,178 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
         </label>
         <Button className="min-h-11 px-4" type="button" variant="outline" onClick={exportMembers}>
           <Download className="size-4" />
-          Exporter
+          Exporter {visibleMembers.length}
         </Button>
-      </div>
-
-      {importNotice ? (
-        <p className="mt-3 rounded-md bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">{importNotice}</p>
-      ) : null}
-
-      <div className="mt-3 grid grid-cols-2 gap-3">
         <Button asChild className="min-h-11 px-4" variant="outline">
           <Link href={`/app/${workspaceSlug}/members/applications`}>
             <UserPlus className="size-4" />
             Demandes
           </Link>
         </Button>
-        <Button asChild className="min-h-11 px-4" variant="outline">
-          <Link href={`/app/${workspaceSlug}/members/invitations`}>
-            <Users className="size-4" />
-            Invitations
-          </Link>
+        <Button className="min-h-11 px-4" type="button" variant="outline" onClick={() => window.alert("L'action Notifier utilisera le Centre de Communication du prochain module.")}>
+          <Mail className="size-4" />
+          Notifier
         </Button>
       </div>
 
+      {selectedIds.length ? (
+        <section className="sticky top-3 z-20 mt-4 flex flex-wrap items-center gap-2 rounded-lg bg-slate-950 p-3 text-white shadow-xl">
+          <CheckSquare className="size-5" />
+          <strong className="mr-auto text-sm">{selectedIds.length} selectionne(s)</strong>
+          <Button className="min-h-9 px-3 text-xs" type="button" variant="outline" onClick={exportMembers}>Exporter</Button>
+          <Button className="min-h-9 px-3 text-xs" type="button" variant="outline" onClick={archiveSelected}>Archiver</Button>
+        </section>
+      ) : null}
+
+      {importNotice ? <p className="mt-3 rounded-md bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">{importNotice}</p> : null}
+
       <section className="mt-5 grid gap-3 md:hidden">
-        {visibleMembers.map((member) => (
-          <article className="flex min-h-20 items-center gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm" key={member.email}>
-            <div className={`grid size-12 shrink-0 place-items-center rounded-full ${member.avatar}`}>
-              <span className="text-sm font-black text-white">{member.name.slice(0, 1)}</span>
+        {pagedMembers.map((member) => (
+          <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" key={member.id}>
+            <div className="flex items-start gap-4">
+              <input className="mt-4 size-4" type="checkbox" checked={selectedIds.includes(member.id)} onChange={() => toggleSelected(member.id)} aria-label={`Selectionner ${member.name}`} />
+              <button className={`grid size-12 shrink-0 place-items-center rounded-full ${member.avatar}`} type="button" onClick={() => setQuickMember(member)}>
+                <span className="text-sm font-black text-white">{member.name.slice(0, 1)}</span>
+              </button>
+              <div className="min-w-0 flex-1">
+                <button className="block max-w-full truncate text-left text-base font-black tracking-normal" type="button" onClick={() => setQuickMember(member)}>{member.name}</button>
+                <p className="text-xs font-bold text-slate-500">{member.number}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <span className={`rounded-full px-2 py-1 text-[10px] font-black ${statusClass(member.status)}`}>{member.status}</span>
+                  <span className={`rounded-full px-2 py-1 text-[10px] font-black ${contributionClass(member.contribution)}`}>Cotisation: {member.contribution}</span>
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-600">{member.function}</span>
+                </div>
+              </div>
+              <button className="grid size-9 place-items-center rounded-full bg-slate-100" type="button" aria-label="Actions" onClick={() => setQuickMember(member)}>
+                <MoreVertical className="size-4" />
+              </button>
             </div>
-            <div className="min-w-0 flex-1">
-              <h2 className="truncate text-base font-black tracking-normal">{member.name}</h2>
-              <p className="truncate text-xs font-medium text-slate-500">{member.email}</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <span className={`rounded-full px-2 py-1 text-[10px] font-black ${statusClass(member.status)}`}>{member.status}</span>
-                <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-600">{member.function}</span>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-3 text-[11px] font-bold text-blue-700">
-                {member.phone ? <a href={`tel:${member.phone.replace(/\s/g, "")}`}>Appeler</a> : null}
-                {member.email ? <a href={`mailto:${member.email}`}>Email</a> : null}
-                <button type="button">Voir</button>
-                <button type="button">Modifier</button>
-                {member.status === "Archive" ? (
-                  <button type="button" onClick={() => changeStatus(member.email, "Actif")}>Restaurer</button>
-                ) : (
-                  <button type="button" onClick={() => changeStatus(member.email, "Archive")}>Archiver</button>
-                )}
-                <span className="basis-full text-slate-500">Adhesion {new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium" }).format(new Date(member.joinedAt))}</span>
-              </div>
+            <div className="mt-4 flex flex-wrap gap-3 text-xs font-bold text-blue-700">
+              {member.phone ? <a href={`tel:${member.phone.replace(/\s/g, "")}`}><Phone className="mr-1 inline size-3" />Appeler</a> : null}
+              {member.email ? <a href={`mailto:${member.email}`}><Mail className="mr-1 inline size-3" />Email</a> : null}
+              <button type="button" onClick={() => setQuickMember(member)}>Profil rapide</button>
+              <Link href={`/app/${workspaceSlug}/members/${member.id}`}>Voir le profil</Link>
             </div>
           </article>
         ))}
       </section>
 
       <section className="mt-6 hidden overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm md:block">
-        <div className="grid grid-cols-[minmax(180px,1.4fr)_1fr_150px_120px_130px_180px] gap-3 border-b border-slate-200 px-4 py-3 text-xs font-black uppercase text-slate-500">
+        <div className="grid grid-cols-[44px_minmax(220px,1.5fr)_120px_1fr_150px_120px_150px_150px_110px] gap-3 border-b border-slate-200 px-4 py-3 text-xs font-black uppercase text-slate-500">
+          <span />
           <span>Membre</span>
+          <span>Numero</span>
           <span>Fonction</span>
-          <span>Telephone</span>
+          <span>Contact</span>
           <span>Statut</span>
-          <span>Adhesion</span>
+          <span>Cotisation</span>
+          <span>Derniere activite</span>
           <span>Actions</span>
         </div>
-        {visibleMembers.map((member) => (
-          <div className="grid grid-cols-[minmax(180px,1.4fr)_1fr_150px_120px_130px_180px] items-center gap-3 border-b border-slate-100 px-4 py-4 text-sm last:border-b-0" key={`table-${member.email}`}>
+        {pagedMembers.map((member) => (
+          <div className="grid grid-cols-[44px_minmax(220px,1.5fr)_120px_1fr_150px_120px_150px_150px_110px] items-center gap-3 border-b border-slate-100 px-4 py-4 text-sm last:border-b-0" key={`table-${member.id}`}>
+            <input className="size-4" type="checkbox" checked={selectedIds.includes(member.id)} onChange={() => toggleSelected(member.id)} aria-label={`Selectionner ${member.name}`} />
             <div className="flex min-w-0 items-center gap-3">
               <div className={`grid size-10 shrink-0 place-items-center rounded-full ${member.avatar}`}>
                 <span className="text-xs font-black text-white">{member.name.slice(0, 1)}</span>
               </div>
               <div className="min-w-0">
-                <strong className="block truncate">{member.name}</strong>
-                <span className="block truncate text-xs text-slate-500">{member.email}</span>
+                <Link className="block truncate font-black hover:text-blue-700" href={`/app/${workspaceSlug}/members/${member.id}`}>{member.name}</Link>
+                <span className="block truncate text-xs text-slate-500">{member.category} - {member.city}</span>
               </div>
             </div>
+            <span className="font-bold text-slate-600">{member.number}</span>
             <span className="font-semibold">{member.function}</span>
-            <a className="font-semibold text-blue-700" href={`tel:${member.phone.replace(/\s/g, "")}`}>{member.phone}</a>
+            <span className="min-w-0 text-xs font-semibold text-slate-600">
+              <a className="block truncate text-blue-700" href={`tel:${member.phone.replace(/\s/g, "")}`}>{member.phone}</a>
+              <a className="block truncate" href={`mailto:${member.email}`}>{member.email}</a>
+            </span>
             <span className={`w-fit rounded-full px-2 py-1 text-[11px] font-black ${statusClass(member.status)}`}>{member.status}</span>
-            <span className="font-semibold text-slate-600">{new Intl.DateTimeFormat("fr-FR", { dateStyle: "short" }).format(new Date(member.joinedAt))}</span>
+            <span className={`w-fit rounded-full px-2 py-1 text-[11px] font-black ${contributionClass(member.contribution)}`}>{member.contribution}</span>
+            <span className="font-semibold text-slate-600">{member.lastActivity}</span>
             <div className="flex gap-2">
-              <Button className="min-h-8 px-2 text-xs" type="button" variant="outline">Voir</Button>
-              <Button className="min-h-8 px-2 text-xs" type="button" variant="outline">Modifier</Button>
-              <Button className="min-h-8 px-2 text-xs" type="button" variant="outline" onClick={() => changeStatus(member.email, member.status === "Archive" ? "Actif" : "Archive")}>
+              <Button className="min-h-8 px-2 text-xs" type="button" variant="outline" onClick={() => setQuickMember(member)}>Voir</Button>
+              <Button className="min-h-8 px-2 text-xs" type="button" variant="outline" onClick={() => changeStatus(member.id, member.status === "Archive" ? "Actif" : "Archive")}>
                 {member.status === "Archive" ? "Restaurer" : "Archiver"}
               </Button>
             </div>
           </div>
         ))}
       </section>
+
+      {!visibleMembers.length ? (
+        <section className="mt-8 rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+          <h2 className="text-xl font-black">{debouncedQuery ? `Aucun resultat pour "${debouncedQuery}"` : "Aucun membre trouve."}</h2>
+          <p className="mt-2 text-sm font-semibold text-slate-500">Essayez de modifier vos filtres ou ajoutez un nouveau membre.</p>
+          <Button className="mt-4 min-h-10 px-4" type="button" onClick={resetFilters}>Effacer la recherche</Button>
+        </section>
+      ) : null}
+
+      <section className="mt-4 flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3 text-sm font-bold shadow-sm">
+        <span>{visibleMembers.length} resultat(s)</span>
+        <div className="flex items-center gap-2">
+          <button className="grid size-9 place-items-center rounded-md border border-slate-200 disabled:opacity-40" type="button" disabled={page <= 1} onClick={() => setPage((value) => Math.max(value - 1, 1))} aria-label="Page precedente">
+            <ChevronLeft className="size-4" />
+          </button>
+          <span>Page {page}/{totalPages}</span>
+          <button className="grid size-9 place-items-center rounded-md border border-slate-200 disabled:opacity-40" type="button" disabled={page >= totalPages} onClick={() => setPage((value) => Math.min(value + 1, totalPages))} aria-label="Page suivante">
+            <ChevronRight className="size-4" />
+          </button>
+        </div>
+      </section>
+
+      {showFilters ? (
+        <section className="fixed inset-0 z-40 grid place-items-end bg-slate-950/35 px-4 pb-4 md:hidden">
+          <div className="w-full rounded-2xl bg-white p-5 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-xl font-black">Filtres avances</h2>
+              <button className="grid size-9 place-items-center rounded-full bg-slate-100" type="button" aria-label="Fermer" onClick={() => setShowFilters(false)}>
+                <X className="size-5" />
+              </button>
+            </div>
+            {filterControls}
+            <Button className="mt-5 min-h-12 w-full" type="button" onClick={() => setShowFilters(false)}>Appliquer</Button>
+          </div>
+        </section>
+      ) : null}
+
+      {quickMember ? (
+        <section className="fixed inset-0 z-40 grid place-items-end bg-slate-950/35 px-4 pb-4 md:place-items-center">
+          <aside className="w-full rounded-2xl bg-white p-5 shadow-2xl md:max-w-md">
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="text-2xl font-black tracking-normal">Profil rapide</h2>
+              <button className="grid size-9 place-items-center rounded-full bg-slate-100" type="button" aria-label="Fermer" onClick={() => setQuickMember(null)}>
+                <X className="size-5" />
+              </button>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className={`grid size-16 place-items-center rounded-full ${quickMember.avatar}`}>
+                <span className="text-xl font-black text-white">{quickMember.name.slice(0, 1)}</span>
+              </div>
+              <div>
+                <h3 className="text-xl font-black">{quickMember.name}</h3>
+                <p className="text-sm font-bold text-slate-500">{quickMember.function} - {quickMember.number}</p>
+              </div>
+            </div>
+            <div className="mt-5 grid gap-3 text-sm font-semibold text-slate-700">
+              <p><span className="font-black text-slate-950">Statut:</span> {quickMember.status}</p>
+              <p><span className="font-black text-slate-950">Telephone:</span> {quickMember.phone || "Non renseigne"}</p>
+              <p><span className="font-black text-slate-950">Email:</span> {quickMember.email || "Non renseigne"}</p>
+              <p><span className="font-black text-slate-950">Cotisation:</span> {quickMember.contribution}</p>
+              <p><span className="font-black text-slate-950">Derniere activite:</span> {quickMember.lastActivity}</p>
+              <p><span className="font-black text-slate-950">Adhesion:</span> {formatDate(quickMember.joinedAt)}</p>
+            </div>
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              <Button asChild className="min-h-11">
+                <Link href={`/app/${workspaceSlug}/members/${quickMember.id}`}>Voir le profil</Link>
+              </Button>
+              <Button className="min-h-11" type="button" variant="outline" onClick={() => changeStatus(quickMember.id, quickMember.status === "Archive" ? "Actif" : "Archive")}>
+                {quickMember.status === "Archive" ? "Restaurer" : "Archiver"}
+              </Button>
+            </div>
+          </aside>
+        </section>
+      ) : null}
 
       {showForm ? (
         <section className="fixed inset-0 z-40 grid place-items-end bg-slate-950/35 px-4 pb-24 md:absolute md:place-items-center md:pb-0">
@@ -381,13 +724,7 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
                 Role
                 <select className="min-h-12 rounded-md border border-slate-300 bg-white px-3 text-base outline-none" value={memberFunction} onChange={(event) => setMemberFunction(event.target.value)}>
                   <option value="">Choisir une fonction</option>
-                  <option>President</option>
-                  <option>Vice-president</option>
-                  <option>Secretaire general</option>
-                  <option>Tresorier</option>
-                  <option>Commissaire aux comptes</option>
-                  <option>Responsable communication</option>
-                  <option>Membre</option>
+                  {functions.filter((option) => option !== "Toutes").map((option) => <option key={option}>{option}</option>)}
                 </select>
               </label>
               <label className="grid gap-2 text-sm font-bold">
@@ -405,11 +742,8 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
                 </label>
                 <label className="grid gap-2 text-sm font-bold">
                   Statut
-                  <select className="min-h-12 rounded-md border border-slate-300 bg-white px-3 text-base outline-none" value={status} onChange={(event) => setStatus(event.target.value as Member["status"])}>
-                    <option>Actif</option>
-                  <option>Inactif</option>
-                    <option>Suspendu</option>
-                    <option>Archive</option>
+                  <select className="min-h-12 rounded-md border border-slate-300 bg-white px-3 text-base outline-none" value={status} onChange={(event) => setStatus(event.target.value as MemberStatus)}>
+                    {["Actif", "En attente", "Inactif", "Suspendu", "Archive"].map((option) => <option key={option}>{option}</option>)}
                   </select>
                 </label>
               </div>
@@ -421,7 +755,7 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
         </section>
       ) : null}
 
-      <button className="fixed bottom-24 right-5 z-20 grid size-14 place-items-center rounded-full bg-blue-700 text-white shadow-xl shadow-blue-900/25 md:absolute" type="button" aria-label="Ajouter un membre" onClick={() => setShowForm(true)}>
+      <button className="fixed bottom-24 right-5 z-20 grid size-14 place-items-center rounded-full bg-blue-700 text-white shadow-xl shadow-blue-900/25 md:hidden" type="button" aria-label="Ajouter un membre" onClick={() => setShowForm(true)}>
         <Plus className="size-7" />
       </button>
 
@@ -432,7 +766,7 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
           </div>
           <div>
             <h2 className="text-lg font-black">Assistant IA</h2>
-            <p className="text-xs font-medium text-white/75">Analysez l'engagement des membres.</p>
+            <p className="text-xs font-medium text-white/75">Analysez les segments et l'engagement des membres.</p>
           </div>
         </div>
       </section>
