@@ -67,7 +67,7 @@ export function AssociationShell({ children, workspaceSlug }: Readonly<{ childre
             <Bell className="size-4" />
           </Button>
         </header>
-        <main className="p-4 md:p-6">{children}</main>
+        <main className="p-0 md:p-6">{children}</main>
       </section>
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-border bg-white px-1 pb-[env(safe-area-inset-bottom)] shadow-[0_-10px_30px_rgba(15,23,42,0.08)] md:hidden">
         {([
