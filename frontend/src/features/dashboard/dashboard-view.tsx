@@ -13,7 +13,6 @@ import {
   FileText,
   Grid2X2,
   Landmark,
-  PieChart,
   Plus,
   Search,
   ShieldCheck,
@@ -36,14 +35,107 @@ type Metric = {
   tone: "blue" | "green" | "red" | "slate";
 };
 
-const metrics: Metric[] = [
-  { label: "Membres actifs", value: "1 258", detail: "+12 nouveaux", tone: "green" },
-  { label: "Cotisations payees", value: "6.2M", detail: "65% recouvres", tone: "blue" },
-  { label: "Depenses", value: "3.2M", detail: "Eleve ce mois", tone: "red" },
-  { label: "Projets actifs", value: "18", detail: "4 a risque", tone: "slate" },
-  { label: "Evenements", value: "7", detail: "2 cette semaine", tone: "blue" },
-  { label: "Documents", value: "342", detail: "18 ajoutes", tone: "green" }
-];
+type PeriodKey = "Ce mois" | "Trimestre" | "Annee" | "Tout";
+
+const periodData: Record<
+  PeriodKey,
+  {
+    balance: string;
+    balanceTrend: string;
+    revenues: string;
+    expenses: string;
+    totalContributions: string;
+    paidContributions: string;
+    lateContributions: string;
+    upcomingContributions: string;
+    recoveryRate: number;
+    metrics: Metric[];
+  }
+> = {
+  "Ce mois": {
+    balance: "12.5M",
+    balanceTrend: "+8.2% vs le mois dernier",
+    revenues: "8.9M",
+    expenses: "3.2M",
+    totalContributions: "8.7M",
+    paidContributions: "6.2M",
+    lateContributions: "1.5M",
+    upcomingContributions: "1.0M",
+    recoveryRate: 65,
+    metrics: [
+      { label: "Membres actifs", value: "1 258", detail: "+12 nouveaux", tone: "green" },
+      { label: "Cotisations payees", value: "6.2M", detail: "65% recouvres", tone: "blue" },
+      { label: "Depenses", value: "3.2M", detail: "Eleve ce mois", tone: "red" },
+      { label: "Projets actifs", value: "18", detail: "4 a risque", tone: "slate" },
+      { label: "Evenements", value: "7", detail: "2 cette semaine", tone: "blue" },
+      { label: "Documents", value: "342", detail: "18 ajoutes", tone: "green" }
+    ]
+  },
+  Trimestre: {
+    balance: "31.4M",
+    balanceTrend: "+14.6% vs trimestre precedent",
+    revenues: "24.8M",
+    expenses: "9.7M",
+    totalContributions: "22.0M",
+    paidContributions: "16.9M",
+    lateContributions: "3.6M",
+    upcomingContributions: "1.5M",
+    recoveryRate: 77,
+    metrics: [
+      { label: "Membres actifs", value: "1 284", detail: "+48 nouveaux", tone: "green" },
+      { label: "Cotisations payees", value: "16.9M", detail: "77% recouvres", tone: "blue" },
+      { label: "Depenses", value: "9.7M", detail: "Sous controle", tone: "slate" },
+      { label: "Projets actifs", value: "23", detail: "6 termines", tone: "green" },
+      { label: "Evenements", value: "18", detail: "11 realises", tone: "blue" },
+      { label: "Documents", value: "411", detail: "69 ajoutes", tone: "green" }
+    ]
+  },
+  Annee: {
+    balance: "84.2M",
+    balanceTrend: "+21.3% vs annee derniere",
+    revenues: "72.0M",
+    expenses: "38.6M",
+    totalContributions: "58.0M",
+    paidContributions: "44.7M",
+    lateContributions: "8.4M",
+    upcomingContributions: "4.9M",
+    recoveryRate: 81,
+    metrics: [
+      { label: "Membres actifs", value: "1 326", detail: "+176 cette annee", tone: "green" },
+      { label: "Cotisations payees", value: "44.7M", detail: "81% recouvres", tone: "blue" },
+      { label: "Depenses", value: "38.6M", detail: "64% budget", tone: "slate" },
+      { label: "Projets actifs", value: "41", detail: "15 clotures", tone: "green" },
+      { label: "Evenements", value: "52", detail: "4 majeurs", tone: "blue" },
+      { label: "Documents", value: "928", detail: "317 valides", tone: "green" }
+    ]
+  },
+  Tout: {
+    balance: "146.8M",
+    balanceTrend: "+38.9% depuis creation",
+    revenues: "129.5M",
+    expenses: "67.4M",
+    totalContributions: "94.0M",
+    paidContributions: "76.1M",
+    lateContributions: "10.8M",
+    upcomingContributions: "7.1M",
+    recoveryRate: 86,
+    metrics: [
+      { label: "Membres actifs", value: "1 402", detail: "2 918 historiques", tone: "green" },
+      { label: "Cotisations payees", value: "76.1M", detail: "86% recouvres", tone: "blue" },
+      { label: "Depenses", value: "67.4M", detail: "Grand livre", tone: "slate" },
+      { label: "Projets actifs", value: "67", detail: "39 archives", tone: "green" },
+      { label: "Evenements", value: "138", detail: "9 420 presences", tone: "blue" },
+      { label: "Documents", value: "1 842", detail: "GED complete", tone: "green" }
+    ]
+  }
+};
+
+const notifications = [
+  ["Cotisations", "45 membres ont depasse le delai de paiement.", "Maintenant"],
+  ["Budget", "Le projet centre communautaire approche 85% du budget.", "Il y a 18 min"],
+  ["Document", "2 justificatifs financiers attendent validation.", "Aujourd'hui"],
+  ["Evenement", "La reunion bureau commence demain a 10h.", "Demain"]
+] as const;
 
 const activities = [
   ["Cotisation recue", "Kouame Jean a paye sa cotisation mensuelle.", "Il y a 12 min"],
@@ -97,6 +189,8 @@ export function DashboardView({
 }: Readonly<{ initialData?: DashboardOverview; workspaceSlug: string }>) {
   const [profile, setProfile] = useState<WorkspaceProfile | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodKey>("Ce mois");
+  const [showNotifications, setShowNotifications] = useState(false);
 
   useEffect(() => {
     setProfile(loadWorkspaceProfile(workspaceSlug));
@@ -116,6 +210,8 @@ export function DashboardView({
     return <WorkspaceProfileSetup workspaceSlug={workspaceSlug} onComplete={handleComplete} />;
   }
 
+  const current = periodData[selectedPeriod];
+
   return (
     <main className="min-h-screen bg-[#f5f7f8] px-5 pb-28 pt-5 text-slate-950 md:rounded-[28px]">
       <header className="mb-7 flex items-center justify-between">
@@ -124,7 +220,13 @@ export function DashboardView({
           <strong className="text-sm">NOVEX</strong>
         </div>
         <div className="flex items-center gap-3">
-          <button className="relative grid size-11 place-items-center rounded-full bg-white shadow-sm" type="button" aria-label="Notifications">
+          <button
+            className="relative grid size-11 place-items-center rounded-full bg-white shadow-sm"
+            type="button"
+            aria-expanded={showNotifications}
+            aria-label="Notifications"
+            onClick={() => setShowNotifications((open) => !open)}
+          >
             <Bell className="size-5" />
             <span className="absolute right-2 top-2 size-2 rounded-full bg-red-600" />
           </button>
@@ -133,6 +235,26 @@ export function DashboardView({
           </div>
         </div>
       </header>
+
+      {showNotifications ? (
+        <section className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-lg shadow-slate-900/10">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-xl font-black tracking-normal">Notifications</h2>
+            <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-black text-red-700">{notifications.length} nouvelles</span>
+          </div>
+          <div className="grid gap-3">
+            {notifications.map(([title, detail, date]) => (
+              <div className="rounded-lg bg-slate-50 p-4" key={title}>
+                <div className="flex items-center justify-between gap-3">
+                  <strong className="text-sm">{title}</strong>
+                  <span className="text-[11px] font-bold text-slate-400">{date}</span>
+                </div>
+                <p className="mt-1 text-sm leading-5 text-slate-600">{detail}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="mb-6">
         <h1 className="text-3xl font-black leading-tight tracking-normal">Bonjour, President</h1>
@@ -144,8 +266,13 @@ export function DashboardView({
       </section>
 
       <div className="mb-6 flex gap-3 overflow-x-auto pb-1">
-        {["Ce mois", "Trimestre", "Annee", "Tout"].map((period, index) => (
-          <button className={`min-h-10 shrink-0 rounded-full px-5 text-sm font-bold ${index === 0 ? "bg-black text-white" : "bg-white text-slate-700 shadow-sm"}`} key={period} type="button">
+        {(Object.keys(periodData) as PeriodKey[]).map((period) => (
+          <button
+            className={`min-h-10 shrink-0 rounded-full px-5 text-sm font-bold ${selectedPeriod === period ? "bg-black text-white" : "bg-white text-slate-700 shadow-sm"}`}
+            key={period}
+            type="button"
+            onClick={() => setSelectedPeriod(period)}
+          >
             {period}
           </button>
         ))}
@@ -159,24 +286,24 @@ export function DashboardView({
           </span>
           <ChevronRight className="size-5 text-blue-700" />
         </div>
-        <div className="mt-6 text-4xl font-black tracking-normal">12.5M {profile.currency}</div>
-        <p className="mt-2 text-sm font-bold text-emerald-600">+8.2% vs le mois dernier</p>
+        <div className="mt-6 text-4xl font-black tracking-normal">{current.balance} {profile.currency}</div>
+        <p className="mt-2 text-sm font-bold text-emerald-600">{current.balanceTrend}</p>
         <div className="mt-5 grid grid-cols-2 gap-3">
           <div className="rounded-lg bg-emerald-50 p-3">
             <TrendingUp className="mb-2 size-5 text-emerald-700" />
             <p className="text-xs font-bold text-slate-500">Recettes</p>
-            <strong className="mt-1 block text-lg">8.9M</strong>
+            <strong className="mt-1 block text-lg">{current.revenues}</strong>
           </div>
           <div className="rounded-lg bg-red-50 p-3">
             <TrendingDown className="mb-2 size-5 text-red-700" />
             <p className="text-xs font-bold text-slate-500">Sorties</p>
-            <strong className="mt-1 block text-lg">3.2M</strong>
+            <strong className="mt-1 block text-lg">{current.expenses}</strong>
           </div>
         </div>
       </section>
 
       <section className="mt-5 grid grid-cols-2 gap-4">
-        {metrics.map((metric) => (
+        {current.metrics.map((metric) => (
           <div className="min-h-36 rounded-xl border border-slate-200 bg-white p-4 shadow-sm" key={metric.label}>
             <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-black ${toneClass(metric.tone)}`}>{metric.label}</span>
             <div className="mt-5 text-2xl font-black tracking-normal">{metric.value}</div>
@@ -187,30 +314,38 @@ export function DashboardView({
 
       <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <SectionTitle title="Etat des Cotisations" action="Voir tout" />
+        <div className="mb-4 flex justify-end">
+          <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">{current.totalContributions} {profile.currency} Total</span>
+        </div>
         <div className="grid grid-cols-[120px_minmax(0,1fr)] items-center gap-5">
-          <div className="relative grid size-32 place-items-center rounded-[28px] bg-[conic-gradient(#0b63ce_0_65%,#c81e1e_65%_82%,#e5e7eb_82%_100%)]">
+          <div
+            className="relative grid size-32 place-items-center rounded-[28px]"
+            style={{
+              background: `conic-gradient(#0b63ce 0 ${current.recoveryRate}%, #c81e1e ${current.recoveryRate}% 82%, #e5e7eb 82% 100%)`
+            }}
+          >
             <div className="grid size-20 place-items-center rounded-full bg-white text-center shadow-sm">
-              <span className="text-2xl font-black leading-none">65%</span>
+              <span className="text-2xl font-black leading-none">{current.recoveryRate}%</span>
               <span className="text-[10px] font-bold text-slate-500">Paye</span>
             </div>
           </div>
           <div className="grid gap-4 text-sm font-bold">
             <div className="flex items-center justify-between gap-2">
               <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-blue-700" />Payees</span>
-              <span>6.2M</span>
+              <span>{current.paidContributions}</span>
             </div>
             <div className="flex items-center justify-between gap-2">
               <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-red-600" />En retard</span>
-              <span>1.5M</span>
+              <span>{current.lateContributions}</span>
             </div>
             <div className="flex items-center justify-between gap-2">
               <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-slate-300" />A venir</span>
-              <span>1.0M</span>
+              <span>{current.upcomingContributions}</span>
             </div>
           </div>
         </div>
         <div className="mt-5 h-3 overflow-hidden rounded-full bg-slate-100">
-          <div className="h-full w-[65%] rounded-full bg-blue-700" />
+          <div className="h-full rounded-full bg-blue-700" style={{ width: `${current.recoveryRate}%` }} />
         </div>
       </section>
 
