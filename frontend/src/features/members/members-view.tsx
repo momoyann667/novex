@@ -541,9 +541,11 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
             Demandes
           </Link>
         </Button>
-        <Button className="min-h-11 px-4" type="button" variant="outline" onClick={() => window.alert("L'action Notifier utilisera le Centre de Communication du prochain module.")}>
-          <Mail className="size-4" />
-          Notifier
+        <Button asChild className="min-h-11 px-4" variant="outline">
+          <Link href={`/app/${workspaceSlug}/communication`}>
+            <Mail className="size-4" />
+            Notifier
+          </Link>
         </Button>
       </div>
 

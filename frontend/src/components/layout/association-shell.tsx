@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
-import { Bell, Bot, Calendar, CreditCard, FileText, FolderKanban, Home, Landmark, Menu, Search, Settings, Users, Wallet } from "lucide-react";
+import { Bell, Bot, Calendar, CreditCard, FileText, FolderKanban, Home, Landmark, Menu, MessageSquare, Search, Settings, Users, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -11,6 +11,7 @@ const nav = [
   { label: "Dashboard", path: "dashboard", icon: Home, permission: "dashboard.view" },
   { label: "Mon espace", path: "member", icon: Users, permission: "member.profile.view_self" },
   { label: "Membres", path: "members", icon: Users, permission: "members.view" },
+  { label: "Communication", path: "communication", icon: MessageSquare, permission: "communication.view" },
   { label: "Cotisations", path: "contributions", icon: CreditCard, permission: "contributions.view" },
   { label: "Paiements", path: "payments", icon: CreditCard, permission: "payments.view", plan: "NOVEX_START" },
   { label: "Finances", path: "finance", icon: Wallet, permission: "finance.view", plan: "NOVEX_START" },
@@ -36,6 +37,7 @@ const primaryMobileNav = [
 
 const moreMobileNav = [
   { label: "Mon espace", path: "member", icon: Users },
+  { label: "Communication", path: "communication", icon: MessageSquare },
   { label: "Evenements", path: "events", icon: Calendar },
   { label: "Documents", path: "documents", icon: FileText },
   { label: "Paiements", path: "payments", icon: CreditCard },
