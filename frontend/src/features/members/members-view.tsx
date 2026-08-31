@@ -2,7 +2,8 @@
 
 import { type ChangeEvent, useMemo, useState } from "react";
 import Link from "next/link";
-import { Bell, Bot, Download, Filter, Grid2X2, Plus, Search, SlidersHorizontal, TrendingUp, Upload, UserPlus, Users, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Bell, Bot, Download, Filter, Grid2X2, Plus, Search, SlidersHorizontal, TrendingUp, Upload, UserPlus, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type Member = {
@@ -75,6 +76,7 @@ function parseCsvLine(line: string) {
 }
 
 export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string }>) {
+  const router = useRouter();
   const [memberRows, setMemberRows] = useState<Member[]>(members);
   const [query, setQuery] = useState("");
   const [onlyActive, setOnlyActive] = useState(false);
@@ -194,6 +196,10 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
 
   return (
     <main className="min-h-screen bg-[#f5f7f8] px-4 pb-28 pt-4 text-slate-950 md:rounded-[28px]">
+      <button className="mb-4 inline-flex min-h-10 items-center gap-2 rounded-md bg-white px-3 text-sm font-black text-slate-700 shadow-sm" type="button" onClick={() => router.back()}>
+        <ArrowLeft className="size-4" />
+        Retour
+      </button>
       <header className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Grid2X2 className="size-6" />

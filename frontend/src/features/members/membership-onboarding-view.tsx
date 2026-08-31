@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowRight, Bell, CheckCircle2, Clock3, Copy, FileText, Grid2X2, Link2, Mail, Search, Send, ShieldCheck, UserCheck, UserPlus, X, XCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, ArrowRight, Bell, CheckCircle2, Clock3, Copy, FileText, Grid2X2, Link2, Mail, MessageCircle, Search, Send, ShieldCheck, UserCheck, UserPlus, X, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type ApplicationStatus = "pending" | "under_review" | "approved" | "rejected" | "cancelled" | "expired";
@@ -84,6 +85,34 @@ const statusClass: Record<ApplicationStatus, string> = {
   expired: "bg-slate-900 text-white"
 };
 
+type InvitationDraft = {
+  name: string;
+  email: string;
+  phone: string;
+  function: string;
+  message: string;
+};
+
+function BackButton({ label = "Retour" }: Readonly<{ label?: string }>) {
+  const router = useRouter();
+
+  return (
+    <button className="mb-4 inline-flex min-h-10 items-center gap-2 rounded-md bg-white px-3 text-sm font-black text-slate-700 shadow-sm" type="button" onClick={() => router.back()}>
+      <ArrowLeft className="size-4" />
+      {label}
+    </button>
+  );
+}
+
+function whatsappHref(phone: string, message: string) {
+  const digits = phone.replace(/[^\d]/g, "");
+  return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+}
+
+function mailHref(email: string, subject: string, body: string) {
+  return `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
 export function MembershipApplicationsView() {
   const [applications, setApplications] = useState(initialApplications);
   const [query, setQuery] = useState("");
@@ -113,6 +142,7 @@ export function MembershipApplicationsView() {
 
   return (
     <main className="min-h-screen bg-[#f5f7f8] px-4 pb-28 pt-4 text-slate-950 md:px-8">
+      <BackButton />
       <header className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Grid2X2 className="size-6" />
@@ -213,24 +243,32 @@ export function MembershipApplicationsView() {
 export function MemberInvitationsView() {
   const [copied, setCopied] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [invitationDraft, setInvitationDraft] = useState<InvitationDraft | null>(null);
   const [invitations, setInvitations] = useState([
-    { name: "Grace Kouame", contact: "grace.kouame@example.com", function: "Membre", status: "En attente", expires: "7 jours" },
-    { name: "Eric Toure", contact: "+225 07 21 31 41 51", function: "Commission projet", status: "Envoyee", expires: "5 jours" }
+    { name: "Grace Kouame", email: "grace.kouame@example.com", phone: "+225 07 21 31 41 51", function: "Membre", status: "En attente", expires: "7 jours" },
+    { name: "Eric Toure", email: "eric.toure@example.com", phone: "+225 05 22 18 41 00", function: "Commission projet", status: "Envoyee", expires: "5 jours" }
   ]);
   const publicLink = "https://novex.app/join/association-demo";
+  const invitationMessage = invitationDraft
+    ? `${invitationDraft.name}, vous etes invite(e) a rejoindre notre association sur NOVEX. ${publicLink}${invitationDraft.message ? `\n\nMessage : ${invitationDraft.message}` : ""}`
+    : "";
 
   function addInvitation(formData: FormData) {
     const name = `${formData.get("firstName") || ""} ${formData.get("lastName") || ""}`.trim();
-    const contact = String(formData.get("contact") || "");
-    if (!name || !contact) {
+    const email = String(formData.get("email") || "").trim();
+    const phone = String(formData.get("phone") || "").trim();
+    const memberFunction = String(formData.get("function") || "Membre").trim();
+    const message = String(formData.get("message") || "").trim();
+    if (!name || (!email && !phone)) {
       return;
     }
-    setInvitations((current) => [{ name, contact, function: String(formData.get("function") || "Membre"), status: "En attente", expires: "7 jours" }, ...current]);
-    setShowForm(false);
+    setInvitations((current) => [{ name, email, phone, function: memberFunction || "Membre", status: "En attente", expires: "7 jours" }, ...current]);
+    setInvitationDraft({ name, email, phone, function: memberFunction || "Membre", message });
   }
 
   return (
     <main className="min-h-screen bg-[#f5f7f8] px-4 pb-28 pt-4 text-slate-950 md:px-8">
+      <BackButton />
       <section className="rounded-xl bg-slate-950 p-5 text-white">
         <div className="flex items-center gap-3">
           <div className="grid size-11 place-items-center rounded-full bg-white/15"><Link2 className="size-5" /></div>
@@ -249,11 +287,11 @@ export function MemberInvitationsView() {
 
       <section className="mt-5 grid gap-3">
         {invitations.map((invitation) => (
-          <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" key={`${invitation.name}-${invitation.contact}`}>
+          <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" key={`${invitation.name}-${invitation.email || invitation.phone}`}>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-black tracking-normal">{invitation.name}</h2>
-                <p className="mt-1 text-sm font-semibold text-slate-500">{invitation.contact}</p>
+                <p className="mt-1 text-sm font-semibold text-slate-500">{invitation.email || invitation.phone}</p>
               </div>
               <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700">{invitation.status}</span>
             </div>
@@ -276,14 +314,43 @@ export function MemberInvitationsView() {
               <h2 className="text-2xl font-black tracking-normal">Nouvelle invitation</h2>
               <button className="grid size-9 place-items-center rounded-full bg-slate-100" type="button" aria-label="Fermer" onClick={() => setShowForm(false)}><X className="size-5" /></button>
             </div>
-            <div className="grid gap-4">
-              <input className="min-h-12 rounded-md border border-slate-300 px-3 text-base outline-none" name="firstName" placeholder="Prenom" />
-              <input className="min-h-12 rounded-md border border-slate-300 px-3 text-base outline-none" name="lastName" placeholder="Nom" />
-              <input className="min-h-12 rounded-md border border-slate-300 px-3 text-base outline-none" name="contact" placeholder="Email ou telephone" />
-              <input className="min-h-12 rounded-md border border-slate-300 px-3 text-base outline-none" name="function" placeholder="Fonction eventuelle" />
-              <textarea className="min-h-24 rounded-md border border-slate-300 px-3 py-3 text-base outline-none" name="message" placeholder="Message" />
-            </div>
-            <Button className="mt-6 min-h-12 w-full bg-blue-700 text-white hover:bg-blue-800" type="submit">Envoyer l'invitation <ArrowRight className="size-4" /></Button>
+            {invitationDraft ? (
+              <div className="grid gap-4">
+                <div className="rounded-xl bg-emerald-50 p-4 text-emerald-800">
+                  <h3 className="text-lg font-black">Invitation prete</h3>
+                  <p className="mt-2 text-sm font-semibold">Choisissez le canal d'envoi pour {invitationDraft.name}.</p>
+                </div>
+                {invitationDraft.phone ? (
+                  <Button asChild className="min-h-12 bg-emerald-600 text-white hover:bg-emerald-700">
+                    <a href={whatsappHref(invitationDraft.phone, invitationMessage)} target="_blank" rel="noreferrer">
+                      <MessageCircle className="size-5" />
+                      Envoyer par WhatsApp
+                    </a>
+                  </Button>
+                ) : null}
+                {invitationDraft.email ? (
+                  <Button asChild className="min-h-12 bg-blue-700 text-white hover:bg-blue-800">
+                    <a href={mailHref(invitationDraft.email, "Invitation NOVEX", invitationMessage)}>
+                      <Mail className="size-5" />
+                      Envoyer par mail
+                    </a>
+                  </Button>
+                ) : null}
+                <Button type="button" variant="outline" onClick={() => { setInvitationDraft(null); setShowForm(false); }}>Terminer</Button>
+              </div>
+            ) : (
+              <>
+                <div className="grid gap-4">
+                  <input className="min-h-12 rounded-md border border-slate-300 px-3 text-base outline-none" name="firstName" placeholder="Prenom" required />
+                  <input className="min-h-12 rounded-md border border-slate-300 px-3 text-base outline-none" name="lastName" placeholder="Nom" required />
+                  <input className="min-h-12 rounded-md border border-slate-300 px-3 text-base outline-none" name="phone" placeholder="Telephone WhatsApp ex: +2250700000000" />
+                  <input className="min-h-12 rounded-md border border-slate-300 px-3 text-base outline-none" name="email" type="email" placeholder="Email du destinataire" />
+                  <input className="min-h-12 rounded-md border border-slate-300 px-3 text-base outline-none" name="function" placeholder="Fonction eventuelle" />
+                  <textarea className="min-h-24 rounded-md border border-slate-300 px-3 py-3 text-base outline-none" name="message" placeholder="Message" />
+                </div>
+                <Button className="mt-6 min-h-12 w-full bg-blue-700 text-white hover:bg-blue-800" type="submit">Preparer l'envoi <ArrowRight className="size-4" /></Button>
+              </>
+            )}
           </form>
         </section>
       ) : null}
@@ -297,6 +364,7 @@ export function MembershipApplicationDetailView({ applicationId }: Readonly<{ ap
 
   return (
     <main className="min-h-screen bg-[#f5f7f8] px-4 pb-28 pt-4 text-slate-950 md:px-8">
+      <BackButton />
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <p className="text-xs font-black uppercase text-blue-700">Candidature {application.id}</p>
         <div className="mt-3 flex items-start justify-between gap-3">
@@ -347,6 +415,7 @@ export function PublicMembershipFormView({ slug }: Readonly<{ slug: string }>) {
 
   return (
     <main className="min-h-screen bg-[#0b1220] px-4 py-6 text-slate-950">
+      <BackButton />
       <section className="mx-auto flex min-h-[calc(100vh-48px)] w-full max-w-md flex-col justify-center rounded-2xl bg-white p-6 shadow-2xl">
         <div className="text-center">
           <div className="mx-auto grid size-14 place-items-center rounded-full bg-blue-50 text-blue-700"><ShieldCheck className="size-7" /></div>
@@ -385,6 +454,7 @@ export function InvitationAcceptanceView({ token }: Readonly<{ token: string }>)
 
   return (
     <main className="min-h-screen bg-[#0b1220] px-4 py-6 text-slate-950">
+      <BackButton />
       <section className="mx-auto flex min-h-[calc(100vh-48px)] w-full max-w-md flex-col justify-center rounded-2xl bg-white p-6 shadow-2xl">
         <div className="text-center">
           <div className="mx-auto grid size-14 place-items-center rounded-full bg-blue-50 text-blue-700"><UserPlus className="size-7" /></div>
