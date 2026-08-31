@@ -37,7 +37,7 @@ class RegisterSerializer(serializers.Serializer):
         accepted_terms = validated_data.pop("accepted_terms")
         first_name = validated_data.pop("first_name")
         last_name = validated_data.pop("last_name")
-        email = validated_data["email"]
+        email = validated_data.pop("email")
         user = User.objects.create_user(username=email, email=email, password=password, terms_accepted_at=timezone.now() if accepted_terms else None, **validated_data)
         Profile.objects.create(user=user, first_name=first_name, last_name=last_name)
         return user
