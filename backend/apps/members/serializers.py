@@ -345,3 +345,85 @@ class PublicInvitationSerializer(serializers.Serializer):
     message = serializers.CharField(allow_blank=True)
     status = serializers.CharField()
     expires_at = serializers.DateTimeField()
+
+
+class SelfMemberProfileSerializer(serializers.ModelSerializer):
+    full_name = serializers.CharField(read_only=True)
+    workspace_name = serializers.CharField(source="workspace.name", read_only=True)
+    workspace_currency = serializers.CharField(source="workspace.currency", read_only=True)
+    profile_completion = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Member
+        fields = [
+            "id",
+            "workspace_name",
+            "workspace_currency",
+            "membership_number",
+            "first_name",
+            "last_name",
+            "full_name",
+            "email",
+            "phone_country_code",
+            "phone",
+            "function",
+            "gender",
+            "date_of_birth",
+            "address",
+            "city",
+            "occupation",
+            "photo",
+            "join_date",
+            "status",
+            "custom_fields",
+            "profile_completion",
+        ]
+        read_only_fields = ["id", "workspace_name", "workspace_currency", "membership_number", "function", "join_date", "status", "profile_completion"]
+
+    def get_profile_completion(self, obj):
+        from .services import profile_completion
+
+        return profile_completion(obj)
+
+    def validate_email(self, value):
+        if not value:
+            return ""
+        try:
+            validate_email(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError("Email invalide.") from exc
+        return value.lower()
+
+    def validate_phone_country_code(self, value):
+        if value and not value.startswith("+"):
+            raise serializers.ValidationError("Le code pays doit commencer par +.")
+        return value
+
+    def validate_phone(self, value):
+        digits = "".join(char for char in value if char.isdigit())
+        if value and len(digits) < 6:
+            raise serializers.ValidationError("Telephone invalide.")
+        return value
+
+    def validate_photo(self, value):
+        if not value:
+            return value
+        content_type = getattr(value, "content_type", "")
+        if content_type not in ALLOWED_PHOTO_CONTENT_TYPES:
+            raise serializers.ValidationError("Format photo non autorise. Utilisez JPG, PNG ou WEBP.")
+        if value.size > MAX_MEMBER_PHOTO_BYTES:
+            raise serializers.ValidationError("La photo ne doit pas depasser 5 MB.")
+        return value
+
+
+class SelfMemberDashboardSerializer(serializers.Serializer):
+    profile = serializers.DictField()
+    contribution_summary = serializers.DictField()
+    contributions = serializers.ListField()
+    payment_summary = serializers.DictField()
+    payments = serializers.ListField()
+    attendance_summary = serializers.DictField()
+    events = serializers.DictField()
+    documents = serializers.ListField()
+    history = serializers.ListField()
+    alerts = serializers.ListField()

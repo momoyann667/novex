@@ -187,3 +187,33 @@ def test_membership_applications_api_and_public_form_are_workspace_scoped(django
     rows = response.data["results"] if "results" in response.data else response.data
     assert len(rows) == 1
     assert rows[0]["email"] == "nadia@example.com"
+
+
+@pytest.mark.django_db
+def test_self_member_profile_and_dashboard_are_limited_to_linked_member(django_user_model):
+    workspace, owner = make_workspace(django_user_model, "selfspace", ONBOARDING_PERMISSIONS)
+    linked_member = create_member(
+        workspace=workspace,
+        actor=owner,
+        linked_user=owner,
+        first_name="Mohamed",
+        last_name="Tangora",
+        email=owner.email,
+        phone="+2250700000001",
+    )
+    create_member(workspace=workspace, actor=owner, first_name="Other", last_name="Member", email="other@example.com")
+    api_client = APIClient()
+    api_client.force_authenticate(owner)
+
+    profile = api_client.get("/api/v1/me/member/", HTTP_X_WORKSPACE=workspace.slug)
+    patched = api_client.patch("/api/v1/me/member/", {"phone": "+2250500000002", "function": "President"}, format="json", HTTP_X_WORKSPACE=workspace.slug)
+    dashboard = api_client.get("/api/v1/me/member/dashboard/", HTTP_X_WORKSPACE=workspace.slug)
+
+    linked_member.refresh_from_db()
+    assert profile.status_code == 200
+    assert profile.data["id"] == linked_member.id
+    assert patched.status_code == 200
+    assert linked_member.phone == "+2250500000002"
+    assert linked_member.function == "Membre"
+    assert dashboard.status_code == 200
+    assert dashboard.data["profile"]["id"] == linked_member.id

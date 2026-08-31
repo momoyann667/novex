@@ -1,7 +1,7 @@
 from django.core.cache import cache
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from rest_framework import filters, status, viewsets
+from rest_framework import filters, status, views, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -23,6 +23,8 @@ from .serializers import (
     PublicInvitationSerializer,
     PublicMembershipApplicationSerializer,
     PublicMembershipSettingsSerializer,
+    SelfMemberDashboardSerializer,
+    SelfMemberProfileSerializer,
     MemberTagSerializer,
 )
 from .services import (
@@ -38,11 +40,14 @@ from .services import (
     expire_application,
     get_invitation_by_token,
     get_membership_settings,
+    member_dashboard,
     member_seniority,
     reject_application,
     resend_invitation,
     restore_member,
     review_application,
+    self_member_for_user,
+    update_self_member_profile,
     update_member,
 )
 
@@ -471,3 +476,36 @@ class PublicInvitationViewSet(viewsets.ViewSet):
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response({"status": invitation.status})
+
+
+class SelfMemberProfileView(views.APIView):
+    def get_member(self, request):
+        workspace = current_workspace(request)
+        member = self_member_for_user(workspace=workspace, user=request.user)
+        if not member:
+            return workspace, None
+        return workspace, member
+
+    def get(self, request):
+        _workspace, member = self.get_member(request)
+        if not member:
+            return Response({"detail": "Aucun profil membre lie a ce compte dans ce workspace."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(SelfMemberProfileSerializer(member).data)
+
+    def patch(self, request):
+        _workspace, member = self.get_member(request)
+        if not member:
+            return Response({"detail": "Aucun profil membre lie a ce compte dans ce workspace."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = SelfMemberProfileSerializer(member, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        updated = update_self_member_profile(member=member, actor=request.user, **serializer.validated_data)
+        return Response(SelfMemberProfileSerializer(updated).data)
+
+
+class SelfMemberDashboardView(views.APIView):
+    def get(self, request):
+        workspace = current_workspace(request)
+        member = self_member_for_user(workspace=workspace, user=request.user)
+        if not member:
+            return Response({"detail": "Aucun profil membre lie a ce compte dans ce workspace."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(SelfMemberDashboardSerializer(member_dashboard(workspace=workspace, member=member)).data)

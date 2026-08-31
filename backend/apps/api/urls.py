@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from apps.members.views import PublicInvitationViewSet, PublicMembershipViewSet
+from apps.members.views import PublicInvitationViewSet, PublicMembershipViewSet, SelfMemberDashboardView, SelfMemberProfileView
 
 public_router = DefaultRouter()
 public_router.register("membership", PublicMembershipViewSet, basename="public-membership")
@@ -9,6 +9,8 @@ public_router.register("invitations", PublicInvitationViewSet, basename="public-
 
 urlpatterns = [
     path("auth/", include("apps.users.urls")),
+    path("me/member/", SelfMemberProfileView.as_view(), name="self-member-profile"),
+    path("me/member/dashboard/", SelfMemberDashboardView.as_view(), name="self-member-dashboard"),
     path("dashboard/", include("apps.dashboard.urls")),
     path("workspaces/", include("apps.workspaces.urls")),
     path("members/", include("apps.members.urls")),

@@ -1,14 +1,26 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare, get_random_string, salted_hmac
 
 from apps.audit_logs.models import AuditLog
+from apps.contributions.models import Contribution
+from apps.contributions.statuses import ContributionStatus
+from apps.documents.models import Document
+from apps.documents.statuses import DocumentStatus, DocumentVisibility, ShareSubjectType
+from apps.events.models import EventParticipant
+from apps.events.statuses import EventParticipantStatus, EventStatus
+from apps.payments.models import Payment
+from apps.payments.statuses import PaymentStatus
 from apps.workspaces.models import Role, Workspace, WorkspaceMembership
 from .models import Member, MemberActivity, MemberInvitation, MembershipApplication, MembershipSettings
+
+
+ZERO = Decimal("0.00")
 
 
 def next_membership_number(workspace: Workspace) -> str:
@@ -385,3 +397,215 @@ def profile_completion(member: Member | MembershipApplication) -> dict:
     fields = ["first_name", "last_name", "email", "phone", "photo", "occupation"]
     completed = [field for field in fields if getattr(member, field, None)]
     return {"percentage": round((len(completed) / len(fields)) * 100), "completed": completed, "missing": [field for field in fields if field not in completed]}
+
+
+def self_member_for_user(*, workspace: Workspace, user) -> Member | None:
+    if not user or not getattr(user, "is_authenticated", False):
+        return None
+    member = Member.objects.select_related("workspace", "linked_user", "category").filter(workspace=workspace, linked_user=user).first()
+    if member:
+        return member
+    return Member.objects.select_related("workspace", "linked_user", "category").filter(workspace=workspace, email__iexact=user.email).first()
+
+
+def member_public_id(member: Member) -> str:
+    return f"NOVEX-MEMBER:{member.workspace.slug}:{member.membership_number}"
+
+
+@transaction.atomic
+def update_self_member_profile(*, member: Member, actor, **data) -> Member:
+    allowed_fields = {"first_name", "last_name", "email", "phone_country_code", "phone", "gender", "date_of_birth", "address", "city", "occupation", "photo", "custom_fields"}
+    clean_data = {field: value for field, value in data.items() if field in allowed_fields}
+    photo_updated = "photo" in clean_data
+    for field, value in clean_data.items():
+        setattr(member, field, value)
+    member.save(update_fields=[*clean_data.keys(), "updated_at"] if clean_data else ["updated_at"])
+    log_member_action(member=member, actor=actor, action="member.self_profile_updated", metadata={"fields": sorted(clean_data)})
+    if photo_updated:
+        log_member_action(member=member, actor=actor, action="member.photo_updated")
+    return member
+
+
+def currency_amount(value, currency: str) -> dict:
+    return {"value": value or ZERO, "currency": currency}
+
+
+def contribution_projection(contribution: Contribution) -> dict:
+    return {
+        "id": contribution.id,
+        "campaign": contribution.campaign.name,
+        "period_label": contribution.campaign.period_label,
+        "amount_due": contribution.amount_due,
+        "amount_paid": contribution.amount_paid,
+        "remaining_amount": contribution.remaining_amount,
+        "currency": contribution.currency,
+        "due_date": contribution.due_date,
+        "status": contribution.status,
+        "paid_at": contribution.paid_at,
+    }
+
+
+def payment_projection(payment: Payment) -> dict:
+    receipt = getattr(payment, "receipt", None)
+    return {
+        "id": payment.id,
+        "reference": payment.reference,
+        "amount": payment.amount,
+        "currency": payment.currency,
+        "method": payment.payment_method,
+        "provider": payment.provider,
+        "status": payment.status,
+        "reason": payment.contribution.campaign.name if payment.contribution_id else "Paiement",
+        "paid_at": payment.paid_at,
+        "created_at": payment.created_at,
+        "receipt_number": receipt.receipt_number if receipt else "",
+        "receipt_url": receipt.pdf_file.url if receipt and receipt.pdf_file else receipt.pdf_url if receipt else "",
+    }
+
+
+def event_projection(participant: EventParticipant) -> dict:
+    event = participant.event
+    return {
+        "id": event.id,
+        "title": event.title,
+        "start_at": event.start_at,
+        "end_at": event.end_at,
+        "location": event.location or event.city,
+        "status": event.status,
+        "participation_status": participant.status,
+        "attendance_status": participant.attendance_status,
+        "registration_required": event.registration_required,
+    }
+
+
+def member_visible_documents(*, workspace: Workspace, member: Member):
+    return (
+        Document.objects.filter(workspace=workspace, status__in=[DocumentStatus.ACTIVE, DocumentStatus.APPROVED])
+        .filter(Q(member=member) | Q(visibility=DocumentVisibility.MEMBERS) | Q(shares__subject_type=ShareSubjectType.MEMBER, shares__member=member, shares__can_view=True))
+        .distinct()
+        .order_by("-updated_at")
+    )
+
+
+def document_projection(document: Document) -> dict:
+    return {
+        "id": document.id,
+        "name": document.name,
+        "file_type": document.file_type,
+        "mime_type": document.mime_type,
+        "size": document.size,
+        "category": document.category,
+        "visibility": document.visibility,
+        "updated_at": document.updated_at,
+        "can_preview": document.file_type.lower() in {"pdf", "jpg", "jpeg", "png", "webp"},
+        "download_url": document.file.url if document.file else "",
+    }
+
+
+def history_date(value):
+    if isinstance(value, datetime):
+        return value
+    return timezone.make_aware(datetime.combine(value, datetime.min.time()))
+
+
+def member_history(*, workspace: Workspace, member: Member) -> list[dict]:
+    rows = [
+        {"date": history_date(member.join_date), "type": "membership", "title": "Vous avez rejoint l'association", "detail": workspace.name},
+    ]
+    rows.extend(
+        {
+            "date": payment.paid_at or payment.created_at,
+            "type": "payment",
+            "title": "Paiement enregistre",
+            "detail": f"{payment.amount} {payment.currency}",
+        }
+        for payment in Payment.objects.filter(workspace=workspace, member=member, status=PaymentStatus.SUCCESS).order_by("-created_at")[:5]
+    )
+    rows.extend(
+        {
+            "date": participation.checked_in_at or participation.updated_at,
+            "type": "event",
+            "title": "Participation evenement",
+            "detail": participation.event.title,
+        }
+        for participation in EventParticipant.objects.select_related("event").filter(workspace=workspace, member=member, attendance_status=EventParticipantStatus.ATTENDED).order_by("-updated_at")[:5]
+    )
+    rows.extend(
+        {
+            "date": activity.created_at,
+            "type": "profile",
+            "title": "Profil mis a jour",
+            "detail": activity.action,
+        }
+        for activity in MemberActivity.objects.filter(workspace=workspace, member=member, action__in=["member.self_profile_updated", "member.photo_updated"]).order_by("-created_at")[:5]
+    )
+    return sorted(rows, key=lambda item: item["date"], reverse=True)[:12]
+
+
+def member_dashboard(*, workspace: Workspace, member: Member) -> dict:
+    contributions = Contribution.objects.select_related("campaign").filter(workspace=workspace, member=member).order_by("-due_date", "-created_at")
+    payments = Payment.objects.select_related("contribution", "contribution__campaign", "receipt").filter(workspace=workspace, member=member).order_by("-created_at")
+    participations = EventParticipant.objects.select_related("event").filter(workspace=workspace, member=member).order_by("event__start_at")
+    documents = member_visible_documents(workspace=workspace, member=member)
+    contribution_totals = contributions.aggregate(total_due=Sum("amount_due"), total_paid=Sum("amount_paid"))
+    total_due = contribution_totals["total_due"] or ZERO
+    total_paid = contribution_totals["total_paid"] or ZERO
+    remaining = max(total_due - total_paid, ZERO)
+    participation_total = participations.exclude(status=EventParticipantStatus.CANCELLED).count()
+    attended = participations.filter(attendance_status=EventParticipantStatus.ATTENDED).count()
+    absent = participations.filter(attendance_status=EventParticipantStatus.ABSENT).count()
+    now = timezone.now()
+    completion = profile_completion(member)
+    alerts = []
+    next_due = contributions.filter(status__in=[ContributionStatus.PENDING, ContributionStatus.PARTIALLY_PAID, ContributionStatus.OVERDUE]).order_by("due_date").first()
+    if next_due:
+        alerts.append({"type": "contribution", "message": f"Cotisation en attente: {next_due.campaign.name}", "amount": next_due.remaining_amount, "currency": next_due.currency})
+    upcoming_event = participations.filter(event__start_at__gte=now).order_by("event__start_at").first()
+    if upcoming_event:
+        alerts.append({"type": "event", "message": f"Evenement a venir: {upcoming_event.event.title}", "date": upcoming_event.event.start_at})
+    if completion["percentage"] < 100:
+        alerts.append({"type": "profile", "message": f"Profil complete a {completion['percentage']} %."})
+    return {
+        "profile": {
+            "id": member.id,
+            "full_name": member.full_name,
+            "first_name": member.first_name,
+            "last_name": member.last_name,
+            "function": member.function,
+            "status": member.status,
+            "membership_number": member.membership_number,
+            "join_date": member.join_date,
+            "photo": member.photo.url if member.photo else "",
+            "public_member_id": member_public_id(member),
+            "profile_completion": completion,
+            "seniority": member_seniority(member),
+        },
+        "contribution_summary": {
+            "total_due": currency_amount(total_due, workspace.currency),
+            "total_paid": currency_amount(total_paid, workspace.currency),
+            "remaining_to_pay": currency_amount(remaining, workspace.currency),
+            "payment_rate": round((total_paid / total_due) * 100, 2) if total_due else 0,
+            "overdue_count": contributions.filter(status=ContributionStatus.OVERDUE).count(),
+            "next_due_date": next_due.due_date if next_due else None,
+        },
+        "contributions": [contribution_projection(item) for item in contributions[:8]],
+        "payment_summary": {
+            "total_paid": currency_amount(payments.filter(status=PaymentStatus.SUCCESS).aggregate(total=Sum("amount"))["total"] or ZERO, workspace.currency),
+            "successful_count": payments.filter(status=PaymentStatus.SUCCESS).count(),
+            "pending_count": payments.filter(status__in=[PaymentStatus.PENDING, PaymentStatus.PROCESSING]).count(),
+            "failed_count": payments.filter(status=PaymentStatus.FAILED).count(),
+        },
+        "payments": [payment_projection(item) for item in payments[:8]],
+        "attendance_summary": {
+            "participated": attended,
+            "missed": absent,
+            "participation_rate": round((attended / participation_total) * 100, 2) if participation_total else 0,
+        },
+        "events": {
+            "upcoming": [event_projection(item) for item in participations.filter(event__start_at__gte=now).exclude(event__status=EventStatus.CANCELLED)[:6]],
+            "past": [event_projection(item) for item in participations.filter(event__start_at__lt=now).order_by("-event__start_at")[:6]],
+        },
+        "documents": [document_projection(item) for item in documents[:8]],
+        "history": member_history(workspace=workspace, member=member),
+        "alerts": alerts,
+    }

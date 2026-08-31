@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 
 const nav = [
   { label: "Dashboard", path: "dashboard", icon: Home, permission: "dashboard.view" },
+  { label: "Mon espace", path: "member", icon: Users, permission: "member.profile.view_self" },
   { label: "Membres", path: "members", icon: Users, permission: "members.view" },
   { label: "Cotisations", path: "contributions", icon: CreditCard, permission: "contributions.view" },
   { label: "Paiements", path: "payments", icon: CreditCard, permission: "payments.view", plan: "NOVEX_START" },
@@ -81,7 +82,7 @@ export function AssociationShell({ children, workspaceSlug }: Readonly<{ childre
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-border bg-white px-1 pb-[env(safe-area-inset-bottom)] shadow-[0_-10px_30px_rgba(15,23,42,0.08)] md:hidden">
         {([
           ["Dashboard", "dashboard", Home],
-          ["Membres", "members", Users],
+          ["Profil", "member", Users],
           ["Cotisations", "contributions", CreditCard],
           ["Assi...", "assistant", Bot],
           ["Plus", "settings", Menu]

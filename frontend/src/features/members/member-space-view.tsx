@@ -1,0 +1,256 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, CalendarDays, CheckCircle2, CreditCard, Download, Edit3, FileText, IdCard, QrCode } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+type Tab = "profile" | "contributions" | "payments" | "attendance" | "events" | "documents" | "history";
+
+const profile = {
+  firstName: "Mohamed",
+  lastName: "Tangora",
+  fullName: "Mohamed Tangora",
+  function: "Membre",
+  status: "Actif",
+  membershipNumber: "NOV-000125",
+  joinedAt: "2026-01-12",
+  phone: "+225 07 18 42 90 10",
+  email: "mohamed.tangora@example.com",
+  occupation: "",
+  city: "Abidjan",
+  completion: 83
+};
+
+const contributions = [
+  { period: "Aout 2026", label: "Cotisation mensuelle", due: 10000, paid: 10000, remaining: 0, status: "Payee", dueDate: "2026-08-31" },
+  { period: "Septembre 2026", label: "Cotisation mensuelle", due: 10000, paid: 0, remaining: 10000, status: "En attente", dueDate: "2026-09-30" },
+  { period: "Adhesion", label: "Frais d'adhesion", due: 25000, paid: 25000, remaining: 0, status: "Payee", dueDate: "2026-01-12" }
+];
+
+const payments = [
+  { reference: "NOVEX-2026-A82901", reason: "Cotisation Aout", amount: 10000, method: "Mobile Money", status: "Reussi", date: "2026-08-31", receipt: "NVX-2026-000125" },
+  { reference: "NOVEX-2026-B11042", reason: "Frais d'adhesion", amount: 25000, method: "Manuel", status: "Reussi", date: "2026-01-12", receipt: "NVX-2026-000032" }
+];
+
+const participations = [
+  { title: "Assemblee generale", date: "2026-08-12", status: "Present" },
+  { title: "Reunion mensuelle", date: "2026-08-05", status: "Absent" },
+  { title: "Atelier projets", date: "2026-07-20", status: "Present" }
+];
+
+const events = [
+  { title: "Forum associatif", date: "2026-09-14", time: "18:00", location: "Abidjan", participation: "Je participe", past: false },
+  { title: "Assemblee generale", date: "2026-08-12", time: "17:30", location: "Cocody", participation: "Present", past: true }
+];
+
+const documents = [
+  { name: "Carte membre", type: "PDF", size: "220 KB", category: "Membres" },
+  { name: "Reglement interieur", type: "PDF", size: "2.4 MB", category: "Juridique" },
+  { name: "Recu cotisation Aout", type: "PDF", size: "180 KB", category: "Cotisations" }
+];
+
+const tabs: Array<{ id: Tab; label: string }> = [
+  { id: "profile", label: "Profil" },
+  { id: "contributions", label: "Cotisations" },
+  { id: "payments", label: "Paiements" },
+  { id: "attendance", label: "Presences" },
+  { id: "events", label: "Evenements" },
+  { id: "documents", label: "Documents" },
+  { id: "history", label: "Historique" }
+];
+
+function formatMoney(value: number) {
+  return `${value.toLocaleString("fr-FR")} FCFA`;
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("fr-FR", { dateStyle: "long" }).format(new Date(value));
+}
+
+export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: string }>) {
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<Tab>("profile");
+  const [isEditing, setIsEditing] = useState(false);
+  const totalDue = useMemo(() => contributions.reduce((sum, item) => sum + item.due, 0), []);
+  const totalPaid = useMemo(() => contributions.reduce((sum, item) => sum + item.paid, 0), []);
+  const remaining = Math.max(totalDue - totalPaid, 0);
+  const participationRate = Math.round((participations.filter((item) => item.status === "Present").length / participations.length) * 100);
+
+  return (
+    <main className="min-h-screen bg-[#f5f7f8] px-4 pb-28 pt-4 text-slate-950 md:px-8">
+      <button className="mb-4 inline-flex min-h-10 items-center gap-2 rounded-md bg-white px-3 text-sm font-black text-slate-700 shadow-sm" type="button" onClick={() => router.back()}>
+        <ArrowLeft className="size-4" />
+        Retour
+      </button>
+
+      <section className="rounded-2xl bg-slate-950 p-5 text-white shadow-xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-bold text-white/65">Bonjour {profile.firstName}</p>
+            <h1 className="mt-2 text-3xl font-black tracking-normal">Mon espace</h1>
+            <p className="mt-2 text-sm font-medium leading-6 text-white/70">Voici un apercu de votre activite dans l'association.</p>
+          </div>
+          <div className="grid size-12 shrink-0 place-items-center rounded-xl bg-white text-lg font-black text-slate-950">MT</div>
+        </div>
+        <div className="mt-6 rounded-xl border border-white/10 bg-white/10 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-black tracking-normal">{profile.fullName}</h2>
+              <p className="mt-1 text-sm font-semibold text-white/70">{profile.function} - {profile.status}</p>
+            </div>
+            <QrCode className="size-10 text-white/70" />
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3 text-sm font-semibold text-white/75">
+            <span>{profile.membershipNumber}</span>
+            <span>Depuis {formatDate(profile.joinedAt)}</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[
+          ["Cotisations", remaining === 0 ? "A jour" : formatMoney(remaining), CreditCard],
+          ["Participation", `${participationRate} %`, CalendarDays],
+          ["Documents", documents.length.toString(), FileText],
+          ["Anciennete", "0.6 an", IdCard]
+        ].map(([label, value, Icon]) => (
+          <div className="min-h-28 rounded-lg border border-slate-200 bg-white p-4 shadow-sm" key={label as string}>
+            <div className="flex items-start justify-between">
+              <span className="text-xs font-bold text-slate-600">{label as string}</span>
+              <Icon className="size-8 text-slate-200" />
+            </div>
+            <div className="mt-3 text-2xl font-black tracking-normal">{value as string}</div>
+          </div>
+        ))}
+      </section>
+
+      <section className="mt-5 rounded-xl bg-white p-4 shadow-sm">
+        <p className="text-sm font-black">A retenir</p>
+        <div className="mt-3 grid gap-2 text-sm font-semibold text-slate-600">
+          {remaining ? <p>Votre prochaine cotisation affiche un reste de {formatMoney(remaining)}.</p> : <p>Vos cotisations sont a jour.</p>}
+          <p>Forum associatif prevu le {formatDate("2026-09-14")}.</p>
+          {profile.completion < 100 ? <p>Votre profil est complete a {profile.completion} %.</p> : null}
+        </div>
+      </section>
+
+      <nav className="mt-5 flex gap-2 overflow-x-auto pb-1">
+        {tabs.map((tab) => (
+          <button className={`min-h-10 shrink-0 rounded-full px-4 text-sm font-black ${activeTab === tab.id ? "bg-blue-700 text-white" : "bg-white text-slate-600 shadow-sm"}`} key={tab.id} type="button" onClick={() => setActiveTab(tab.id)}>
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+
+      <section className="mt-5">
+        {activeTab === "profile" ? (
+          <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+            <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-black">Profil</h2>
+                <Button type="button" variant="outline" onClick={() => setIsEditing((value) => !value)}><Edit3 className="size-4" /> Modifier</Button>
+              </div>
+              <div className="mt-5 grid gap-4 md:grid-cols-2">
+                {["Nom: Mohamed", "Prenoms: Tangora", `Telephone: ${profile.phone}`, `Email: ${profile.email}`, `Ville: ${profile.city}`, `Profession: ${profile.occupation || "A completer"}`].map((item) => <p className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-600" key={item}>{item}</p>)}
+              </div>
+              {isEditing ? (
+                <form className="mt-5 grid gap-3">
+                  <input className="min-h-12 rounded-md border border-slate-300 px-3 text-base outline-none" defaultValue={profile.phone} />
+                  <input className="min-h-12 rounded-md border border-slate-300 px-3 text-base outline-none" defaultValue={profile.email} />
+                  <input className="min-h-12 rounded-md border border-slate-300 px-3 text-base outline-none" placeholder="Profession" />
+                  <Button className="min-h-12 bg-blue-700 text-white hover:bg-blue-800" type="button" onClick={() => setIsEditing(false)}>Enregistrer</Button>
+                </form>
+              ) : null}
+            </article>
+            <aside className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="text-xl font-black">Completion profil</h2>
+              <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-700" style={{ width: `${profile.completion}%` }} /></div>
+              <p className="mt-3 text-3xl font-black">{profile.completion} %</p>
+              <div className="mt-4 grid gap-2 text-sm font-semibold text-slate-600">
+                <p><CheckCircle2 className="mr-2 inline size-4 text-emerald-600" /> Informations personnelles</p>
+                <p><CheckCircle2 className="mr-2 inline size-4 text-emerald-600" /> Telephone</p>
+                <p><CheckCircle2 className="mr-2 inline size-4 text-emerald-600" /> Email</p>
+                <p className="text-amber-700">Profession a completer</p>
+              </div>
+            </aside>
+          </div>
+        ) : null}
+
+        {activeTab === "contributions" ? (
+          <div className="grid gap-4">
+            <div className="rounded-xl bg-white p-5 shadow-sm">
+              <div className="flex items-end justify-between"><h2 className="text-xl font-black">Cotisations</h2><strong>{Math.round((totalPaid / totalDue) * 100)} %</strong></div>
+              <div className="mt-4 h-4 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-600" style={{ width: `${Math.round((totalPaid / totalDue) * 100)}%` }} /></div>
+              <p className="mt-3 text-sm font-semibold text-slate-600">{formatMoney(totalPaid)} paye sur {formatMoney(totalDue)}. Reste : {formatMoney(remaining)}.</p>
+            </div>
+            {contributions.map((item) => <DataCard key={item.period} title={item.period} subtitle={item.label} value={formatMoney(item.due)} status={item.status} detail={`Echeance ${formatDate(item.dueDate)}`} />)}
+            <Button asChild className="min-h-12 bg-blue-700 text-white hover:bg-blue-800"><Link href={`/app/${workspaceSlug}/payments`}>Payer ma cotisation</Link></Button>
+          </div>
+        ) : null}
+
+        {activeTab === "payments" ? (
+          <div className="grid gap-3">
+            {payments.map((item) => <DataCard key={item.reference} title={item.reason} subtitle={`${item.method} - ${formatDate(item.date)}`} value={formatMoney(item.amount)} status={item.status} detail={`Reference ${item.reference}`} action="Voir le recu" />)}
+          </div>
+        ) : null}
+
+        {activeTab === "attendance" ? (
+          <div className="grid gap-3">
+            <div className="rounded-xl bg-white p-5 shadow-sm"><h2 className="text-xl font-black">Presences</h2><p className="mt-2 text-3xl font-black">{participationRate} %</p><p className="text-sm font-semibold text-slate-500">{participations.filter((item) => item.status === "Present").length} presents, {participations.filter((item) => item.status === "Absent").length} absence.</p></div>
+            {participations.map((item) => <DataCard key={item.title} title={item.title} subtitle={formatDate(item.date)} value={item.status} status={item.status} detail="Historique de presence" />)}
+          </div>
+        ) : null}
+
+        {activeTab === "events" ? (
+          <div className="grid gap-3">
+            {events.map((item) => <DataCard key={`${item.title}-${item.date}`} title={item.title} subtitle={`${formatDate(item.date)} - ${item.time} - ${item.location}`} value={item.participation} status={item.past ? "Passe" : "A venir"} detail={item.past ? "Evenement passe" : "Inscription ouverte"} />)}
+          </div>
+        ) : null}
+
+        {activeTab === "documents" ? (
+          <div className="grid gap-3">
+            {documents.map((item) => <DataCard key={item.name} title={item.name} subtitle={`${item.type} - ${item.size}`} value={item.category} status="Disponible" detail="Apercu et telechargement autorises" action="Telecharger" />)}
+          </div>
+        ) : null}
+
+        {activeTab === "history" ? (
+          <div className="rounded-xl bg-white p-5 shadow-sm">
+            <h2 className="text-xl font-black">Mon historique</h2>
+            <div className="mt-5 grid gap-5">
+              {[
+                ["31 aout", "Cotisation payee", "10 000 FCFA"],
+                ["12 aout", "Participation evenement", "Assemblee generale"],
+                ["12 janvier", "Adhesion", "Association NOVEX"]
+              ].map(([date, title, detail]) => (
+                <div className="grid grid-cols-[64px_1fr] gap-4" key={title}>
+                  <span className="text-xs font-black text-blue-700">{date}</span>
+                  <div className="border-l border-slate-200 pl-4"><p className="font-black">{title}</p><p className="mt-1 text-sm font-semibold text-slate-500">{detail}</p></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </section>
+    </main>
+  );
+}
+
+function DataCard({ title, subtitle, value, status, detail, action }: Readonly<{ title: string; subtitle: string; value: string; status: string; detail: string; action?: string }>) {
+  return (
+    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h3 className="text-lg font-black tracking-normal">{title}</h3>
+          <p className="mt-1 text-sm font-semibold text-slate-500">{subtitle}</p>
+        </div>
+        <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700">{status}</span>
+      </div>
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <strong className="text-xl font-black">{value}</strong>
+        {action ? <Button type="button" variant="outline"><Download className="size-4" /> {action}</Button> : null}
+      </div>
+      <p className="mt-3 text-sm font-semibold text-slate-500">{detail}</p>
+    </article>
+  );
+}
