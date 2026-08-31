@@ -1,6 +1,7 @@
 "use client";
 
 import { type ChangeEvent, useMemo, useState } from "react";
+import Link from "next/link";
 import { Bell, Bot, Download, Filter, Grid2X2, Plus, Search, SlidersHorizontal, TrendingUp, Upload, UserPlus, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -73,7 +74,7 @@ function parseCsvLine(line: string) {
   return values;
 }
 
-export function MembersView() {
+export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string }>) {
   const [memberRows, setMemberRows] = useState<Member[]>(members);
   const [query, setQuery] = useState("");
   const [onlyActive, setOnlyActive] = useState(false);
@@ -275,6 +276,21 @@ export function MembersView() {
       {importNotice ? (
         <p className="mt-3 rounded-md bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">{importNotice}</p>
       ) : null}
+
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <Button asChild className="min-h-11 px-4" variant="outline">
+          <Link href={`/app/${workspaceSlug}/members/applications`}>
+            <UserPlus className="size-4" />
+            Demandes
+          </Link>
+        </Button>
+        <Button asChild className="min-h-11 px-4" variant="outline">
+          <Link href={`/app/${workspaceSlug}/members/invitations`}>
+            <Users className="size-4" />
+            Invitations
+          </Link>
+        </Button>
+      </div>
 
       <section className="mt-5 grid gap-3 md:hidden">
         {visibleMembers.map((member) => (

@@ -1,9 +1,14 @@
-from django.db import transaction
+from datetime import timedelta
+
+from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils import timezone
+from django.utils.crypto import constant_time_compare, get_random_string, salted_hmac
 
 from apps.audit_logs.models import AuditLog
-from apps.workspaces.models import Workspace
-from .models import Member, MemberActivity
+from apps.workspaces.models import Role, Workspace, WorkspaceMembership
+from .models import Member, MemberActivity, MemberInvitation, MembershipApplication, MembershipSettings
 
 
 def next_membership_number(workspace: Workspace) -> str:
@@ -29,6 +34,10 @@ def log_member_action(*, member: Member, actor, action: str, metadata: dict | No
         resource_id=str(member.id),
         metadata={"membership_number": member.membership_number, **payload},
     )
+
+
+def log_membership_event(*, workspace: Workspace | None, actor, action: str, resource: str, resource_id: str, metadata: dict | None = None) -> None:
+    AuditLog.objects.create(workspace=workspace, actor=actor, action=action, resource=resource, resource_id=resource_id, metadata=metadata or {})
 
 
 def sync_member_relations(member: Member, *, tags=None, groups=None) -> None:
@@ -90,3 +99,289 @@ def restore_member(*, member: Member, actor) -> Member:
     member.save(update_fields=["status", "archived_at", "updated_at"])
     log_member_action(member=member, actor=actor, action="member.restored")
     return member
+
+
+def get_membership_settings(workspace: Workspace) -> MembershipSettings:
+    settings, _ = MembershipSettings.objects.get_or_create(workspace=workspace)
+    return settings
+
+
+def invitation_token_hash(token: str) -> str:
+    return salted_hmac("member-invitation", token).hexdigest()
+
+
+def generate_invitation_token() -> str:
+    return get_random_string(48)
+
+
+def find_existing_member(*, workspace: Workspace, email: str = "", phone: str = "") -> Member | None:
+    filters = Q()
+    if email:
+        filters |= Q(email__iexact=email)
+    if phone:
+        filters |= Q(phone=phone)
+    if not filters:
+        return None
+    return Member.objects.filter(workspace=workspace).filter(filters).first()
+
+
+def duplicate_warning(*, workspace: Workspace, email: str = "", phone: str = "") -> dict:
+    member = find_existing_member(workspace=workspace, email=email, phone=phone)
+    active_applications = MembershipApplication.objects.filter(workspace=workspace, status__in=[MembershipApplication.Status.PENDING, MembershipApplication.Status.UNDER_REVIEW])
+    if email:
+        active_applications = active_applications.filter(Q(email__iexact=email) | Q(phone=phone))
+    elif phone:
+        active_applications = active_applications.filter(phone=phone)
+    matches = {}
+    if member:
+        matches["member"] = {"id": member.id, "name": member.full_name, "email": member.email, "phone": member.phone}
+    if active_applications.exists():
+        matches["applications"] = list(active_applications.values("id", "first_name", "last_name", "email", "phone", "status")[:5])
+    return matches
+
+
+@transaction.atomic
+def create_membership_application(*, workspace: Workspace, actor=None, source=MembershipApplication.Source.ADMIN, **data) -> MembershipApplication:
+    email = (data.get("email") or "").lower()
+    phone = data.get("phone") or ""
+    linked_user = get_user_model().objects.filter(email__iexact=email).first() if email else None
+    application = MembershipApplication.objects.create(
+        workspace=workspace,
+        linked_user=linked_user,
+        source=source,
+        duplicate_warning=duplicate_warning(workspace=workspace, email=email, phone=phone),
+        **{**data, "email": email},
+    )
+    log_membership_event(workspace=workspace, actor=actor, action="membership_application.created", resource="membership_application", resource_id=str(application.id), metadata={"source": source})
+    return application
+
+
+@transaction.atomic
+def review_application(*, application: MembershipApplication, actor, internal_note: str = "") -> MembershipApplication:
+    application = MembershipApplication.objects.select_for_update().get(id=application.id)
+    if application.status not in [MembershipApplication.Status.PENDING, MembershipApplication.Status.UNDER_REVIEW]:
+        raise ValueError("Cette candidature ne peut plus etre prise en charge.")
+    application.status = MembershipApplication.Status.UNDER_REVIEW
+    application.reviewed_by = actor
+    application.reviewed_at = timezone.now()
+    if internal_note:
+        application.internal_note = internal_note
+    application.save(update_fields=["status", "reviewed_by", "reviewed_at", "internal_note", "updated_at"])
+    log_membership_event(workspace=application.workspace, actor=actor, action="membership_application.reviewed", resource="membership_application", resource_id=str(application.id))
+    return application
+
+
+@transaction.atomic
+def approve_application(*, application: MembershipApplication, actor, official_join_date=None) -> MembershipApplication:
+    application = MembershipApplication.objects.select_for_update().select_related("workspace", "linked_user", "member").get(id=application.id)
+    if application.status == MembershipApplication.Status.APPROVED and application.member_id:
+        return application
+    if application.status in [MembershipApplication.Status.REJECTED, MembershipApplication.Status.CANCELLED, MembershipApplication.Status.EXPIRED]:
+        raise ValueError("Cette candidature ne peut pas etre approuvee.")
+
+    existing_member = find_existing_member(workspace=application.workspace, email=application.email, phone=application.phone)
+    if existing_member:
+        member = existing_member
+        if member.status != Member.Status.ACTIVE:
+            member.status = Member.Status.ACTIVE
+            member.save(update_fields=["status", "updated_at"])
+    else:
+        member = create_member(
+            workspace=application.workspace,
+            actor=actor,
+            linked_user=application.linked_user,
+            first_name=application.first_name,
+            last_name=application.last_name,
+            email=application.email,
+            phone=application.phone,
+            occupation=application.occupation,
+            city=application.city,
+            notes=application.internal_note,
+            custom_fields=application.custom_fields,
+            join_date=official_join_date or timezone.localdate(),
+            status=Member.Status.ACTIVE,
+        )
+        log_membership_event(workspace=application.workspace, actor=actor, action="member.created_from_application", resource="member", resource_id=str(member.id), metadata={"application_id": application.id})
+
+    application.status = MembershipApplication.Status.APPROVED
+    application.member = member
+    application.reviewed_by = actor
+    application.reviewed_at = timezone.now()
+    application.save(update_fields=["status", "member", "reviewed_by", "reviewed_at", "updated_at"])
+    log_membership_event(workspace=application.workspace, actor=actor, action="membership_application.approved", resource="membership_application", resource_id=str(application.id), metadata={"member_id": member.id})
+    return application
+
+
+@transaction.atomic
+def reject_application(*, application: MembershipApplication, actor, rejection_reason: str = "", internal_note: str = "") -> MembershipApplication:
+    application = MembershipApplication.objects.select_for_update().get(id=application.id)
+    if application.status in [MembershipApplication.Status.APPROVED, MembershipApplication.Status.REJECTED, MembershipApplication.Status.CANCELLED, MembershipApplication.Status.EXPIRED]:
+        raise ValueError("Cette candidature ne peut plus etre refusee.")
+    application.status = MembershipApplication.Status.REJECTED
+    application.reviewed_by = actor
+    application.reviewed_at = timezone.now()
+    application.rejection_reason = rejection_reason
+    if internal_note:
+        application.internal_note = internal_note
+    application.save(update_fields=["status", "reviewed_by", "reviewed_at", "rejection_reason", "internal_note", "updated_at"])
+    log_membership_event(workspace=application.workspace, actor=actor, action="membership_application.rejected", resource="membership_application", resource_id=str(application.id))
+    return application
+
+
+@transaction.atomic
+def cancel_application(*, application: MembershipApplication, actor) -> MembershipApplication:
+    application = MembershipApplication.objects.select_for_update().get(id=application.id)
+    if application.status not in [MembershipApplication.Status.PENDING, MembershipApplication.Status.UNDER_REVIEW]:
+        raise ValueError("Cette candidature ne peut pas etre annulee.")
+    application.status = MembershipApplication.Status.CANCELLED
+    application.save(update_fields=["status", "updated_at"])
+    log_membership_event(workspace=application.workspace, actor=actor, action="membership_application.cancelled", resource="membership_application", resource_id=str(application.id))
+    return application
+
+
+@transaction.atomic
+def expire_application(*, application: MembershipApplication) -> MembershipApplication:
+    application = MembershipApplication.objects.select_for_update().get(id=application.id)
+    if application.status in [MembershipApplication.Status.PENDING, MembershipApplication.Status.UNDER_REVIEW] and application.expires_at and application.expires_at <= timezone.now():
+        application.status = MembershipApplication.Status.EXPIRED
+        application.save(update_fields=["status", "updated_at"])
+        log_membership_event(workspace=application.workspace, actor=None, action="membership_application.expired", resource="membership_application", resource_id=str(application.id))
+    return application
+
+
+def active_invitation_filter(*, workspace: Workspace, email: str = "", phone: str = ""):
+    filters = Q(workspace=workspace, status=MemberInvitation.Status.PENDING, expires_at__gt=timezone.now())
+    identity = Q()
+    if email:
+        identity |= Q(email__iexact=email)
+    if phone:
+        identity |= Q(phone=phone)
+    return MemberInvitation.objects.filter(filters).filter(identity) if identity else MemberInvitation.objects.none()
+
+
+@transaction.atomic
+def create_member_invitation(*, workspace: Workspace, actor, **data) -> tuple[MemberInvitation, str, bool]:
+    settings = get_membership_settings(workspace)
+    if not settings.invitation_enabled:
+        raise ValueError("Les invitations sont desactivees pour cette association.")
+    email = (data.get("email") or "").lower()
+    phone = data.get("phone") or ""
+    existing = active_invitation_filter(workspace=workspace, email=email, phone=phone).first()
+    if existing:
+        return existing, "", False
+    token = generate_invitation_token()
+    invitation = MemberInvitation.objects.create(
+        workspace=workspace,
+        invited_by=actor,
+        token_hash=invitation_token_hash(token),
+        expires_at=timezone.now() + timedelta(days=settings.invitation_expiration_days),
+        last_sent_at=timezone.now(),
+        **{**data, "email": email},
+    )
+    log_membership_event(workspace=workspace, actor=actor, action="invitation.created", resource="member_invitation", resource_id=str(invitation.id), metadata={"email": email, "phone": phone})
+    return invitation, token, True
+
+
+def get_invitation_by_token(token: str) -> MemberInvitation | None:
+    token_hash = invitation_token_hash(token)
+    for invitation in MemberInvitation.objects.select_related("workspace", "invited_by").filter(token_hash=token_hash):
+        if constant_time_compare(invitation.token_hash, token_hash):
+            return invitation
+    return None
+
+
+@transaction.atomic
+def accept_invitation(*, token: str, user=None) -> MemberInvitation:
+    invitation = get_invitation_by_token(token)
+    if not invitation:
+        raise ValueError("Invitation invalide.")
+    invitation = MemberInvitation.objects.select_for_update().select_related("workspace").get(id=invitation.id)
+    if invitation.status != MemberInvitation.Status.PENDING:
+        raise ValueError("Cette invitation n'est plus active.")
+    if invitation.expires_at <= timezone.now():
+        invitation.status = MemberInvitation.Status.EXPIRED
+        invitation.save(update_fields=["status", "updated_at"])
+        log_membership_event(workspace=invitation.workspace, actor=None, action="invitation.expired", resource="member_invitation", resource_id=str(invitation.id))
+        raise ValueError("Cette invitation a expire.")
+
+    linked_user = user if getattr(user, "is_authenticated", False) else None
+    if not linked_user and invitation.email:
+        linked_user = get_user_model().objects.filter(email__iexact=invitation.email).first()
+    member = find_existing_member(workspace=invitation.workspace, email=invitation.email, phone=invitation.phone)
+    if not member:
+        member = create_member(
+            workspace=invitation.workspace,
+            actor=invitation.invited_by,
+            linked_user=linked_user,
+            first_name=invitation.first_name,
+            last_name=invitation.last_name,
+            email=invitation.email,
+            phone=invitation.phone,
+            function=invitation.function,
+            status=Member.Status.ACTIVE,
+        )
+    elif linked_user and not member.linked_user_id:
+        member.linked_user = linked_user
+        member.save(update_fields=["linked_user", "updated_at"])
+
+    if linked_user:
+        role = Role.objects.filter(workspace=invitation.workspace, code="MEMBER").first()
+        if role:
+            WorkspaceMembership.objects.get_or_create(user=linked_user, workspace=invitation.workspace, defaults={"role": role, "status": WorkspaceMembership.Status.ACTIVE, "joined_at": timezone.now()})
+
+    invitation.status = MemberInvitation.Status.ACCEPTED
+    invitation.member = member
+    invitation.accepted_by = linked_user
+    invitation.accepted_at = timezone.now()
+    invitation.save(update_fields=["status", "member", "accepted_by", "accepted_at", "updated_at"])
+    log_membership_event(workspace=invitation.workspace, actor=linked_user, action="invitation.accepted", resource="member_invitation", resource_id=str(invitation.id), metadata={"member_id": member.id})
+    return invitation
+
+
+@transaction.atomic
+def decline_invitation(*, token: str) -> MemberInvitation:
+    invitation = get_invitation_by_token(token)
+    if not invitation:
+        raise ValueError("Invitation invalide.")
+    invitation = MemberInvitation.objects.select_for_update().get(id=invitation.id)
+    if invitation.status != MemberInvitation.Status.PENDING:
+        raise ValueError("Cette invitation n'est plus active.")
+    invitation.status = MemberInvitation.Status.DECLINED
+    invitation.declined_at = timezone.now()
+    invitation.save(update_fields=["status", "declined_at", "updated_at"])
+    log_membership_event(workspace=invitation.workspace, actor=None, action="invitation.declined", resource="member_invitation", resource_id=str(invitation.id))
+    return invitation
+
+
+@transaction.atomic
+def cancel_invitation(*, invitation: MemberInvitation, actor) -> MemberInvitation:
+    invitation = MemberInvitation.objects.select_for_update().get(id=invitation.id)
+    if invitation.status != MemberInvitation.Status.PENDING:
+        raise ValueError("Cette invitation ne peut plus etre annulee.")
+    invitation.status = MemberInvitation.Status.CANCELLED
+    invitation.cancelled_at = timezone.now()
+    invitation.save(update_fields=["status", "cancelled_at", "updated_at"])
+    log_membership_event(workspace=invitation.workspace, actor=actor, action="invitation.cancelled", resource="member_invitation", resource_id=str(invitation.id))
+    return invitation
+
+
+@transaction.atomic
+def resend_invitation(*, invitation: MemberInvitation, actor) -> tuple[MemberInvitation, str]:
+    invitation = MemberInvitation.objects.select_for_update().get(id=invitation.id)
+    if invitation.status not in [MemberInvitation.Status.PENDING, MemberInvitation.Status.EXPIRED]:
+        raise ValueError("Cette invitation ne peut pas etre renvoyee.")
+    settings = get_membership_settings(invitation.workspace)
+    token = generate_invitation_token()
+    invitation.token_hash = invitation_token_hash(token)
+    invitation.status = MemberInvitation.Status.PENDING
+    invitation.expires_at = timezone.now() + timedelta(days=settings.invitation_expiration_days)
+    invitation.last_sent_at = timezone.now()
+    invitation.save(update_fields=["token_hash", "status", "expires_at", "last_sent_at", "updated_at"])
+    log_membership_event(workspace=invitation.workspace, actor=actor, action="invitation.resent", resource="member_invitation", resource_id=str(invitation.id))
+    return invitation, token
+
+
+def profile_completion(member: Member | MembershipApplication) -> dict:
+    fields = ["first_name", "last_name", "email", "phone", "photo", "occupation"]
+    completed = [field for field in fields if getattr(member, field, None)]
+    return {"percentage": round((len(completed) / len(fields)) * 100), "completed": completed, "missing": [field for field in fields if field not in completed]}

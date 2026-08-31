@@ -4,8 +4,8 @@ import pytest
 from rest_framework.test import APIClient
 
 from apps.audit_logs.models import AuditLog
-from apps.members.models import Member, MemberActivity
-from apps.members.services import archive_member, create_member, member_seniority, restore_member, update_member
+from apps.members.models import Member, MemberActivity, MemberInvitation, MembershipApplication, MembershipSettings
+from apps.members.services import accept_invitation, approve_application, create_member_invitation, create_membership_application, decline_invitation, member_seniority, reject_application, review_application, archive_member, create_member, restore_member, update_member
 from apps.workspaces.models import Permission, Role, RolePermission, Workspace, WorkspaceMembership
 
 
@@ -18,6 +18,23 @@ def make_workspace(django_user_model, slug="association", permissions=None):
         RolePermission.objects.create(role=role, permission=permission)
     WorkspaceMembership.objects.create(user=owner, workspace=workspace, role=role, status="active")
     return workspace, owner
+
+
+ONBOARDING_PERMISSIONS = {
+    "members.view",
+    "members.create",
+    "members.update",
+    "members.archive",
+    "members.restore",
+    "members.applications.view",
+    "members.applications.review",
+    "members.applications.approve",
+    "members.applications.reject",
+    "members.invitations.create",
+    "members.invitations.cancel",
+    "members.invitations.resend",
+    "members.onboarding.manage",
+}
 
 
 @pytest.mark.django_db
@@ -83,3 +100,90 @@ def test_members_api_create_patch_archive_restore(django_user_model):
     assert patched.data["status"] == Member.Status.INACTIVE
     assert archived.data["status"] == Member.Status.ARCHIVED
     assert restored.data["status"] == Member.Status.ACTIVE
+
+
+@pytest.mark.django_db
+def test_membership_application_review_approve_reject_workflow(django_user_model):
+    workspace, owner = make_workspace(django_user_model, "onboarding", ONBOARDING_PERMISSIONS)
+    application = create_membership_application(
+        workspace=workspace,
+        actor=owner,
+        source=MembershipApplication.Source.PUBLIC_FORM,
+        first_name="Mariam",
+        last_name="Kone",
+        email="mariam.kone@example.com",
+        phone="+2250700000010",
+        occupation="Entrepreneure",
+    )
+
+    reviewed = review_application(application=application, actor=owner, internal_note="Dossier complet")
+    approved = approve_application(application=reviewed, actor=owner)
+    approved_again = approve_application(application=approved, actor=owner)
+
+    assert reviewed.status == MembershipApplication.Status.UNDER_REVIEW
+    assert approved.status == MembershipApplication.Status.APPROVED
+    assert approved.member.status == Member.Status.ACTIVE
+    assert approved_again.member_id == approved.member_id
+    assert Member.objects.filter(workspace=workspace, email="mariam.kone@example.com").count() == 1
+
+    rejected_application = create_membership_application(workspace=workspace, actor=owner, first_name="Yao", last_name="Kouassi", email="yao@example.com")
+    rejected = reject_application(application=rejected_application, actor=owner, rejection_reason="Completude insuffisante")
+    assert rejected.status == MembershipApplication.Status.REJECTED
+
+
+@pytest.mark.django_db
+def test_member_invitation_token_accept_decline_and_idempotence(django_user_model):
+    workspace, owner = make_workspace(django_user_model, "invites", ONBOARDING_PERMISSIONS)
+    MembershipSettings.objects.create(workspace=workspace, invitation_enabled=True)
+
+    invitation, token, created = create_member_invitation(
+        workspace=workspace,
+        actor=owner,
+        first_name="Grace",
+        last_name="Kouame",
+        email="grace@example.com",
+        function="Membre",
+    )
+    duplicate, duplicate_token, duplicate_created = create_member_invitation(
+        workspace=workspace,
+        actor=owner,
+        first_name="Grace",
+        last_name="Kouame",
+        email="grace@example.com",
+        function="Membre",
+    )
+
+    accepted = accept_invitation(token=token)
+
+    assert created is True
+    assert duplicate.id == invitation.id
+    assert duplicate_token == ""
+    assert duplicate_created is False
+    assert accepted.status == MemberInvitation.Status.ACCEPTED
+    assert accepted.member.email == "grace@example.com"
+
+    second_invitation, second_token, _ = create_member_invitation(workspace=workspace, actor=owner, first_name="Paul", last_name="Ake", phone="+2250102030405")
+    declined = decline_invitation(token=second_token)
+    assert declined.id == second_invitation.id
+    assert declined.status == MemberInvitation.Status.DECLINED
+
+
+@pytest.mark.django_db
+def test_membership_applications_api_and_public_form_are_workspace_scoped(django_user_model):
+    workspace, owner = make_workspace(django_user_model, "publicform", ONBOARDING_PERMISSIONS)
+    MembershipSettings.objects.create(workspace=workspace, public_form_enabled=True, membership_enabled=True)
+    api_client = APIClient()
+
+    public_response = api_client.post(
+        f"/api/v1/public/membership/{workspace.slug}/apply/",
+        {"first_name": "Nadia", "last_name": "Bamba", "email": "nadia@example.com", "phone": "+2250700000099"},
+        format="json",
+    )
+    assert public_response.status_code == 201
+
+    api_client.force_authenticate(owner)
+    response = api_client.get("/api/v1/members/applications/", {"search": "Nadia"}, HTTP_X_WORKSPACE=workspace.slug)
+    assert response.status_code == 200
+    rows = response.data["results"] if "results" in response.data else response.data
+    assert len(rows) == 1
+    assert rows[0]["email"] == "nadia@example.com"

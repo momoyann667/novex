@@ -27,13 +27,21 @@ MEMBER_PERMISSIONS = {
     "members.delete": "Supprimer definitivement les membres",
     "members.export": "Exporter les membres",
     "members.manage_custom_fields": "Gerer les champs personnalises membres",
+    "members.applications.view": "Voir les demandes d'adhesion",
+    "members.applications.review": "Prendre en charge les demandes d'adhesion",
+    "members.applications.approve": "Approuver les demandes d'adhesion",
+    "members.applications.reject": "Refuser les demandes d'adhesion",
+    "members.invitations.create": "Inviter des membres",
+    "members.invitations.cancel": "Annuler les invitations membres",
+    "members.invitations.resend": "Renvoyer les invitations membres",
+    "members.onboarding.manage": "Gerer les parametres d'adhesion",
 }
 
 ROLE_MEMBER_PERMISSIONS = {
     "OWNER": set(MEMBER_PERMISSIONS),
     "ADMIN": set(MEMBER_PERMISSIONS),
     "PRESIDENT": set(MEMBER_PERMISSIONS) - {"members.delete"},
-    "SECRETARY": {"members.view", "members.create", "members.update", "members.export"},
+    "SECRETARY": {"members.view", "members.create", "members.update", "members.export", "members.applications.view", "members.applications.review", "members.invitations.create", "members.invitations.resend"},
     "TREASURER": {"members.view", "members.export"},
     "PROJECT_MANAGER": {"members.view"},
     "MEMBER": {"members.view"},

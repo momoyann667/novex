@@ -160,3 +160,115 @@ class MemberActivity(models.Model):
 
     class Meta:
         indexes = [models.Index(fields=["workspace", "-created_at"]), models.Index(fields=["member", "-created_at"]), models.Index(fields=["action", "-created_at"])]
+
+
+class MembershipSettings(models.Model):
+    workspace = models.OneToOneField(Workspace, on_delete=models.CASCADE, related_name="membership_settings")
+    membership_enabled = models.BooleanField(default=True)
+    public_form_enabled = models.BooleanField(default=False)
+    invitation_enabled = models.BooleanField(default=True)
+    approval_required = models.BooleanField(default=True)
+    auto_activate_members = models.BooleanField(default=True)
+    public_title = models.CharField(max_length=180, default="Rejoindre l'association")
+    public_description = models.TextField(blank=True)
+    welcome_message = models.TextField(blank=True)
+    confirmation_message = models.TextField(default="Votre demande a bien ete envoyee.")
+    visible_fields = models.JSONField(default=list, blank=True)
+    required_fields = models.JSONField(default=list, blank=True)
+    invitation_expiration_days = models.PositiveSmallIntegerField(default=7)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"Adhesion - {self.workspace}"
+
+
+class MembershipApplication(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "En attente"
+        UNDER_REVIEW = "under_review", "En cours"
+        APPROVED = "approved", "Approuvee"
+        REJECTED = "rejected", "Refusee"
+        CANCELLED = "cancelled", "Annulee"
+        EXPIRED = "expired", "Expiree"
+
+    class Source(models.TextChoices):
+        PUBLIC_FORM = "public_form", "Formulaire public"
+        ADMIN = "admin", "Saisie admin"
+        INVITATION = "invitation", "Invitation"
+
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="membership_applications")
+    member = models.ForeignKey(Member, on_delete=models.SET_NULL, null=True, blank=True, related_name="membership_applications")
+    linked_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="membership_applications")
+    first_name = models.CharField(max_length=120)
+    last_name = models.CharField(max_length=120)
+    email = models.EmailField(blank=True)
+    phone = models.CharField(max_length=32, blank=True)
+    photo = models.ImageField(upload_to="membership-applications/", blank=True)
+    occupation = models.CharField(max_length=160, blank=True)
+    city = models.CharField(max_length=120, blank=True)
+    message = models.TextField(blank=True)
+    internal_note = models.TextField(blank=True)
+    custom_fields = models.JSONField(default=dict, blank=True)
+    duplicate_warning = models.JSONField(default=dict, blank=True)
+    source = models.CharField(max_length=24, choices=Source.choices, default=Source.ADMIN)
+    status = models.CharField(max_length=24, choices=Status.choices, default=Status.PENDING)
+    submitted_at = models.DateTimeField(default=timezone.now)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="reviewed_membership_applications")
+    rejection_reason = models.TextField(blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["workspace", "status"]),
+            models.Index(fields=["workspace", "-submitted_at"]),
+            models.Index(fields=["workspace", "email"]),
+            models.Index(fields=["workspace", "phone"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.first_name} {self.last_name}".strip()
+
+
+class MemberInvitation(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "En attente"
+        ACCEPTED = "accepted", "Acceptee"
+        DECLINED = "declined", "Refusee"
+        CANCELLED = "cancelled", "Annulee"
+        EXPIRED = "expired", "Expiree"
+
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="member_invitations")
+    member = models.ForeignKey(Member, on_delete=models.SET_NULL, null=True, blank=True, related_name="invitations")
+    invited_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="sent_member_invitations")
+    accepted_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="accepted_member_invitations")
+    first_name = models.CharField(max_length=120)
+    last_name = models.CharField(max_length=120)
+    email = models.EmailField(blank=True)
+    phone = models.CharField(max_length=32, blank=True)
+    function = models.CharField(max_length=120, default="Membre")
+    message = models.TextField(blank=True)
+    token_hash = models.CharField(max_length=128, unique=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    expires_at = models.DateTimeField()
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    declined_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    last_sent_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["workspace", "status"]),
+            models.Index(fields=["workspace", "email"]),
+            models.Index(fields=["workspace", "phone"]),
+            models.Index(fields=["token_hash"]),
+            models.Index(fields=["expires_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.first_name} {self.last_name}".strip()
