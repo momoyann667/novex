@@ -48,3 +48,22 @@ def test_register_rejects_existing_email():
 
     assert response.status_code == 400
     assert "email" in response.data
+
+
+@pytest.mark.django_db
+def test_login_authenticates_registered_user():
+    api_client = APIClient()
+    get_user_model().objects.create_user(email="jean@example.com", password="NovexPass123")
+
+    response = api_client.post(
+        "/api/v1/auth/login/",
+        {
+            "email": "JEAN@example.com",
+            "password": "NovexPass123",
+        },
+        format="json",
+    )
+
+    assert response.status_code == 200
+    assert response.data["email"] == "jean@example.com"
+    assert "sessionid" in response.cookies

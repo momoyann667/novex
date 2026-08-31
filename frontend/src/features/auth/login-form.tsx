@@ -3,9 +3,12 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { z } from "zod";
 import { Eye, LockKeyhole, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ApiError } from "@/lib/api/client";
 
 const schema = z.object({
   email: z.string().email(),
@@ -14,15 +17,63 @@ const schema = z.object({
 
 type LoginValues = z.infer<typeof schema>;
 
+function errorMessageFromPayload(payload: unknown): string {
+  if (!payload || typeof payload !== "object") {
+    return "Impossible de se connecter pour le moment.";
+  }
+
+  const data = payload as Record<string, unknown>;
+  if (typeof data.message === "string") {
+    return data.message;
+  }
+  if (typeof data.detail === "string") {
+    return data.detail;
+  }
+
+  const firstError = Object.entries(data).find(([, value]) => Array.isArray(value) || typeof value === "string");
+  if (!firstError) {
+    return "Impossible de se connecter pour le moment.";
+  }
+
+  const [field, value] = firstError;
+  const message = Array.isArray(value) ? value.join(" ") : value;
+  return `${field}: ${message}`;
+}
+
 export function LoginForm() {
   const form = useForm<LoginValues>({ resolver: zodResolver(schema) });
+  const router = useRouter();
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  async function onSubmit(values: LoginValues) {
+    setSubmitError(null);
+
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(values)
+      });
+      const payload = (await response.json().catch(() => null)) as unknown;
+
+      if (!response.ok) {
+        throw new ApiError(errorMessageFromPayload(payload), response.status);
+      }
+
+      router.push("/app/demo/dashboard");
+    } catch (error) {
+      setSubmitError(error instanceof ApiError ? error.message : "Impossible de se connecter pour le moment.");
+    }
+  }
 
   return (
     <main className="min-h-screen bg-[#10131a] bg-[radial-gradient(circle_at_center,#3a4558_1px,transparent_1px)] [background-size:18px_18px] text-[#0f172a]">
       <section className="mx-auto flex min-h-screen w-full items-stretch justify-center md:max-w-[430px] md:items-center md:px-6 md:py-8">
         <form
           className="flex min-h-screen w-full flex-col bg-white px-7 py-10 shadow-2xl shadow-black/30 md:min-h-0 md:rounded-[22px] md:border md:border-slate-200 md:p-7"
-          onSubmit={form.handleSubmit(() => undefined)}
+          onSubmit={form.handleSubmit(onSubmit)}
         >
           <div className="rounded-[18px] border border-slate-200 bg-white px-7 py-9 md:px-8">
             <div className="text-center">
@@ -55,8 +106,12 @@ export function LoginForm() {
               </Button>
             </div>
 
-            <Button type="submit" className="mt-5 min-h-12 w-full bg-[#0863cf] text-white hover:bg-[#0755b3]">
-              Se connecter
+            {submitError ? (
+              <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{submitError}</p>
+            ) : null}
+
+            <Button disabled={form.formState.isSubmitting} type="submit" className="mt-5 min-h-12 w-full bg-[#0863cf] text-white hover:bg-[#0755b3]">
+              {form.formState.isSubmitting ? "Connexion en cours..." : "Se connecter"}
             </Button>
 
             <div className="my-7 flex items-center gap-4 text-xs text-slate-700">
