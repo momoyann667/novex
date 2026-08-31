@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 type EventRow = {
   id: string;
   title: string;
-  day: number;
+  date: string;
   time: string;
   type: string;
   location: string;
@@ -20,74 +20,109 @@ type EventRow = {
   status: "Bientot" | "Ouvert" | "Complet";
 };
 
-const monthLabel = "Novembre 2023";
-const todayDay = 10;
-const leadingDays = [30, 31];
+const monthNames = ["Janvier", "Fevrier", "Mars", "Avril", "Mai", "Juin", "Juillet", "Aout", "Septembre", "Octobre", "Novembre", "Decembre"];
+const currency = "FCFA";
 
 const events: EventRow[] = [
   {
-    id: "EVT-2023-001",
+    id: "EVT-2026-001",
     title: "Assemblee Generale Annuelle",
-    day: 15,
+    date: "2026-08-31",
     time: "18:00",
     type: "Conference",
     location: "Centre de Conference",
     participants: "120/150",
     participantPercent: 80,
-    budget: "5 000 EUR",
-    expense: "3 200 EUR",
-    revenue: "6 500 EUR",
+    budget: `5 000 000 ${currency}`,
+    expense: `3 200 000 ${currency}`,
+    revenue: `6 500 000 ${currency}`,
     status: "Bientot"
   },
   {
-    id: "EVT-2023-002",
+    id: "EVT-2026-002",
     title: "Atelier Formation Numerique",
-    day: 19,
+    date: "2026-09-04",
     time: "09:00",
     type: "Formation",
     location: "En ligne (Zoom)",
     participants: "45/50",
     participantPercent: 90,
-    budget: "500 EUR",
-    expense: "120 EUR",
-    revenue: "0 EUR",
+    budget: `500 000 ${currency}`,
+    expense: `120 000 ${currency}`,
+    revenue: `0 ${currency}`,
     status: "Ouvert"
   },
   {
-    id: "EVT-2023-003",
+    id: "EVT-2026-003",
     title: "Reunion Bureau Executif",
-    day: 10,
+    date: "2026-08-28",
     time: "16:30",
     type: "Reunion",
     location: "Siege NOVEX",
     participants: "12/12",
     participantPercent: 100,
-    budget: "150 EUR",
-    expense: "80 EUR",
-    revenue: "0 EUR",
+    budget: `150 000 ${currency}`,
+    expense: `80 000 ${currency}`,
+    revenue: `0 ${currency}`,
     status: "Complet"
   },
   {
-    id: "EVT-2023-004",
+    id: "EVT-2026-004",
     title: "Journee Communautaire",
-    day: 24,
+    date: "2026-08-24",
     time: "08:00",
     type: "Social",
     location: "Parc municipal",
     participants: "210/300",
     participantPercent: 70,
-    budget: "2 800 EUR",
-    expense: "1 100 EUR",
-    revenue: "900 EUR",
+    budget: `2 800 000 ${currency}`,
+    expense: `1 100 000 ${currency}`,
+    revenue: `900 000 ${currency}`,
     status: "Bientot"
   }
 ];
 
-const days = [
-  ...leadingDays.map((day) => ({ day, outside: true })),
-  ...Array.from({ length: 30 }, (_, index) => ({ day: index + 1, outside: false })),
-  ...[1, 2, 3].map((day) => ({ day, outside: true }))
-];
+function toIsoDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getMonthLabel(date: Date) {
+  return `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+function getCalendarDays(date: Date) {
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const previousMonthDays = new Date(year, month, 0).getDate();
+  const leadingCount = (firstDay.getDay() + 6) % 7;
+  const currentDays = Array.from({ length: daysInMonth }, (_, index) => {
+    const day = index + 1;
+    return { day, date: toIsoDate(new Date(year, month, day)), outside: false };
+  });
+  const leadingDays = Array.from({ length: leadingCount }, (_, index) => {
+    const day = previousMonthDays - leadingCount + index + 1;
+    return { day, date: toIsoDate(new Date(year, month - 1, day)), outside: true };
+  });
+  const trailingCount = Math.max(0, 42 - leadingDays.length - currentDays.length);
+  const trailingDays = Array.from({ length: trailingCount }, (_, index) => {
+    const day = index + 1;
+    return { day, date: toIsoDate(new Date(year, month + 1, day)), outside: true };
+  });
+  return [...leadingDays, ...currentDays, ...trailingDays];
+}
+
+function getDisplayDay(dateIso: string) {
+  return Number(dateIso.slice(8, 10));
+}
+
+function getDisplayMonth(dateIso: string) {
+  return monthNames[Number(dateIso.slice(5, 7)) - 1].slice(0, 3);
+}
 
 function eventDotClass(status: EventRow["status"]) {
   return {
@@ -105,17 +140,27 @@ function statusClass(status: EventRow["status"]) {
   }[status];
 }
 
-function eventDaySummary(day: number) {
-  const count = events.filter((event) => event.day === day).length;
+function eventDaySummary(dateIso: string) {
+  const count = events.filter((event) => event.date === dateIso).length;
   if (!count) return "";
   return `${count} evenement${count > 1 ? "s" : ""}`;
 }
 
 export function EventsView({ workspaceSlug }: Readonly<{ workspaceSlug: string }>) {
-  const [selectedDay, setSelectedDay] = useState(15);
-  const selectedEvents = useMemo(() => events.filter((event) => event.day === selectedDay), [selectedDay]);
-  const upcomingEvents = events.filter((event) => event.day >= todayDay).length;
+  const [today] = useState(() => new Date());
+  const [visibleMonth, setVisibleMonth] = useState(() => new Date());
+  const [selectedDate, setSelectedDate] = useState(() => toIsoDate(new Date()));
+  const todayIso = toIsoDate(today);
+  const calendarDays = useMemo(() => getCalendarDays(visibleMonth), [visibleMonth]);
+  const selectedEvents = useMemo(() => events.filter((event) => event.date === selectedDate), [selectedDate]);
+  const upcomingEvents = events.filter((event) => event.date >= todayIso).length;
   const averageParticipation = Math.round(events.reduce((total, event) => total + event.participantPercent, 0) / events.length);
+  const selectedDay = getDisplayDay(selectedDate);
+  const selectedMonth = getDisplayMonth(selectedDate);
+
+  function changeMonth(offset: number) {
+    setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
+  }
 
   return (
     <main className="min-h-screen bg-[#f5f7f8] px-4 pb-28 pt-5 text-slate-950 md:rounded-[28px] md:px-6">
@@ -147,18 +192,18 @@ export function EventsView({ workspaceSlug }: Readonly<{ workspaceSlug: string }
         </article>
         <article className="min-h-24 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-bold text-slate-500">Budget total</p>
-          <p className="mt-2 text-2xl font-black">8 450 EUR</p>
+          <p className="mt-2 text-2xl font-black">8 450 000 {currency}</p>
         </article>
       </section>
 
       <section className="mt-5 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-black tracking-normal">{monthLabel}</h2>
+          <h2 className="text-xl font-black tracking-normal">{getMonthLabel(visibleMonth)}</h2>
           <div className="flex gap-1">
-            <button className="grid size-8 place-items-center rounded-md hover:bg-slate-100" type="button" aria-label="Mois precedent">
+            <button className="grid size-8 place-items-center rounded-md hover:bg-slate-100" type="button" aria-label="Mois precedent" onClick={() => changeMonth(-1)}>
               <ChevronLeft className="size-4" />
             </button>
-            <button className="grid size-8 place-items-center rounded-md hover:bg-slate-100" type="button" aria-label="Mois suivant">
+            <button className="grid size-8 place-items-center rounded-md hover:bg-slate-100" type="button" aria-label="Mois suivant" onClick={() => changeMonth(1)}>
               <ChevronRight className="size-4" />
             </button>
           </div>
@@ -168,17 +213,17 @@ export function EventsView({ workspaceSlug }: Readonly<{ workspaceSlug: string }
           {["L", "M", "M", "J", "V", "S", "D"].map((day) => <span key={day}>{day}</span>)}
         </div>
         <div className="mt-2 grid grid-cols-7 gap-y-2">
-          {days.map(({ day, outside }, index) => {
-            const dayEvents = outside ? [] : events.filter((event) => event.day === day);
-            const isToday = !outside && day === todayDay;
-            const isSelected = !outside && day === selectedDay;
+          {calendarDays.map(({ day, date, outside }, index) => {
+            const dayEvents = outside ? [] : events.filter((event) => event.date === date);
+            const isToday = date === todayIso;
+            const isSelected = date === selectedDate;
             return (
               <button
                 className={`relative mx-auto grid size-10 place-items-center rounded-full text-sm font-bold transition-colors ${outside ? "text-slate-300" : isSelected ? "bg-slate-950 text-white" : isToday ? "bg-blue-700 text-white" : "text-slate-800 hover:bg-blue-50"}`}
                 type="button"
-                key={`${outside ? "outside" : "current"}-${day}-${index}`}
-                onClick={() => !outside && setSelectedDay(day)}
-                aria-label={`${day} novembre ${eventDaySummary(day)}`}
+                key={`${date}-${index}`}
+                onClick={() => setSelectedDate(date)}
+                aria-label={`${day} ${getMonthLabel(new Date(date))} ${eventDaySummary(date)}`}
               >
                 {day}
                 {dayEvents.length ? (
@@ -200,7 +245,7 @@ export function EventsView({ workspaceSlug }: Readonly<{ workspaceSlug: string }
 
       <section className="mt-5 grid gap-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-black">Evenements du {selectedDay} novembre</h2>
+          <h2 className="text-lg font-black">Evenements du {selectedDay} {selectedMonth.toLowerCase()}</h2>
           <span className="text-xs font-bold text-slate-500">{selectedEvents.length} selection</span>
         </div>
 
@@ -213,7 +258,7 @@ export function EventsView({ workspaceSlug }: Readonly<{ workspaceSlug: string }
             <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
               <span className={`rounded px-2 py-1 ${statusClass(event.status)}`}>{event.status}</span>
               <Clock3 className="size-4" />
-              <span>{selectedDay} Nov, {event.time}</span>
+              <span>{getDisplayDay(event.date)} {getDisplayMonth(event.date)}, {event.time}</span>
             </div>
             <h3 className="mt-2 text-xl font-black tracking-normal">{event.title}</h3>
             <p className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-slate-600">
