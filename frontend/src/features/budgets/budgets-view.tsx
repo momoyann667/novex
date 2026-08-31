@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AlertTriangle, Archive, BarChart3, FileSpreadsheet, Gauge, Landmark, Plus, TrendingUp, WalletCards } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
@@ -11,7 +12,7 @@ const kpis = [
   ["3 430 000 XOF", "Restant", Gauge],
   ["36.7%", "Consommation", BarChart3],
   ["2", "Budgets a risque", AlertTriangle],
-];
+] satisfies ReadonlyArray<readonly [string, string, LucideIcon]>;
 
 const budgets = [
   { id: "annual-2027", name: "Budget annuel 2027", used: "2 400 000", total: "5 000 000", rate: 48, rest: "2 600 000", state: "Normal" },

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Bell, Bot, Calendar, CreditCard, FileText, FolderKanban, Home, Landmark, Menu, Search, Settings, Users, Wallet } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const nav = [
@@ -69,13 +70,13 @@ export function AssociationShell({ children, workspaceSlug }: Readonly<{ childre
         <main className="p-4 md:p-6">{children}</main>
       </section>
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-border bg-white pb-[env(safe-area-inset-bottom)] md:hidden">
-        {[
+        {([
           ["Accueil", Home],
           ["Membres", Users],
           ["Cotisations", CreditCard],
           ["Finance", Wallet],
           ["Plus", Menu]
-        ].map(([label, Icon]) => (
+        ] satisfies ReadonlyArray<readonly [string, LucideIcon]>).map(([label, Icon]) => (
           <button className="grid min-h-16 place-items-center text-xs text-slate-600" key={String(label)} type="button">
             <Icon className="size-5" />
             {label}

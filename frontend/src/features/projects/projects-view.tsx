@@ -124,11 +124,3 @@ export function ProjectsView({ workspaceSlug }: Readonly<{ workspaceSlug: string
     </div>
   );
 }
-            </div>
-            <p className="mt-2 text-sm text-slate-500">0 XOF consomme</p>
-          </div>
-        ))}
-      </section>
-    </div>
-  );
-}

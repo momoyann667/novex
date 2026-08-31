@@ -1,4 +1,5 @@
 import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, FileWarning, Plus, Scale, Wallet } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
@@ -10,7 +11,7 @@ const primaryKpis = [
   ["0 XOF", "Flux net", Scale],
   ["0 XOF", "Recettes du mois", ArrowUp],
   ["0 XOF", "Depenses du mois", ArrowDown],
-];
+] satisfies ReadonlyArray<readonly [string, string, LucideIcon]>;
 
 const secondaryKpis = [
   ["0%", "Croissance recettes"],
