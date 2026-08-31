@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Bell, Bot, Filter, Grid2X2, Plus, Search, SlidersHorizontal, TrendingUp, UserPlus, Users, X } from "lucide-react";
+import { type ChangeEvent, useMemo, useState } from "react";
+import { Bell, Bot, Download, Filter, Grid2X2, Plus, Search, SlidersHorizontal, TrendingUp, Upload, UserPlus, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type Member = {
@@ -43,12 +43,43 @@ function statusClass(status: Member["status"]) {
   }[status];
 }
 
+function csvEscape(value: string) {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+function parseCsvLine(line: string) {
+  const values: string[] = [];
+  let current = "";
+  let isQuoted = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    const nextCharacter = line[index + 1];
+
+    if (character === '"' && isQuoted && nextCharacter === '"') {
+      current += '"';
+      index += 1;
+    } else if (character === '"') {
+      isQuoted = !isQuoted;
+    } else if (character === "," && !isQuoted) {
+      values.push(current.trim());
+      current = "";
+    } else {
+      current += character;
+    }
+  }
+
+  values.push(current.trim());
+  return values;
+}
+
 export function MembersView() {
   const [memberRows, setMemberRows] = useState<Member[]>(members);
   const [query, setQuery] = useState("");
   const [onlyActive, setOnlyActive] = useState(false);
   const [sortAsc, setSortAsc] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [importNotice, setImportNotice] = useState("");
   const [fullName, setFullName] = useState("");
   const [memberFunction, setMemberFunction] = useState("");
   const [phone, setPhone] = useState("");
@@ -97,6 +128,67 @@ export function MembersView() {
 
   function changeStatus(emailAddress: string, nextStatus: Member["status"]) {
     setMemberRows((current) => current.map((member) => (member.email === emailAddress ? { ...member, status: nextStatus } : member)));
+  }
+
+  function exportMembers() {
+    const header = ["Nom et prenoms", "Email", "Telephone", "Role", "Date adhesion", "Statut"];
+    const rows = visibleMembers.map((member) => [member.name, member.email, member.phone, member.function, member.joinedAt, member.status]);
+    const csvContent = [header, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `novex-membres-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setImportNotice(`${visibleMembers.length} membre(s) exporte(s).`);
+  }
+
+  function importMembers(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const content = String(reader.result || "");
+      const lines = content.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      const dataLines = lines[0]?.toLowerCase().includes("nom") ? lines.slice(1) : lines;
+      const importedMembers = dataLines
+        .map((line, index) => {
+          const [name, emailAddress, phoneNumber, role, date, importedStatus] = parseCsvLine(line);
+          const cleanName = name?.trim();
+          const cleanRole = role?.trim() || "Membre";
+          if (!cleanName) {
+            return null;
+          }
+          const nextStatus = ["Actif", "Inactif", "Suspendu", "Archive"].includes(importedStatus) ? importedStatus as Member["status"] : "Actif";
+          return {
+            name: cleanName,
+            email: emailAddress?.trim() || `${cleanName.toLowerCase().replace(/[^a-z0-9]+/g, ".").replace(/^\.+|\.+$/g, "") || "membre"}@example.com`,
+            phone: phoneNumber?.trim() || "",
+            function: cleanRole,
+            joinedAt: date?.trim() || new Date().toISOString().slice(0, 10),
+            status: nextStatus,
+            avatar: avatarStyles[index % avatarStyles.length]
+          };
+        })
+        .filter((member): member is Member => Boolean(member));
+
+      if (!importedMembers.length) {
+        setImportNotice("Aucun membre valide trouve dans le fichier.");
+        event.target.value = "";
+        return;
+      }
+
+      setMemberRows((current) => [...importedMembers, ...current]);
+      setImportNotice(`${importedMembers.length} membre(s) importe(s).`);
+      event.target.value = "";
+    };
+    reader.readAsText(file);
   }
 
   return (
@@ -157,7 +249,7 @@ export function MembersView() {
         />
       </label>
 
-      <div className="mt-4 flex gap-3">
+      <div className="mt-4 grid grid-cols-2 gap-3">
         <Button className={`min-h-10 px-4 ${onlyActive ? "bg-blue-700 text-white hover:bg-blue-800" : ""}`} type="button" variant={onlyActive ? "default" : "outline"} onClick={() => setOnlyActive((value) => !value)}>
           <Filter className="size-4" />
           Filtres
@@ -167,6 +259,22 @@ export function MembersView() {
           Trier
         </Button>
       </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <label className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold shadow-sm transition-colors hover:bg-slate-50">
+          <Upload className="size-4" />
+          Importer
+          <input className="sr-only" type="file" accept=".csv,text/csv" onChange={importMembers} />
+        </label>
+        <Button className="min-h-11 px-4" type="button" variant="outline" onClick={exportMembers}>
+          <Download className="size-4" />
+          Exporter
+        </Button>
+      </div>
+
+      {importNotice ? (
+        <p className="mt-3 rounded-md bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">{importNotice}</p>
+      ) : null}
 
       <section className="mt-5 grid gap-3 md:hidden">
         {visibleMembers.map((member) => (
