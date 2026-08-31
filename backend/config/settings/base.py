@@ -107,7 +107,7 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "0.1.0",
 }
 
-CORS_ALLOWED_ORIGINS = [origin for origin in os.environ.get("DJANGO_CORS_ALLOWED_ORIGINS", "http://localhost:3000").split(",") if origin]
+CORS_ALLOWED_ORIGINS = [origin for origin in os.environ.get("DJANGO_CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3002").split(",") if origin]
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_HTTPONLY = False

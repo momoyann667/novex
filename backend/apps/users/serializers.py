@@ -19,11 +19,15 @@ class RegisterSerializer(serializers.Serializer):
     accepted_terms = serializers.BooleanField()
 
     def validate(self, attrs):
+        email = attrs["email"].lower()
+        if User.objects.filter(email=email).exists():
+            raise serializers.ValidationError({"email": "Un compte existe deja avec cet email."})
         if attrs["password"] != attrs["password_confirmation"]:
             raise serializers.ValidationError({"password_confirmation": "Les mots de passe ne correspondent pas."})
         if not attrs["accepted_terms"]:
             raise serializers.ValidationError({"accepted_terms": "Vous devez accepter les conditions."})
         validate_password(attrs["password"])
+        attrs["email"] = email
         return attrs
 
     @transaction.atomic
@@ -33,7 +37,7 @@ class RegisterSerializer(serializers.Serializer):
         accepted_terms = validated_data.pop("accepted_terms")
         first_name = validated_data.pop("first_name")
         last_name = validated_data.pop("last_name")
-        email = validated_data["email"].lower()
+        email = validated_data["email"]
         user = User.objects.create_user(username=email, email=email, password=password, terms_accepted_at=timezone.now() if accepted_terms else None, **validated_data)
         Profile.objects.create(user=user, first_name=first_name, last_name=last_name)
         return user
