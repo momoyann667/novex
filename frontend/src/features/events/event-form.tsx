@@ -32,6 +32,11 @@ const eventSchema = z.object({
 
 type EventFormValues = z.infer<typeof eventSchema>;
 
+const fieldClass = "min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
+const labelClass = "grid min-w-0 gap-2 text-xs font-black text-slate-700";
+const sectionClass = "rounded-lg border border-slate-200 bg-white p-4 shadow-sm";
+const sectionTitleClass = "border-b border-slate-100 pb-3 text-base font-black text-slate-950";
+
 function toPayload(values: EventFormValues): EventFormPayload {
   const capacity = Number(values.capacity || 0);
   return {
@@ -83,83 +88,108 @@ export function EventForm({ workspaceSlug }: Readonly<{ workspaceSlug: string }>
   });
 
   return (
-    <form className="grid gap-4" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <label className="grid gap-1 text-sm font-medium">
-          Titre
-          <input className="min-h-10 rounded-md border border-border px-3" {...form.register("title")} />
-        </label>
-        <label className="grid gap-1 text-sm font-medium">
-          Type
-          <select className="min-h-10 rounded-md border border-border px-3" {...form.register("event_type")}>
-            {EVENT_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
-          </select>
-        </label>
-        <label className="grid gap-1 text-sm font-medium">
-          Date de debut
-          <input className="min-h-10 rounded-md border border-border px-3" type="date" {...form.register("start_date")} />
-        </label>
-        <label className="grid gap-1 text-sm font-medium">
-          Heure de debut
-          <input className="min-h-10 rounded-md border border-border px-3" type="time" {...form.register("start_time")} />
-        </label>
-        <label className="grid gap-1 text-sm font-medium">
-          Date de fin
-          <input className="min-h-10 rounded-md border border-border px-3" type="date" {...form.register("end_date")} />
-        </label>
-        <label className="grid gap-1 text-sm font-medium">
-          Heure de fin
-          <input className="min-h-10 rounded-md border border-border px-3" type="time" {...form.register("end_time")} />
-        </label>
-        <label className="grid gap-1 text-sm font-medium">
-          Lieu
-          <input className="min-h-10 rounded-md border border-border px-3" {...form.register("location")} />
-        </label>
-        <label className="grid gap-1 text-sm font-medium">
-          Responsable
-          <input className="min-h-10 rounded-md border border-border px-3" placeholder="Utilisateur ou membre du workspace" {...form.register("responsible")} />
-        </label>
-        <label className="grid gap-1 text-sm font-medium">
-          Statut
-          <select className="min-h-10 rounded-md border border-border px-3" {...form.register("status")}>
-            {EVENT_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
-          </select>
-        </label>
-        <label className="grid gap-1 text-sm font-medium">
-          Capacite
-          <input className="min-h-10 rounded-md border border-border px-3" min={0} type="number" {...form.register("capacity")} />
-        </label>
-        <label className="grid gap-1 text-sm font-medium">
-          Budget prevu
-          <input className="min-h-10 rounded-md border border-border px-3" min={0} step="0.01" type="number" {...form.register("budget")} />
-        </label>
-        <label className="grid gap-1 text-sm font-medium">
-          Projet associe
-          <input className="min-h-10 rounded-md border border-border px-3" {...form.register("project")} />
-        </label>
-      </div>
-      <label className="grid gap-1 text-sm font-medium">
-        Description
-        <textarea className="min-h-24 rounded-md border border-border px-3 py-2" {...form.register("description")} />
-      </label>
-      <div className="flex flex-col gap-3 rounded-md border border-dashed border-border p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3 text-sm text-slate-600">
-          <CalendarPlus className="size-5 text-blue-700" />
-          Recurrence
+    <form className="grid w-full gap-4" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
+      <section className={sectionClass}>
+        <h2 className={sectionTitleClass}>Informations de base</h2>
+        <div className="mt-4 grid gap-4">
+          <label className={labelClass}>
+            Titre de l'evenement *
+            <input className={fieldClass} placeholder="Ex: Assemblee Generale Annuelle" {...form.register("title")} />
+          </label>
+          <label className={labelClass}>
+            Categorie *
+            <select className={fieldClass} {...form.register("event_type")}>
+              {EVENT_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+            </select>
+          </label>
+          <label className={labelClass}>
+            Description
+            <textarea className={`${fieldClass} min-h-28 resize-none py-3 leading-5`} placeholder="Decrivez l'objectif et le programme de l'evenement..." {...form.register("description")} />
+          </label>
         </div>
-        <select className="min-h-10 rounded-md border border-border px-3 text-sm" {...form.register("recurrence")}>
-          <option value="none">Aucune</option>
-          <option value="daily">Quotidienne</option>
-          <option value="weekly">Hebdomadaire</option>
-          <option value="monthly">Mensuelle</option>
-          <option value="yearly">Annuelle</option>
-        </select>
-      </div>
+      </section>
+
+      <section className={sectionClass}>
+        <h2 className={sectionTitleClass}>Date et lieu</h2>
+        <div className="mt-4 grid gap-4">
+          <div className="grid grid-cols-2 gap-3">
+            <label className={labelClass}>
+              Date debut *
+              <input className={fieldClass} type="date" {...form.register("start_date")} />
+            </label>
+            <label className={labelClass}>
+              Heure debut *
+              <input className={fieldClass} type="time" {...form.register("start_time")} />
+            </label>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <label className={labelClass}>
+              Date fin *
+              <input className={fieldClass} type="date" {...form.register("end_date")} />
+            </label>
+            <label className={labelClass}>
+              Heure fin *
+              <input className={fieldClass} type="time" {...form.register("end_time")} />
+            </label>
+          </div>
+          <label className={labelClass}>
+            Lieu ou adresse
+            <input className={fieldClass} placeholder="Rechercher une adresse..." {...form.register("location")} />
+          </label>
+          <div className="grid gap-2">
+            <span className="text-xs font-black text-slate-700">Recurrence</span>
+            <div className="flex min-h-12 items-center gap-3 rounded-md border border-slate-300 bg-white px-3">
+              <CalendarPlus className="size-5 shrink-0 text-blue-700" />
+              <select className="min-h-10 min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none" {...form.register("recurrence")}>
+                <option value="none">Aucune</option>
+                <option value="daily">Quotidienne</option>
+                <option value="weekly">Hebdomadaire</option>
+                <option value="monthly">Mensuelle</option>
+                <option value="yearly">Annuelle</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className={sectionClass}>
+        <h2 className={sectionTitleClass}>Parametres d'inscription</h2>
+        <div className="mt-4 grid gap-4">
+          <div className="grid grid-cols-2 gap-3">
+            <label className={labelClass}>
+              Capacite
+              <input className={fieldClass} min={0} type="number" {...form.register("capacity")} />
+            </label>
+            <label className={labelClass}>
+              Budget prevu
+              <div className="flex min-h-12 rounded-md border border-slate-300 bg-white focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100">
+                <input className="min-w-0 flex-1 rounded-l-md px-3 text-sm font-semibold outline-none" min={0} step="1" type="number" {...form.register("budget")} />
+                <span className="grid place-items-center rounded-r-md border-l border-slate-200 px-3 text-xs font-black text-slate-600">FCFA</span>
+              </div>
+            </label>
+          </div>
+          <label className={labelClass}>
+            Statut
+            <select className={fieldClass} {...form.register("status")}>
+              {EVENT_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
+            </select>
+          </label>
+          <label className={labelClass}>
+            Projet associe
+            <input className={fieldClass} placeholder="Projet optionnel" {...form.register("project")} />
+          </label>
+          <label className={labelClass}>
+            Responsable
+            <input className={fieldClass} placeholder="Utilisateur ou membre du workspace" {...form.register("responsible")} />
+          </label>
+        </div>
+      </section>
+
       {mutation.isError ? (
         <p className="rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{mutation.error instanceof Error ? mutation.error.message : "Impossible de creer l'evenement pour le moment."}</p>
       ) : null}
-      <div className="flex justify-end">
-        <Button type="submit" disabled={mutation.isPending}><Save className="size-4" /> {mutation.isPending ? "Enregistrement..." : "Enregistrer"}</Button>
+      <div className="sticky bottom-0 -mx-1 bg-white/90 px-1 py-3 backdrop-blur md:static md:bg-transparent md:p-0">
+        <Button className="min-h-12 w-full md:w-auto" type="submit" disabled={mutation.isPending}><Save className="size-4" /> {mutation.isPending ? "Enregistrement..." : "Creer l'evenement"}</Button>
       </div>
     </form>
   );
