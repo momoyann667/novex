@@ -6,7 +6,7 @@ import { EventForm } from "./event-form";
 
 const steps = ["Informations", "Date & lieu", "Participants", "Budget", "Projet", "Communication", "Confirmation"] as const;
 
-export function EventNewView() {
+export function EventNewView({ workspaceSlug }: Readonly<{ workspaceSlug: string }>) {
   return (
     <div className="grid gap-6">
       <PageHeader title="Nouvel evenement" description="Assistant evenement avec participants, budget, projet et communication." />
@@ -16,7 +16,7 @@ export function EventNewView() {
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2 text-base"><CalendarPlus className="size-4" /> Informations</CardTitle></CardHeader>
-          <CardContent><EventForm /></CardContent>
+          <CardContent><EventForm workspaceSlug={workspaceSlug} /></CardContent>
         </Card>
         <Card>
           <CardHeader><CardTitle className="text-base">Resume</CardTitle></CardHeader>
@@ -32,4 +32,3 @@ export function EventNewView() {
     </div>
   );
 }
-

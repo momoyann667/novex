@@ -106,12 +106,24 @@ def build_qr_code(prefix: str, code: str) -> str:
 @transaction.atomic
 def change_event_status(*, event: Event, actor, status: str) -> Event:
     event = Event.objects.select_for_update().get(id=event.id)
+    if status == EventStatus.PUBLISHED and event.status != EventStatus.DRAFT:
+        raise ValueError("Seul un brouillon peut etre publie.")
     if status == EventStatus.ARCHIVED and event.status not in {EventStatus.COMPLETED, EventStatus.CANCELLED}:
         raise ValueError("Seul un evenement termine ou annule peut etre archive.")
     previous = event.status
     event.status = status
     event.save(update_fields=["status", "updated_at"])
-    action = "event.completed" if status == EventStatus.COMPLETED else "event.cancelled" if status == EventStatus.CANCELLED else "event.updated"
+    action = (
+        "event.published"
+        if status == EventStatus.PUBLISHED
+        else "event.completed"
+        if status == EventStatus.COMPLETED
+        else "event.cancelled"
+        if status == EventStatus.CANCELLED
+        else "event.archived"
+        if status == EventStatus.ARCHIVED
+        else "event.updated"
+    )
     log_event_activity(event=event, actor=actor, action=action, metadata={"from": previous, "to": status})
     return event
 
@@ -179,6 +191,7 @@ def remove_participant(*, participant: EventParticipant, actor) -> None:
 def update_rsvp(*, participant: EventParticipant, status: str, actor) -> EventParticipant:
     if status not in {EventParticipantStatus.CONFIRMED, EventParticipantStatus.DECLINED, EventParticipantStatus.INVITED}:
         raise ValueError("Statut RSVP invalide.")
+    participant = EventParticipant.objects.select_for_update().select_related("event").get(id=participant.id)
     participant.mark_response(status)
     log_event_activity(event=participant.event, actor=actor, action="event.rsvp_updated", metadata={"member_id": participant.member_id, "status": status})
     return participant
@@ -254,7 +267,7 @@ def workspace_event_stats(workspace: Workspace) -> dict:
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     events = Event.objects.filter(workspace=workspace)
     aggregates = events.aggregate(
-        upcoming_events=Count("id", filter=Q(start_at__gte=now) & ~Q(status=EventStatus.CANCELLED)),
+        upcoming_events=Count("id", filter=Q(end_at__gte=now) & ~Q(status__in=[EventStatus.CANCELLED, EventStatus.ARCHIVED])),
         month_events=Count("id", filter=Q(start_at__gte=month_start)),
         completed_events=Count("id", filter=Q(status=EventStatus.COMPLETED)),
         cancelled_events=Count("id", filter=Q(status=EventStatus.CANCELLED)),

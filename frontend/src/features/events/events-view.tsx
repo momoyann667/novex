@@ -2,8 +2,10 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, ChevronLeft, ChevronRight, Clock3, MapPin, Plus, Ticket, Users, WalletCards } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getEventsOverview, listEvents, type EventOverview, type EventResource } from "./api";
 
 type EventRow = {
   id: string;
@@ -23,7 +25,7 @@ type EventRow = {
 const monthNames = ["Janvier", "Fevrier", "Mars", "Avril", "Mai", "Juin", "Juillet", "Aout", "Septembre", "Octobre", "Novembre", "Decembre"];
 const currency = "FCFA";
 
-const events: EventRow[] = [
+const fallbackEvents: EventRow[] = [
   {
     id: "EVT-2026-001",
     title: "Assemblee Generale Annuelle",
@@ -81,6 +83,19 @@ const events: EventRow[] = [
     status: "Bientot"
   }
 ];
+
+const emptyOverview: EventOverview = {
+  upcoming_events: 0,
+  month_events: 0,
+  completed_events: 0,
+  cancelled_events: 0,
+  planned_participants: 0,
+  average_attendance_rate: 0,
+  total_budget: 0,
+  total_expenses: 0,
+  total_revenues: 0,
+  net_result: 0
+};
 
 function toIsoDate(date: Date) {
   const year = date.getFullYear();
@@ -140,10 +155,41 @@ function statusClass(status: EventRow["status"]) {
   }[status];
 }
 
-function eventDaySummary(dateIso: string) {
+function eventDaySummary(dateIso: string, events: EventRow[]) {
   const count = events.filter((event) => event.date === dateIso).length;
   if (!count) return "";
   return `${count} evenement${count > 1 ? "s" : ""}`;
+}
+
+function money(value: string | number | null | undefined) {
+  const amount = Number(value || 0);
+  return `${amount.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} ${currency}`;
+}
+
+function mapStatus(status: EventResource["status"]): EventRow["status"] {
+  if (status === "COMPLETED" || status === "CANCELLED" || status === "ARCHIVED") return "Complet";
+  if (status === "REGISTRATION_OPEN" || status === "PUBLISHED" || status === "ONGOING") return "Ouvert";
+  return "Bientot";
+}
+
+function toEventRow(event: EventResource): EventRow {
+  const registered = Number(event.stats?.registered || 0) + Number(event.stats?.confirmed || 0);
+  const capacity = Number(event.capacity || event.stats?.capacity || 0);
+  const participantPercent = capacity ? Math.min(Math.round((registered / capacity) * 100), 100) : Number(event.stats?.occupancy_rate || 0);
+  return {
+    id: String(event.id),
+    title: event.title,
+    date: event.start_at.slice(0, 10),
+    time: new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: event.timezone || "Africa/Abidjan" }).format(new Date(event.start_at)),
+    type: event.event_type_label || event.event_type,
+    location: event.location || event.city || "Lieu a confirmer",
+    participants: `${registered}/${capacity || "Illimite"}`,
+    participantPercent,
+    budget: money(event.stats?.budget ?? event.budget),
+    expense: money(event.stats?.expenses),
+    revenue: money(event.stats?.revenues),
+    status: mapStatus(event.status)
+  };
 }
 
 export function EventsView({ workspaceSlug }: Readonly<{ workspaceSlug: string }>) {
@@ -151,10 +197,22 @@ export function EventsView({ workspaceSlug }: Readonly<{ workspaceSlug: string }
   const [visibleMonth, setVisibleMonth] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(() => toIsoDate(new Date()));
   const todayIso = toIsoDate(today);
+  const monthStart = toIsoDate(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1));
+  const monthEnd = toIsoDate(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0));
+  const eventsQuery = useQuery({
+    queryKey: ["events", workspaceSlug, monthStart, monthEnd],
+    queryFn: () => listEvents(workspaceSlug, { start: monthStart, end: monthEnd, ordering: "start_at" })
+  });
+  const overviewQuery = useQuery({
+    queryKey: ["events-overview", workspaceSlug],
+    queryFn: () => getEventsOverview(workspaceSlug)
+  });
+  const events = eventsQuery.data?.map(toEventRow) ?? fallbackEvents.filter((event) => event.date >= monthStart && event.date <= monthEnd);
+  const overview = overviewQuery.data ?? emptyOverview;
   const calendarDays = useMemo(() => getCalendarDays(visibleMonth), [visibleMonth]);
   const selectedEvents = useMemo(() => events.filter((event) => event.date === selectedDate), [selectedDate]);
-  const upcomingEvents = events.filter((event) => event.date >= todayIso).length;
-  const averageParticipation = Math.round(events.reduce((total, event) => total + event.participantPercent, 0) / events.length);
+  const upcomingEvents = overviewQuery.data ? overview.upcoming_events : events.filter((event) => event.date >= todayIso).length;
+  const averageParticipation = overviewQuery.data ? Math.round(overview.average_attendance_rate) : Math.round(events.reduce((total, event) => total + event.participantPercent, 0) / Math.max(events.length, 1));
   const selectedDay = getDisplayDay(selectedDate);
   const selectedMonth = getDisplayMonth(selectedDate);
 
@@ -188,13 +246,17 @@ export function EventsView({ workspaceSlug }: Readonly<{ workspaceSlug: string }
         </article>
         <article className="min-h-24 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-bold text-slate-500">Inscrits</p>
-          <p className="mt-2 text-3xl font-black">387</p>
+          <p className="mt-2 text-3xl font-black">{overview.planned_participants || events.reduce((total, event) => total + Number(event.participants.split("/")[0] || 0), 0)}</p>
         </article>
         <article className="min-h-24 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-bold text-slate-500">Budget total</p>
-          <p className="mt-2 text-2xl font-black">8 450 000 {currency}</p>
+          <p className="mt-2 text-2xl font-black">{money(overview.total_budget || 8_450_000)}</p>
         </article>
       </section>
+
+      {eventsQuery.isError ? (
+        <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">API evenements indisponible, affichage des donnees de demonstration locales.</p>
+      ) : null}
 
       <section className="mt-5 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between">
@@ -214,7 +276,7 @@ export function EventsView({ workspaceSlug }: Readonly<{ workspaceSlug: string }
         </div>
         <div className="mt-2 grid grid-cols-7 gap-y-2">
           {calendarDays.map(({ day, date, outside }, index) => {
-            const dayEvents = outside ? [] : events.filter((event) => event.date === date);
+            const dayEvents = events.filter((event) => event.date === date);
             const isToday = date === todayIso;
             const isSelected = date === selectedDate;
             return (
@@ -223,7 +285,7 @@ export function EventsView({ workspaceSlug }: Readonly<{ workspaceSlug: string }
                 type="button"
                 key={`${date}-${index}`}
                 onClick={() => setSelectedDate(date)}
-                aria-label={`${day} ${getMonthLabel(new Date(date))} ${eventDaySummary(date)}`}
+                aria-label={`${day} ${getMonthLabel(new Date(date))} ${eventDaySummary(date, events)}`}
               >
                 {day}
                 {dayEvents.length ? (

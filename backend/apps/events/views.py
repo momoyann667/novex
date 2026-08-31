@@ -80,6 +80,7 @@ class EventViewSet(viewsets.ModelViewSet):
             "update": "events.update",
             "partial_update": "events.update",
             "destroy": "events.delete",
+            "publish": "events.publish",
             "cancel": "events.cancel",
             "complete": "events.update",
             "register": "events.view",
@@ -150,6 +151,14 @@ class EventViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         delete_event(event=instance, actor=self.request.user)
+
+    @decorators.action(detail=True, methods=["post"])
+    def publish(self, request, pk=None):
+        try:
+            event = change_event_status(event=self.get_object(), actor=request.user, status=EventStatus.PUBLISHED)
+        except ValueError as exc:
+            return response.Response({"message": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(EventSerializer(event, context=self.get_serializer_context()).data)
 
     @decorators.action(detail=True, methods=["post"])
     def cancel(self, request, pk=None):

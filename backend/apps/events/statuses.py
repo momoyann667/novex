@@ -19,6 +19,7 @@ class EventType(models.TextChoices):
 
 class EventStatus(models.TextChoices):
     DRAFT = "DRAFT", "Brouillon"
+    PUBLISHED = "PUBLISHED", "Publie"
     PLANNED = "PLANNED", "Planifie"
     REGISTRATION_OPEN = "REGISTRATION_OPEN", "Inscriptions ouvertes"
     REGISTRATION_CLOSED = "REGISTRATION_CLOSED", "Inscriptions fermees"

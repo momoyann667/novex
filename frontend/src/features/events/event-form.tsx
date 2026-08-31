@@ -1,11 +1,14 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CalendarPlus, Save } from "lucide-react";
 import { useForm } from "react-hook-form";
+import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { EVENT_STATUSES, EVENT_TYPES } from "./event-status";
+import { createEvent, type EventFormPayload } from "./api";
 
 const eventSchema = z.object({
   title: z.string().min(2),
@@ -17,7 +20,7 @@ const eventSchema = z.object({
   end_time: z.string().min(1),
   location: z.string().optional(),
   responsible: z.string().optional(),
-  status: z.enum(["DRAFT", "PLANNED", "REGISTRATION_OPEN", "REGISTRATION_CLOSED", "ONGOING", "COMPLETED", "CANCELLED", "POSTPONED", "ARCHIVED"]),
+  status: z.enum(["DRAFT", "PUBLISHED", "PLANNED", "REGISTRATION_OPEN", "REGISTRATION_CLOSED", "ONGOING", "COMPLETED", "CANCELLED", "POSTPONED", "ARCHIVED"]),
   capacity: z.coerce.number().min(0).optional(),
   budget: z.coerce.number().min(0),
   project: z.string().optional(),
@@ -29,7 +32,28 @@ const eventSchema = z.object({
 
 type EventFormValues = z.infer<typeof eventSchema>;
 
-export function EventForm() {
+function toPayload(values: EventFormValues): EventFormPayload {
+  const capacity = Number(values.capacity || 0);
+  return {
+    title: values.title,
+    description: values.description,
+    event_type: values.event_type,
+    status: values.status,
+    start_at: `${values.start_date}T${values.start_time}:00`,
+    end_at: `${values.end_date}T${values.end_time}:00`,
+    timezone: "Africa/Abidjan",
+    location_type: "PHYSICAL",
+    location: values.location,
+    capacity: capacity > 0 ? capacity : null,
+    budget: Number(values.budget || 0),
+    recurrence: values.recurrence,
+    registration_required: values.status === "REGISTRATION_OPEN"
+  };
+}
+
+export function EventForm({ workspaceSlug }: Readonly<{ workspaceSlug: string }>) {
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const form = useForm<EventFormValues>({
     resolver: zodResolver(eventSchema),
     defaultValues: {
@@ -49,9 +73,17 @@ export function EventForm() {
       recurrence: "none",
     },
   });
+  const mutation = useMutation({
+    mutationFn: (values: EventFormValues) => createEvent(workspaceSlug, toPayload(values)),
+    onSuccess: async (event) => {
+      await queryClient.invalidateQueries({ queryKey: ["events"] });
+      await queryClient.invalidateQueries({ queryKey: ["events-overview", workspaceSlug] });
+      router.push(`/app/${workspaceSlug}/events/${event.id}`);
+    }
+  });
 
   return (
-    <form className="grid gap-4" onSubmit={form.handleSubmit(() => undefined)}>
+    <form className="grid gap-4" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
       <div className="grid gap-4 lg:grid-cols-2">
         <label className="grid gap-1 text-sm font-medium">
           Titre
@@ -123,8 +155,11 @@ export function EventForm() {
           <option value="yearly">Annuelle</option>
         </select>
       </div>
+      {mutation.isError ? (
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{mutation.error instanceof Error ? mutation.error.message : "Impossible de creer l'evenement pour le moment."}</p>
+      ) : null}
       <div className="flex justify-end">
-        <Button type="submit"><Save className="size-4" /> Enregistrer</Button>
+        <Button type="submit" disabled={mutation.isPending}><Save className="size-4" /> {mutation.isPending ? "Enregistrement..." : "Enregistrer"}</Button>
       </div>
     </form>
   );

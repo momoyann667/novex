@@ -1,8 +1,12 @@
+"use client";
+
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { Activity, Banknote, CalendarClock, CheckCircle2, CheckSquare, FileText, FolderKanban, Megaphone, QrCode, ScrollText, Ticket, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
+import { getEvent, type EventResource } from "./api";
 
 const tabs = [
   ["Resume", FolderKanban],
@@ -16,15 +20,41 @@ const tabs = [
   ["Rapport", ScrollText],
 ] as const;
 
-const detailKpis = [["320", "Participants"], ["280", "Confirmes"], ["226", "Presents"], ["81%", "Presence"], ["400", "Capacite"], ["80%", "Remplissage"], ["4 450 000 XOF", "Recettes"], ["1 250 000 XOF", "Resultat"]] as const;
-
 const quickCards = [["QR event", "NOVEX EVENT EVT-2026-001", QrCode], ["Billetterie", "3 types de tickets", Ticket], ["Programme", "8 sessions planifiees", CalendarClock], ["Communication", "Rappel J-7 pret", Megaphone]] as const;
 
+function money(value: string | number | null | undefined) {
+  const amount = Number(value || 0);
+  return `${amount.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} FCFA`;
+}
+
+function eventKpis(event?: EventResource) {
+  if (!event) {
+    return [["0", "Participants"], ["0", "Confirmes"], ["0", "Presents"], ["0%", "Presence"], ["0", "Capacite"], ["0%", "Remplissage"], ["0 FCFA", "Recettes"], ["0 FCFA", "Resultat"]] as const;
+  }
+  return [
+    [String(event.stats.participants || 0), "Participants"],
+    [String(event.stats.confirmed || 0), "Confirmes"],
+    [String(event.stats.attended || 0), "Presents"],
+    [`${event.stats.attendance_rate || 0}%`, "Presence"],
+    [String(event.capacity || event.stats.capacity || 0), "Capacite"],
+    [`${event.stats.occupancy_rate || 0}%`, "Remplissage"],
+    [money(event.stats.revenues), "Recettes"],
+    [money(event.stats.balance), "Resultat"],
+  ] as const;
+}
+
 export function EventDetailView({ eventId, workspaceSlug }: Readonly<{ eventId: string; workspaceSlug: string }>) {
+  const eventQuery = useQuery({
+    queryKey: ["event", workspaceSlug, eventId],
+    queryFn: () => getEvent(workspaceSlug, eventId)
+  });
+  const event = eventQuery.data;
+  const detailKpis = eventKpis(event);
+
   return (
     <div className="grid gap-6">
       <PageHeader
-        title={`Evenement ${eventId}`}
+        title={event ? event.title : `Evenement ${eventId}`}
         description="Planning, participants, presences, tickets, finances et rapport."
         actions={
           <>
@@ -36,16 +66,17 @@ export function EventDetailView({ eventId, workspaceSlug }: Readonly<{ eventId: 
       <section className="rounded-card border border-border bg-white p-5">
         <div className="grid gap-4 md:grid-cols-[1fr_280px] md:items-center">
           <div>
-            <div className="inline-flex rounded-md bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">REGISTRATION_OPEN</div>
-            <h1 className="mt-3 text-2xl font-bold tracking-normal">Nom de l'evenement</h1>
-            <p className="mt-1 text-sm text-slate-500">EVT-2026-001 - Africa/Abidjan - Hotel Ivoire - responsable Awa Kone</p>
+            <div className="inline-flex rounded-md bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">{event?.status || "CHARGEMENT"}</div>
+            <h1 className="mt-3 text-2xl font-bold tracking-normal">{event?.title || "Chargement de l'evenement"}</h1>
+            <p className="mt-1 text-sm text-slate-500">{event ? `${event.code} - ${event.timezone} - ${event.location || "Lieu a confirmer"} - ${event.event_type_label}` : "Connexion aux donnees backend..."}</p>
           </div>
           <div className="rounded-md border border-border p-3">
-            <div className="flex justify-between text-sm"><span>Taux de presence</span><strong>0%</strong></div>
-            <div className="mt-2 h-3 rounded-full bg-slate-100"><div className="h-3 w-0 rounded-full bg-blue-700" /></div>
+            <div className="flex justify-between text-sm"><span>Taux de presence</span><strong>{event?.stats.attendance_rate || 0}%</strong></div>
+            <div className="mt-2 h-3 rounded-full bg-slate-100"><div className="h-3 rounded-full bg-blue-700" style={{ width: `${Math.min(Number(event?.stats.attendance_rate || 0), 100)}%` }} /></div>
           </div>
         </div>
       </section>
+      {eventQuery.isError ? <p className="rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">Impossible de charger cet evenement depuis l'API.</p> : null}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {detailKpis.map(([value, label]) => (
           <Card key={label}><CardContent className="p-5"><div className="text-2xl font-bold tabular-nums">{value}</div><p className="mt-1 text-sm text-slate-500">{label}</p></CardContent></Card>
@@ -68,12 +99,12 @@ export function EventDetailView({ eventId, workspaceSlug }: Readonly<{ eventId: 
         <Card>
           <CardHeader><CardTitle className="text-base text-slate-900">Budget evenement</CardTitle></CardHeader>
           <CardContent>
-            <div className="flex justify-between text-sm"><span>0 / 0 XOF</span><strong>0%</strong></div>
-            <div className="mt-2 h-3 rounded-full bg-slate-100"><div className="h-3 w-0 rounded-full bg-blue-700" /></div>
+            <div className="flex justify-between text-sm"><span>{money(event?.stats.expenses)} / {money(event?.stats.budget)}</span><strong>{event?.stats.budget_consumed_rate || 0}%</strong></div>
+            <div className="mt-2 h-3 rounded-full bg-slate-100"><div className="h-3 rounded-full bg-blue-700" style={{ width: `${Math.min(Number(event?.stats.budget_consumed_rate || 0), 100)}%` }} /></div>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-slate-500">Depenses</p><strong>0 XOF</strong></div>
-              <div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-slate-500">Recettes</p><strong>0 XOF</strong></div>
-              <div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-slate-500">Marge</p><strong>0%</strong></div>
+              <div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-slate-500">Depenses</p><strong>{money(event?.stats.expenses)}</strong></div>
+              <div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-slate-500">Recettes</p><strong>{money(event?.stats.revenues)}</strong></div>
+              <div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-slate-500">Marge</p><strong>{event?.stats.budget_consumed_rate || 0}%</strong></div>
             </div>
           </CardContent>
         </Card>

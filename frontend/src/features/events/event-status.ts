@@ -16,6 +16,7 @@ export const EVENT_TYPES = [
 
 export const EVENT_STATUSES = [
   { value: "DRAFT", label: "Brouillon" },
+  { value: "PUBLISHED", label: "Publie" },
   { value: "PLANNED", label: "Planifie" },
   { value: "REGISTRATION_OPEN", label: "Inscriptions ouvertes" },
   { value: "REGISTRATION_CLOSED", label: "Inscriptions fermees" },

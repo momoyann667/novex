@@ -13,6 +13,7 @@ from apps.events.services import (
     add_participant,
     add_revenue_allocation,
     checkin_ticket,
+    change_event_status,
     create_event,
     create_ticket_order,
     create_ticket_type,
@@ -197,3 +198,16 @@ def test_event_dates_are_validated(django_user_model):
 
     assert serializer.is_valid() is False
     assert "end_at" in serializer.errors
+
+
+@pytest.mark.django_db
+def test_draft_event_can_be_published_once(django_user_model):
+    workspace, owner = make_workspace(django_user_model, "publish")
+    event = make_event(workspace, owner, status=EventStatus.DRAFT)
+
+    published = change_event_status(event=event, actor=owner, status=EventStatus.PUBLISHED)
+
+    assert published.status == EventStatus.PUBLISHED
+    assert published.activities.filter(action="event.published").exists()
+    with pytest.raises(ValueError):
+        change_event_status(event=published, actor=owner, status=EventStatus.PUBLISHED)
