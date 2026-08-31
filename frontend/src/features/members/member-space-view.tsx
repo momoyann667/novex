@@ -23,6 +23,11 @@ const profile = {
   completion: 83
 };
 
+const association = {
+  name: "NOVEX",
+  logoInitial: "N"
+};
+
 const contributions = [
   { period: "Aout 2026", label: "Cotisation mensuelle", due: 10000, paid: 10000, remaining: 0, status: "Payee", dueDate: "2026-08-31" },
   { period: "Septembre 2026", label: "Cotisation mensuelle", due: 10000, paid: 0, remaining: 10000, status: "En attente", dueDate: "2026-09-30" },
@@ -94,18 +99,42 @@ export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: str
           </div>
           <div className="grid size-12 shrink-0 place-items-center rounded-xl bg-white text-lg font-black text-slate-950">MT</div>
         </div>
-        <div className="mt-6 rounded-xl border border-white/10 bg-white/10 p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-black tracking-normal">{profile.fullName}</h2>
-              <p className="mt-1 text-sm font-semibold text-white/70">{profile.function} - {profile.status}</p>
+      </section>
+
+      <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between px-5 pt-5">
+          <div className="flex items-center gap-3">
+            <div className="grid size-10 place-items-center rounded-full bg-[#0f2347] text-sm font-black text-white">{association.logoInitial}</div>
+            <strong className="text-sm tracking-normal text-slate-700">{association.name}</strong>
+          </div>
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
+            <span className="size-2 rounded-full bg-emerald-600" />
+            {profile.status}
+          </span>
+        </div>
+
+        <div className="px-5 py-7 text-center">
+          <div className="mx-auto grid size-24 place-items-center overflow-hidden rounded-full border-4 border-white bg-[linear-gradient(135deg,#dbeafe,#0f2347)] shadow-lg shadow-slate-900/10">
+            <span className="text-2xl font-black text-white">MT</span>
+          </div>
+          <h2 className="mt-5 text-2xl font-black tracking-normal">{profile.fullName}</h2>
+          <p className="mt-1 text-sm font-black text-slate-500">ID: {profile.membershipNumber}</p>
+          <div className="mt-3 inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 shadow-sm">
+            <CheckCircle2 className="size-4 text-blue-700" />
+            {profile.function} Premium
+          </div>
+
+          <div className="mx-auto mt-6 w-full max-w-[210px] rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="grid aspect-square place-items-center bg-slate-100 text-slate-300">
+              <QrCode className="size-20" />
             </div>
-            <QrCode className="size-10 text-white/70" />
+            <p className="mt-3 text-xs font-black text-slate-500">Scanner pour verifier</p>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-3 text-sm font-semibold text-white/75">
-            <span>{profile.membershipNumber}</span>
-            <span>Depuis {formatDate(profile.joinedAt)}</span>
-          </div>
+        </div>
+
+        <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-5 py-4 text-xs font-black text-slate-500">
+          <span>Actif depuis le {formatDate(profile.joinedAt)}</span>
+          <IdCard className="size-4" />
         </div>
       </section>
 
