@@ -8,7 +8,7 @@ import { useState } from "react";
 import { z } from "zod";
 import { ArrowRight, Eye, LockKeyhole, Mail, RotateCcw, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ApiError, apiFetch } from "@/lib/api/client";
+import { ApiError } from "@/lib/api/client";
 
 const schema = z
   .object({
@@ -34,6 +34,29 @@ function splitFullName(fullName: string) {
   return { firstName, lastName };
 }
 
+function errorMessageFromPayload(payload: unknown): string {
+  if (!payload || typeof payload !== "object") {
+    return "Impossible de creer le compte pour le moment.";
+  }
+
+  const data = payload as Record<string, unknown>;
+  if (typeof data.message === "string") {
+    return data.message;
+  }
+  if (typeof data.detail === "string") {
+    return data.detail;
+  }
+
+  const firstError = Object.entries(data).find(([, value]) => Array.isArray(value) || typeof value === "string");
+  if (!firstError) {
+    return "Impossible de creer le compte pour le moment.";
+  }
+
+  const [field, value] = firstError;
+  const message = Array.isArray(value) ? value.join(" ") : value;
+  return `${field}: ${message}`;
+}
+
 export function RegisterForm() {
   const form = useForm<RegisterValues>({ resolver: zodResolver(schema) });
   const router = useRouter();
@@ -44,8 +67,11 @@ export function RegisterForm() {
     const { firstName, lastName } = splitFullName(values.fullName);
 
     try {
-      await apiFetch<RegisteredUser>("/auth/register/", {
+      const response = await fetch("/api/auth/register", {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
         body: JSON.stringify({
           first_name: firstName,
           last_name: lastName,
@@ -55,6 +81,12 @@ export function RegisterForm() {
           accepted_terms: values.acceptedTerms
         })
       });
+
+      const payload = (await response.json().catch(() => null)) as RegisteredUser | unknown;
+      if (!response.ok) {
+        throw new ApiError(errorMessageFromPayload(payload), response.status);
+      }
+
       router.push("/auth/login");
     } catch (error) {
       setSubmitError(error instanceof ApiError ? error.message : "Impossible de creer le compte pour le moment.");
