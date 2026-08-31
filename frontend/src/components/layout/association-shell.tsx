@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { Bell, Bot, Calendar, CreditCard, FileText, FolderKanban, Home, Landmark, Menu, Search, Settings, Users, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -24,6 +27,12 @@ const nav = [
 ] as const;
 
 export function AssociationShell({ children, workspaceSlug }: Readonly<{ children: ReactNode; workspaceSlug: string }>) {
+  const pathname = usePathname();
+
+  function isActive(path: string) {
+    return pathname === `/app/${workspaceSlug}/${path}` || pathname.startsWith(`/app/${workspaceSlug}/${path}/`);
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 pb-20 md:grid md:grid-cols-[272px_minmax(0,1fr)] md:pb-0">
       <aside className="hidden border-r border-border bg-white p-5 md:block">
@@ -35,9 +44,9 @@ export function AssociationShell({ children, workspaceSlug }: Readonly<{ childre
           Association active
         </Button>
         <nav className="grid gap-1">
-          {nav.map(({ label, path, icon: Icon }, index) => (
+          {nav.map(({ label, path, icon: Icon }) => (
             <Link
-              className={`flex min-h-10 items-center gap-3 rounded-md px-3 text-sm ${index === 0 ? "bg-blue-50 font-semibold text-blue-700" : "text-slate-700 hover:bg-slate-100"}`}
+              className={`flex min-h-10 items-center gap-3 rounded-md px-3 text-sm ${isActive(path) ? "bg-blue-50 font-semibold text-blue-700" : "text-slate-700 hover:bg-slate-100"}`}
               href={`/app/${workspaceSlug}/${path}`}
               key={path}
             >
@@ -76,9 +85,9 @@ export function AssociationShell({ children, workspaceSlug }: Readonly<{ childre
           ["Cotisations", "contributions", CreditCard],
           ["Assi...", "assistant", Bot],
           ["Plus", "settings", Menu]
-        ] satisfies ReadonlyArray<readonly [string, string, LucideIcon]>).map(([label, path, Icon], index) => (
-          <Link className={`grid min-h-16 place-items-center rounded-md text-[10px] font-bold ${index === 0 ? "text-blue-700" : "text-slate-600"}`} href={`/app/${workspaceSlug}/${path}`} key={path}>
-            <span className={`grid size-8 place-items-center rounded-md ${index === 0 ? "bg-blue-50" : ""}`}>
+        ] satisfies ReadonlyArray<readonly [string, string, LucideIcon]>).map(([label, path, Icon]) => (
+          <Link className={`grid min-h-16 place-items-center rounded-md text-[10px] font-bold ${isActive(path) ? "text-blue-700" : "text-slate-600"}`} href={`/app/${workspaceSlug}/${path}`} key={path}>
+            <span className={`grid size-8 place-items-center rounded-md ${isActive(path) ? "bg-blue-50" : ""}`}>
               <Icon className="size-5" />
             </span>
             {label}
