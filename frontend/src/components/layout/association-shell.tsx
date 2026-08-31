@@ -48,7 +48,7 @@ export function AssociationShell({ children, workspaceSlug }: Readonly<{ childre
         </nav>
       </aside>
       <section>
-        <header className="sticky top-0 z-20 flex min-h-16 items-center justify-between border-b border-border bg-white/90 px-4 backdrop-blur md:px-6">
+        <header className="sticky top-0 z-20 hidden min-h-16 items-center justify-between border-b border-border bg-white/90 px-4 backdrop-blur md:flex md:px-6">
           <div className="flex items-center gap-3">
             <Button className="md:hidden" variant="ghost" aria-label="Menu">
               <Menu className="size-5" />
@@ -69,18 +69,20 @@ export function AssociationShell({ children, workspaceSlug }: Readonly<{ childre
         </header>
         <main className="p-4 md:p-6">{children}</main>
       </section>
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-border bg-white pb-[env(safe-area-inset-bottom)] md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-border bg-white px-1 pb-[env(safe-area-inset-bottom)] shadow-[0_-10px_30px_rgba(15,23,42,0.08)] md:hidden">
         {([
-          ["Accueil", Home],
-          ["Membres", Users],
-          ["Cotisations", CreditCard],
-          ["Finance", Wallet],
-          ["Plus", Menu]
-        ] satisfies ReadonlyArray<readonly [string, LucideIcon]>).map(([label, Icon]) => (
-          <button className="grid min-h-16 place-items-center text-xs text-slate-600" key={String(label)} type="button">
-            <Icon className="size-5" />
+          ["Dashboard", "dashboard", Home],
+          ["Membres", "members", Users],
+          ["Cotisations", "contributions", CreditCard],
+          ["Assi...", "assistant", Bot],
+          ["Plus", "settings", Menu]
+        ] satisfies ReadonlyArray<readonly [string, string, LucideIcon]>).map(([label, path, Icon], index) => (
+          <Link className={`grid min-h-16 place-items-center rounded-md text-[10px] font-bold ${index === 0 ? "text-blue-700" : "text-slate-600"}`} href={`/app/${workspaceSlug}/${path}`} key={path}>
+            <span className={`grid size-8 place-items-center rounded-md ${index === 0 ? "bg-blue-50" : ""}`}>
+              <Icon className="size-5" />
+            </span>
             {label}
-          </button>
+          </Link>
         ))}
       </nav>
     </div>
