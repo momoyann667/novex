@@ -1,11 +1,14 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
-from .views import MemberCategoryViewSet, MemberViewSet
+from .views import MemberCategoryViewSet, MemberCustomFieldDefinitionViewSet, MemberGroupViewSet, MemberTagViewSet, MemberViewSet
 from apps.payments.views import MemberFinancialHistoryView
 
 router = DefaultRouter()
 router.register("categories", MemberCategoryViewSet, basename="member-category")
+router.register("tags", MemberTagViewSet, basename="member-tag")
+router.register("groups", MemberGroupViewSet, basename="member-group")
+router.register("custom-fields", MemberCustomFieldDefinitionViewSet, basename="member-custom-field")
 router.register("", MemberViewSet, basename="member")
 
 urlpatterns = [
