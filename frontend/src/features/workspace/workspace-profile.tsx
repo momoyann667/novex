@@ -22,12 +22,16 @@ const defaultProfile: WorkspaceProfile = {
   color: "#0F7F2A"
 };
 
+function isValidWorkspaceSlug(workspaceSlug: string) {
+  return Boolean(workspaceSlug && workspaceSlug !== "undefined" && workspaceSlug !== "null");
+}
+
 function storageKey(workspaceSlug: string) {
   return `novex.workspace.${workspaceSlug}.profile`;
 }
 
 export function loadWorkspaceProfile(workspaceSlug: string): WorkspaceProfile | null {
-  if (typeof window === "undefined") {
+  if (typeof window === "undefined" || !isValidWorkspaceSlug(workspaceSlug)) {
     return null;
   }
 
@@ -44,7 +48,15 @@ export function loadWorkspaceProfile(workspaceSlug: string): WorkspaceProfile | 
 }
 
 export function saveWorkspaceProfile(workspaceSlug: string, profile: WorkspaceProfile) {
+  if (!isValidWorkspaceSlug(workspaceSlug)) {
+    return;
+  }
+
   window.localStorage.setItem(storageKey(workspaceSlug), JSON.stringify(profile));
+}
+
+export function isWorkspaceSlugValid(workspaceSlug: string) {
+  return isValidWorkspaceSlug(workspaceSlug);
 }
 
 export function WorkspaceProfileSetup({

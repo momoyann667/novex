@@ -1,5 +1,6 @@
 import { ProjectReportView } from "@/features/projects/project-report-view";
 
-export default function ProjectReportPage({ params }: Readonly<{ params: { workspace: string; projectId: string } }>) {
-  return <ProjectReportView projectId={params.projectId} workspaceSlug={params.workspace} />;
+export default async function ProjectReportPage({ params }: Readonly<{ params: Promise<{ workspace: string; projectId: string }> }>) {
+  const { workspace, projectId } = await params;
+  return <ProjectReportView projectId={projectId} workspaceSlug={workspace} />;
 }

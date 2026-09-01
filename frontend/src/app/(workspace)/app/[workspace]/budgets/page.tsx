@@ -1,6 +1,6 @@
 import { BudgetsView } from "@/features/budgets/budgets-view";
 
-export default function BudgetsPage({ params }: Readonly<{ params: { workspace: string } }>) {
-  return <BudgetsView workspaceSlug={params.workspace} />;
+export default async function BudgetsPage({ params }: Readonly<{ params: Promise<{ workspace: string }> }>) {
+  const { workspace } = await params;
+  return <BudgetsView workspaceSlug={workspace} />;
 }
-

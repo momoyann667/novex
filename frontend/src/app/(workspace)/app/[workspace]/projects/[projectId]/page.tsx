@@ -1,5 +1,6 @@
 import { ProjectDetailView } from "@/features/projects/project-detail-view";
 
-export default function ProjectDetailPage({ params }: Readonly<{ params: { workspace: string; projectId: string } }>) {
-  return <ProjectDetailView projectId={params.projectId} workspaceSlug={params.workspace} />;
+export default async function ProjectDetailPage({ params }: Readonly<{ params: Promise<{ workspace: string; projectId: string }> }>) {
+  const { workspace, projectId } = await params;
+  return <ProjectDetailView projectId={projectId} workspaceSlug={workspace} />;
 }

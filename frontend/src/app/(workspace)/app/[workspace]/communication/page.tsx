@@ -1,5 +1,6 @@
 import { CommunicationCenterView } from "@/features/communication/communication-center-view";
 
-export default function CommunicationPage({ params }: Readonly<{ params: { workspace: string } }>) {
-  return <CommunicationCenterView workspaceSlug={params.workspace} />;
+export default async function CommunicationPage({ params }: Readonly<{ params: Promise<{ workspace: string }> }>) {
+  const { workspace } = await params;
+  return <CommunicationCenterView workspaceSlug={workspace} />;
 }

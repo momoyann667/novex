@@ -1,5 +1,6 @@
 import { BudgetDetailView } from "@/features/budgets/budget-detail-view";
 
-export default function BudgetDetailPage({ params }: Readonly<{ params: { workspace: string; budgetId: string } }>) {
-  return <BudgetDetailView workspaceSlug={params.workspace} />;
+export default async function BudgetDetailPage({ params }: Readonly<{ params: Promise<{ workspace: string; budgetId: string }> }>) {
+  const { workspace } = await params;
+  return <BudgetDetailView workspaceSlug={workspace} />;
 }
