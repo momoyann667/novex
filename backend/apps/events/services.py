@@ -6,10 +6,12 @@ from django.db.models import Avg, Count, Q, Sum
 from django.utils import timezone
 
 from apps.audit_logs.models import AuditLog
+from apps.communications.models import Communication
+from apps.contributions.models import Contribution, ContributionCampaign, ContributionReminder
 from apps.finance.models import FinancialTransaction
 from apps.finance.statuses import FinancialTransactionStatus, FinancialTransactionType
 from apps.members.models import Member
-from apps.projects.models import Project
+from apps.projects.models import Project, ProjectMilestone, ProjectTask
 from apps.workspaces.models import Workspace
 from .models import (
     Event,
@@ -300,6 +302,264 @@ def workspace_event_stats(workspace: Workspace) -> dict:
 
 def calendar_events(*, workspace: Workspace, start_at, end_at):
     return Event.objects.filter(workspace=workspace, start_at__lt=end_at, end_at__gte=start_at).order_by("start_at")
+
+
+def day_bounds(value):
+    return (
+        timezone.make_aware(timezone.datetime.combine(value, timezone.datetime.min.time())),
+        timezone.make_aware(timezone.datetime.combine(value, timezone.datetime.max.time())),
+    )
+
+
+def calendar_item(
+    *,
+    uid: str,
+    source_type: str,
+    title: str,
+    start_at,
+    end_at=None,
+    status="",
+    color="slate",
+    source_url="",
+    location="",
+    description="",
+    all_day=False,
+):
+    if end_at is None:
+        end_at = start_at
+    return {
+        "id": uid,
+        "source_type": source_type,
+        "title": title,
+        "description": description,
+        "status": status,
+        "start_at": start_at.isoformat(),
+        "end_at": end_at.isoformat(),
+        "location": location,
+        "all_day": all_day,
+        "color": color,
+        "source_url": source_url,
+    }
+
+
+def unified_calendar_items(*, workspace: Workspace, start_at, end_at):
+    items = []
+    start_date = start_at.date()
+    end_date = end_at.date()
+
+    for event in calendar_events(workspace=workspace, start_at=start_at, end_at=end_at).select_related("project"):
+        items.append(
+            calendar_item(
+                uid=f"event:{event.id}",
+                source_type="EVENT",
+                title=event.title,
+                description=event.description,
+                status=event.status,
+                start_at=event.start_at,
+                end_at=event.end_at,
+                location=event.location or event.city,
+                color="blue",
+                source_url=f"events/{event.id}",
+            )
+        )
+
+    projects = (
+        Project.objects.filter(workspace=workspace)
+        .filter(Q(start_date__range=(start_date, end_date)) | Q(end_date__range=(start_date, end_date)))
+        .only("id", "name", "status", "start_date", "end_date", "progress")
+    )
+    for project in projects:
+        if project.start_date:
+            day_start, day_end = day_bounds(project.start_date)
+            items.append(
+                calendar_item(
+                    uid=f"project-start:{project.id}",
+                    source_type="PROJECT",
+                    title=f"Debut projet - {project.name}",
+                    status=project.status,
+                    start_at=day_start,
+                    end_at=day_end,
+                    color="amber",
+                    source_url=f"projects/{project.id}",
+                    all_day=True,
+                )
+            )
+        if project.end_date:
+            day_start, day_end = day_bounds(project.end_date)
+            items.append(
+                calendar_item(
+                    uid=f"project-deadline:{project.id}",
+                    source_type="DEADLINE",
+                    title=f"Echeance projet - {project.name}",
+                    status=project.status,
+                    start_at=day_start,
+                    end_at=day_end,
+                    color="rose",
+                    source_url=f"projects/{project.id}",
+                    all_day=True,
+                )
+            )
+
+    for milestone in (
+        ProjectMilestone.objects.select_related("project")
+        .filter(workspace=workspace, due_date__range=(start_date, end_date))
+        .only("id", "name", "status", "due_date", "project_id", "project__name")
+    ):
+        day_start, day_end = day_bounds(milestone.due_date)
+        items.append(
+            calendar_item(
+                uid=f"milestone:{milestone.id}",
+                source_type="DEADLINE",
+                title=f"Jalon - {milestone.name}",
+                description=milestone.project.name,
+                status=milestone.status,
+                start_at=day_start,
+                end_at=day_end,
+                color="orange",
+                source_url=f"projects/{milestone.project_id}",
+                all_day=True,
+            )
+        )
+
+    for task in (
+        ProjectTask.objects.select_related("project")
+        .filter(workspace=workspace, due_date__range=(start_date, end_date))
+        .only("id", "title", "status", "due_date", "project_id", "project__name")
+    ):
+        day_start, day_end = day_bounds(task.due_date)
+        items.append(
+            calendar_item(
+                uid=f"task:{task.id}",
+                source_type="TASK",
+                title=f"Tache - {task.title}",
+                description=task.project.name,
+                status=task.status,
+                start_at=day_start,
+                end_at=day_end,
+                color="violet",
+                source_url=f"projects/{task.project_id}/tasks",
+                all_day=True,
+            )
+        )
+
+    for campaign in ContributionCampaign.objects.filter(workspace=workspace, due_date__range=(start_date, end_date)).only(
+        "id",
+        "name",
+        "status",
+        "due_date",
+        "amount",
+        "currency",
+    ):
+        day_start, day_end = day_bounds(campaign.due_date)
+        items.append(
+            calendar_item(
+                uid=f"contribution-campaign:{campaign.id}",
+                source_type="CONTRIBUTION",
+                title=f"Cotisation - {campaign.name}",
+                description=f"{campaign.amount} {campaign.currency}",
+                status=campaign.status,
+                start_at=day_start,
+                end_at=day_end,
+                color="emerald",
+                source_url="contributions",
+                all_day=True,
+            )
+        )
+
+    contributions = (
+        Contribution.objects.select_related("campaign", "member")
+        .filter(workspace=workspace, due_date__range=(start_date, end_date))
+        .exclude(status__in=["PAID", "WAIVED"])
+        .only(
+            "id",
+            "status",
+            "due_date",
+            "amount_due",
+            "currency",
+            "campaign__name",
+            "member__first_name",
+            "member__last_name",
+        )
+    )
+    for contribution in contributions:
+        day_start, day_end = day_bounds(contribution.due_date)
+        member_name = f"{contribution.member.first_name} {contribution.member.last_name}".strip()
+        items.append(
+            calendar_item(
+                uid=f"contribution:{contribution.id}",
+                source_type="CONTRIBUTION",
+                title=f"Echeance cotisation - {member_name}",
+                description=f"{contribution.campaign.name} - {contribution.amount_due} {contribution.currency}",
+                status=contribution.status,
+                start_at=day_start,
+                end_at=day_end,
+                color="emerald",
+                source_url="contributions",
+                all_day=True,
+            )
+        )
+
+    for reminder in (
+        ContributionReminder.objects.select_related("campaign")
+        .filter(workspace=workspace, scheduled_for__gte=start_at, scheduled_for__lte=end_at)
+        .only("id", "status", "scheduled_for", "subject", "campaign__name")
+    ):
+        items.append(
+            calendar_item(
+                uid=f"reminder:{reminder.id}",
+                source_type="REMINDER",
+                title=reminder.subject,
+                description=reminder.campaign.name,
+                status=reminder.status,
+                start_at=reminder.scheduled_for,
+                color="teal",
+                source_url="contributions",
+                location="Notification",
+            )
+        )
+
+    for communication in Communication.objects.filter(workspace=workspace, scheduled_at__gte=start_at, scheduled_at__lte=end_at).only(
+        "id",
+        "title",
+        "status",
+        "scheduled_at",
+        "communication_type",
+    ):
+        items.append(
+            calendar_item(
+                uid=f"communication:{communication.id}",
+                source_type="COMMUNICATION",
+                title=f"Communication - {communication.title}",
+                status=communication.status,
+                start_at=communication.scheduled_at,
+                color="cyan",
+                source_url="communication",
+                location="Centre de communication",
+            )
+        )
+
+    for transaction in FinancialTransaction.objects.filter(
+        workspace=workspace,
+        transaction_date__range=(start_date, end_date),
+    ).only("id", "description", "status", "transaction_type", "transaction_date", "amount"):
+        day_start, day_end = day_bounds(transaction.transaction_date)
+        color = "emerald" if transaction.transaction_type == FinancialTransactionType.INCOME else "rose"
+        items.append(
+            calendar_item(
+                uid=f"finance:{transaction.id}",
+                source_type="FINANCE",
+                title=f"Finance - {transaction.description}",
+                description=f"{transaction.amount} {workspace.currency}",
+                status=transaction.status,
+                start_at=day_start,
+                end_at=day_end,
+                color=color,
+                source_url="finance",
+                all_day=True,
+            )
+        )
+
+    return sorted(items, key=lambda item: (item["start_at"], item["source_type"], item["title"]))
 
 
 @transaction.atomic

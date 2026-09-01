@@ -8,7 +8,6 @@ from common.permissions.workspace import RequireWorkspacePermission
 from .models import Event, EventActivity, EventAnnouncement, EventDocument, EventFeedback, EventOrganizer, EventParticipant, EventScheduleItem, EventSpeaker, EventSponsor, EventTicket, EventTicketType
 from .serializers import (
     AttendanceUpdateSerializer,
-    CalendarEventSerializer,
     EventAnnouncementSerializer,
     EventActivitySerializer,
     EventDocumentSerializer,
@@ -33,7 +32,6 @@ from .services import (
     add_expense_allocation,
     add_participant,
     add_revenue_allocation,
-    calendar_events,
     change_event_status,
     checkin_ticket,
     create_event,
@@ -48,6 +46,7 @@ from .services import (
     update_attendance,
     update_event,
     update_rsvp,
+    unified_calendar_items,
     workspace_event_stats,
 )
 from .statuses import EventStatus
@@ -178,8 +177,11 @@ class EventViewSet(viewsets.ModelViewSet):
         end_at = parse_calendar_bound(request.query_params.get("end", ""), end_of_day=True)
         if not start_at or not end_at:
             return response.Response({"message": "Parametres start et end requis au format date ou datetime ISO."}, status=status.HTTP_400_BAD_REQUEST)
-        queryset = calendar_events(workspace=current_workspace(request), start_at=start_at, end_at=end_at)
-        return response.Response(CalendarEventSerializer(queryset, many=True).data)
+        items = unified_calendar_items(workspace=current_workspace(request), start_at=start_at, end_at=end_at)
+        source_type = request.query_params.get("source_type")
+        if source_type:
+            items = [item for item in items if item["source_type"] == source_type]
+        return response.Response(items)
 
     @decorators.action(detail=True, methods=["get"])
     def stats(self, request, pk=None):

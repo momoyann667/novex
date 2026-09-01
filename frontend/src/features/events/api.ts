@@ -90,6 +90,20 @@ export type EventOverview = {
   net_result: string | number;
 };
 
+export type CalendarItem = {
+  id: string;
+  source_type: "EVENT" | "MEETING" | "DEADLINE" | "CONTRIBUTION" | "PROJECT" | "TASK" | "REMINDER" | "COMMUNICATION" | "FINANCE" | "OTHER";
+  title: string;
+  description: string;
+  status: string;
+  start_at: string;
+  end_at: string;
+  location: string;
+  all_day: boolean;
+  color: string;
+  source_url: string;
+};
+
 export type EventFormPayload = {
   title: string;
   description?: string;
@@ -149,6 +163,15 @@ export async function listEvents(workspaceSlug: string, params: Record<string, s
     cache: "no-store"
   });
   return unwrapList(payload);
+}
+
+export async function listCalendarItems(workspaceSlug: string, params: Record<string, string> = {}) {
+  const search = new URLSearchParams(params);
+  const suffix = search.toString() ? `?${search.toString()}` : "";
+  return apiFetch<CalendarItem[]>(`/events/calendar/${suffix}`, {
+    headers: workspaceHeaders(workspaceSlug),
+    cache: "no-store"
+  });
 }
 
 export async function getEvent(workspaceSlug: string, eventId: string) {
