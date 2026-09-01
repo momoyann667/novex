@@ -272,6 +272,9 @@ def record_manual_payment(
 ) -> Payment:
     if member.workspace_id != workspace.id:
         raise ValueError("Le membre appartient a un autre workspace.")
+    existing_payment = Payment.objects.filter(workspace=workspace, idempotency_key=idempotency_key).first()
+    if existing_payment:
+        return existing_payment
     if contribution:
         contribution = Contribution.objects.select_for_update().get(id=contribution.id)
         validate_contribution_payment(workspace=workspace, contribution=contribution, amount=amount)

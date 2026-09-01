@@ -274,6 +274,8 @@ def period_bounds(period: str | None) -> tuple:
         start = today.replace(day=1)
     elif period == "quarter":
         start = today.replace(month=((today.month - 1) // 3) * 3 + 1, day=1)
+    elif period == "semester":
+        start = today.replace(month=1 if today.month <= 6 else 7, day=1)
     elif period == "year":
         start = today.replace(month=1, day=1)
     else:
@@ -284,8 +286,10 @@ def period_bounds(period: str | None) -> tuple:
     return start, now.date(), previous_start, previous_end
 
 
-def contribution_queryset_for_period(workspace: Workspace, period: str | None):
+def contribution_queryset_for_period(workspace: Workspace, period: str | None, campaign_id: int | None = None):
     queryset = Contribution.objects.filter(workspace=workspace)
+    if campaign_id:
+        queryset = queryset.filter(campaign_id=campaign_id)
     start, end, _previous_start, _previous_end = period_bounds(period)
     if start and end:
         queryset = queryset.filter(created_at__date__gte=start, created_at__date__lte=end)
@@ -394,13 +398,16 @@ def type_performance(workspace: Workspace) -> list[dict]:
     return rows
 
 
-def collection_series(workspace: Workspace, range_code: str | None = "30d") -> list[dict]:
+def collection_series(workspace: Workspace, range_code: str | None = "30d", campaign_id: int | None = None) -> list[dict]:
     days_by_range = {"7d": 7, "30d": 30, "3m": 90, "6m": 180, "12m": 365}
     days = days_by_range.get(range_code or "30d", 30)
     start = timezone.now() - timedelta(days=days)
     trunc = TruncMonth("created_at") if days > 90 else TruncDay("created_at")
+    queryset = Contribution.objects.filter(workspace=workspace, created_at__gte=start)
+    if campaign_id:
+        queryset = queryset.filter(campaign_id=campaign_id)
     rows = (
-        Contribution.objects.filter(workspace=workspace, created_at__gte=start)
+        queryset
         .annotate(bucket=trunc)
         .values("bucket")
         .annotate(expected=Sum("amount_due"), collected=Sum("amount_paid"))
@@ -409,15 +416,35 @@ def collection_series(workspace: Workspace, range_code: str | None = "30d") -> l
     return [{"period": row["bucket"].date().isoformat(), "expected": row["expected"] or Decimal("0.00"), "collected": row["collected"] or Decimal("0.00")} for row in rows]
 
 
-def contribution_analytics(*, workspace: Workspace, period: str | None = "month", range_code: str | None = "30d") -> dict:
-    current_qs = contribution_queryset_for_period(workspace, period)
+def payment_method_distribution(workspace: Workspace, *, period: str | None = "month", campaign_id: int | None = None) -> list[dict]:
+    from apps.payments.models import Payment
+    from apps.payments.statuses import PaymentStatus
+
+    queryset = Payment.objects.filter(workspace=workspace, contribution__isnull=False, status=PaymentStatus.SUCCESS)
+    if campaign_id:
+        queryset = queryset.filter(contribution__campaign_id=campaign_id)
+    start, end, _previous_start, _previous_end = period_bounds(period)
+    if start and end:
+        queryset = queryset.filter(paid_at__date__gte=start, paid_at__date__lte=end)
+    return [
+        {"method": row["payment_method"], "label": row["payment_method"].replace("_", " ").title(), "amount": row["amount"] or Decimal("0.00"), "count": row["count"]}
+        for row in queryset.values("payment_method").annotate(amount=Sum("amount"), count=Count("id")).order_by("-amount")
+    ]
+
+
+def contribution_analytics(*, workspace: Workspace, period: str | None = "month", range_code: str | None = "30d", campaign_id: int | None = None) -> dict:
+    current_qs = contribution_queryset_for_period(workspace, period, campaign_id=campaign_id)
     start, _end, previous_start, previous_end = period_bounds(period)
     previous_qs = Contribution.objects.filter(workspace=workspace)
+    if campaign_id:
+        previous_qs = previous_qs.filter(campaign_id=campaign_id)
     if previous_start and previous_end:
         previous_qs = previous_qs.filter(created_at__date__gte=previous_start, created_at__date__lte=previous_end)
     current = totals_for_queryset(current_qs)
     previous = totals_for_queryset(previous_qs)
     overdue = overdue_queryset(workspace)
+    if campaign_id:
+        overdue = overdue.filter(campaign_id=campaign_id)
     overdue_totals = totals_for_queryset(overdue)
     settings = recovery_settings(workspace)
     return {
@@ -436,7 +463,8 @@ def contribution_analytics(*, workspace: Workspace, period: str | None = "month"
             "collected": variation(current["collected"], previous["collected"]),
             "collection_rate": variation(Decimal(str(current["collection_rate"])), Decimal(str(previous["collection_rate"]))),
         },
-        "series": collection_series(workspace, range_code),
+        "series": collection_series(workspace, range_code, campaign_id=campaign_id),
+        "payment_methods": payment_method_distribution(workspace, period=period, campaign_id=campaign_id),
         "overdue_segments": overdue_segments(workspace),
         "top_unpaid": top_unpaid_members(workspace),
         "upcoming": {
@@ -521,23 +549,34 @@ def cache_key_for_contribution_analytics(workspace: Workspace, period: str | Non
     return f"workspace:{workspace.id}:contributions:analytics:{period or 'all'}:{range_code or '30d'}"
 
 
-def contribution_dashboard(*, workspace: Workspace, period: str | None = None) -> dict:
-    queryset = Contribution.objects.filter(workspace=workspace)
-    totals = contribution_stats(workspace)
+def contribution_dashboard(*, workspace: Workspace, period: str | None = None, campaign_id: int | None = None) -> dict:
+    queryset = contribution_queryset_for_period(workspace, period, campaign_id=campaign_id)
+    totals = totals_for_queryset(queryset)
+    overdue = queryset.filter(due_date__lt=timezone.localdate()).exclude(status__in=[ContributionStatus.PAID, ContributionStatus.WAIVED, ContributionStatus.CANCELLED])
+    overdue_totals = totals_for_queryset(overdue)
     status_counts = queryset.aggregate(
-        members_paid=Count("id", filter=Q(status=ContributionStatus.PAID)),
-        members_partial=Count("id", filter=Q(status=ContributionStatus.PARTIALLY_PAID)),
-        members_overdue=Count("id", filter=Q(status=ContributionStatus.OVERDUE)),
-        members_unpaid=Count("id", filter=Q(status=ContributionStatus.PENDING)),
+        members_paid=Count("member_id", filter=Q(status=ContributionStatus.PAID), distinct=True),
+        members_partial=Count("member_id", filter=Q(status=ContributionStatus.PARTIALLY_PAID), distinct=True),
+        members_overdue=Count("member_id", filter=Q(status=ContributionStatus.OVERDUE), distinct=True),
+        members_unpaid=Count("member_id", filter=Q(status=ContributionStatus.PENDING), distinct=True),
         waived=Count("id", filter=Q(status=ContributionStatus.WAIVED)),
     )
     active_campaigns = ContributionCampaign.objects.filter(workspace=workspace, status=CampaignStatus.ACTIVE).count()
     upcoming_due = queryset.filter(due_date__gte=timezone.localdate(), due_date__lte=timezone.localdate() + timedelta(days=7)).count()
+    status_breakdown = {
+        ContributionStatus.PAID: status_counts["members_paid"] or 0,
+        ContributionStatus.PARTIALLY_PAID: status_counts["members_partial"] or 0,
+        ContributionStatus.PENDING: status_counts["members_unpaid"] or 0,
+        ContributionStatus.OVERDUE: status_counts["members_overdue"] or 0,
+        ContributionStatus.WAIVED: status_counts["waived"] or 0,
+    }
     return {
         "total_expected": totals["expected"],
         "total_collected": totals["collected"],
         "total_remaining": totals["remaining"],
-        "collection_rate": totals["recovery_rate"],
+        "collection_rate": totals["collection_rate"],
+        "total_overdue": overdue_totals["remaining"],
+        "members_concerned": queryset.values("member_id").distinct().count(),
         "members_paid": status_counts["members_paid"] or 0,
         "members_partial": status_counts["members_partial"] or 0,
         "members_overdue": status_counts["members_overdue"] or 0,
@@ -546,7 +585,10 @@ def contribution_dashboard(*, workspace: Workspace, period: str | None = None) -
         "active_campaigns": active_campaigns,
         "upcoming_due": upcoming_due,
         "period": period or "all",
-        "series": [],
+        "statuses": status_breakdown,
+        "series": collection_series(workspace, "12m", campaign_id=campaign_id),
+        "payment_methods": payment_method_distribution(workspace, period=period, campaign_id=campaign_id),
+        "categories": type_performance(workspace),
     }
 
 

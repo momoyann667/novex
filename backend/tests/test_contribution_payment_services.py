@@ -16,6 +16,7 @@ from django.utils import timezone
 from apps.contributions.services import (
     bulk_reminder_preview,
     contribution_analytics,
+    contribution_dashboard,
     create_campaign,
     create_export_request,
     create_manual_reminder,
@@ -64,6 +65,56 @@ def test_manual_payment_is_idempotent_and_updates_contribution(django_user_model
     assert Payment.objects.count() == 1
     assert contribution.amount_paid == Decimal("2500.00")
     assert contribution.status == ContributionStatus.PARTIALLY_PAID
+
+
+@pytest.mark.django_db
+def test_contribution_dashboard_uses_workspace_and_period_totals(django_user_model):
+    owner = django_user_model.objects.create_user(username="dashboard@example.com", email="dashboard@example.com", password="pass")
+    workspace = Workspace.objects.create(name="Association Dashboard", slug="association-dashboard", organization_type="association", owner=owner)
+    other_workspace = Workspace.objects.create(name="Other Dashboard", slug="other-dashboard", organization_type="association", owner=owner)
+    member = Member.objects.create(workspace=workspace, membership_number="A-000020", first_name="Awa", last_name="Kone")
+    second_member = Member.objects.create(workspace=workspace, membership_number="A-000021", first_name="Jean", last_name="Yao")
+    other_member = Member.objects.create(workspace=other_workspace, membership_number="B-000020", first_name="Bad", last_name="Tenant")
+    campaign = create_campaign(workspace=workspace, actor=owner, name="Dashboard 2026", amount=Decimal("10000.00"))
+    other_campaign = create_campaign(workspace=other_workspace, actor=owner, name="Other 2026", amount=Decimal("90000.00"))
+    partial = Contribution.objects.create(
+        workspace=workspace,
+        campaign=campaign,
+        member=member,
+        amount_due=Decimal("10000.00"),
+        amount_paid=Decimal("5000.00"),
+        status=ContributionStatus.PARTIALLY_PAID,
+    )
+    old_overdue = Contribution.objects.create(
+        workspace=workspace,
+        campaign=campaign,
+        member=second_member,
+        amount_due=Decimal("5000.00"),
+        due_date=timezone.localdate() - timedelta(days=1),
+        status=ContributionStatus.OVERDUE,
+    )
+    Contribution.objects.create(
+        workspace=other_workspace,
+        campaign=other_campaign,
+        member=other_member,
+        amount_due=Decimal("90000.00"),
+        amount_paid=Decimal("90000.00"),
+        status=ContributionStatus.PAID,
+    )
+    Contribution.objects.filter(id=old_overdue.id).update(created_at=timezone.now() - timedelta(days=45))
+
+    all_period = contribution_dashboard(workspace=workspace, period="all")
+    month_period = contribution_dashboard(workspace=workspace, period="month")
+
+    assert all_period["total_expected"] == Decimal("15000.00")
+    assert all_period["total_collected"] == Decimal("5000.00")
+    assert all_period["total_remaining"] == Decimal("10000.00")
+    assert all_period["members_concerned"] == 2
+    assert all_period["members_partial"] == 1
+    assert all_period["members_overdue"] == 1
+    assert month_period["total_expected"] == partial.amount_due
+    assert month_period["total_collected"] == partial.amount_paid
+    assert month_period["members_concerned"] == 1
 
 
 @pytest.mark.django_db

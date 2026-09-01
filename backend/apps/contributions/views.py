@@ -36,6 +36,7 @@ from .services import (
     member_recovery_summary,
     overdue_days,
     overdue_queryset,
+    period_bounds,
     recovery_settings,
     render_reminder_template,
     upcoming_due,
@@ -172,6 +173,16 @@ class ContributionViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(status=self.request.query_params["status"])
         if self.request.query_params.get("campaign"):
             queryset = queryset.filter(campaign_id=self.request.query_params["campaign"])
+        if self.request.query_params.get("category"):
+            queryset = queryset.filter(member__category_id=self.request.query_params["category"])
+        if self.request.query_params.get("group"):
+            queryset = queryset.filter(member__groups__id=self.request.query_params["group"])
+        if self.request.query_params.get("payment_method"):
+            queryset = queryset.filter(payments__payment_method=self.request.query_params["payment_method"]).distinct()
+        period = self.request.query_params.get("period")
+        start, end, _previous_start, _previous_end = period_bounds(period)
+        if start and end:
+            queryset = queryset.filter(created_at__date__gte=start, created_at__date__lte=end)
         if self.request.query_params.get("member"):
             queryset = queryset.filter(member_id=self.request.query_params["member"])
         if self.request.query_params.get("due_before"):
@@ -196,7 +207,14 @@ class ContributionViewSet(viewsets.ModelViewSet):
 
     @decorators.action(detail=False, methods=["get"])
     def dashboard(self, request):
-        return response.Response(contribution_dashboard(workspace=current_workspace(request), period=request.query_params.get("period")))
+        campaign = request.query_params.get("campaign")
+        return response.Response(
+            contribution_dashboard(
+                workspace=current_workspace(request),
+                period=request.query_params.get("period"),
+                campaign_id=int(campaign) if campaign else None,
+            )
+        )
 
     @decorators.action(detail=False, methods=["get"])
     def analytics(self, request):
@@ -205,6 +223,7 @@ class ContributionViewSet(viewsets.ModelViewSet):
                 workspace=current_workspace(request),
                 period=request.query_params.get("period", "month"),
                 range_code=request.query_params.get("range", "30d"),
+                campaign_id=int(request.query_params["campaign"]) if request.query_params.get("campaign") else None,
             )
         )
 
