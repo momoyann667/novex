@@ -1,5 +1,7 @@
-from datetime import timedelta
+from calendar import monthrange
+from datetime import date, timedelta
 from decimal import Decimal
+from uuid import uuid4
 
 from django.db import transaction
 from django.db.models import Avg, Count, Q, Sum
@@ -65,7 +67,7 @@ def period_is_closed(workspace: Workspace, transaction_date) -> bool:
 
 
 def build_transaction_reference(prefix: str = "FIN") -> str:
-    return f"{prefix}-{timezone.now():%Y}-{timezone.now().timestamp():.0f}"
+    return f"{prefix}-{timezone.now():%Y}-{uuid4().hex[:10].upper()}"
 
 
 @transaction.atomic
@@ -208,6 +210,24 @@ def validate_expense(*, transaction_obj: FinancialTransaction, actor) -> Financi
 
 
 @transaction.atomic
+def reject_expense(*, transaction_obj: FinancialTransaction, actor, reason: str = "") -> FinancialTransaction:
+    transaction_obj = FinancialTransaction.objects.select_for_update().get(id=transaction_obj.id)
+    if transaction_obj.transaction_type != FinancialTransactionType.EXPENSE:
+        raise ValueError("Seules les depenses peuvent etre refusees par ce flux.")
+    if transaction_obj.status == FinancialTransactionStatus.VALIDATED:
+        raise ValueError("Une depense validee doit etre corrigee par ajustement.")
+    if period_is_closed(transaction_obj.workspace, transaction_obj.transaction_date):
+        raise ValueError("La periode comptable est cloturee.")
+    transaction_obj.status = FinancialTransactionStatus.REJECTED
+    transaction_obj.cancellation_reason = reason
+    transaction_obj.cancelled_by = actor
+    transaction_obj.cancelled_at = timezone.now()
+    transaction_obj.save(update_fields=["status", "cancellation_reason", "cancelled_by", "cancelled_at", "updated_at"])
+    AuditLog.objects.create(workspace=transaction_obj.workspace, actor=actor, action="expense.rejected", resource="financial_transaction", resource_id=str(transaction_obj.id), metadata={"reason": reason})
+    return transaction_obj
+
+
+@transaction.atomic
 def cancel_transaction(*, transaction_obj: FinancialTransaction, actor, reason: str) -> FinancialTransaction:
     transaction_obj = FinancialTransaction.objects.select_for_update().get(id=transaction_obj.id)
     if period_is_closed(transaction_obj.workspace, transaction_obj.transaction_date):
@@ -220,6 +240,115 @@ def cancel_transaction(*, transaction_obj: FinancialTransaction, actor, reason: 
     action = "income.cancelled" if transaction_obj.transaction_type == FinancialTransactionType.INCOME else "expense.cancelled"
     AuditLog.objects.create(workspace=transaction_obj.workspace, actor=actor, action=action, resource="financial_transaction", resource_id=str(transaction_obj.id), metadata={"reason": reason})
     return transaction_obj
+
+
+def expense_period_bounds(*, year: int | None = None, month: int | None = None) -> tuple[date, date, dict]:
+    today = timezone.localdate()
+    selected_year = year or today.year
+    if month:
+        _, last_day = monthrange(selected_year, month)
+        start = date(selected_year, month, 1)
+        end = date(selected_year, month, last_day)
+        label = f"{selected_year}-{month:02d}"
+    else:
+        start = date(selected_year, 1, 1)
+        end = date(selected_year, 12, 31)
+        label = str(selected_year)
+    return start, end, {"year": selected_year, "month": month, "label": label, "start": start.isoformat(), "end": end.isoformat()}
+
+
+def expense_base_queryset(*, workspace: Workspace, year: int | None = None, month: int | None = None):
+    start, end, _period = expense_period_bounds(year=year, month=month)
+    return FinancialTransaction.objects.filter(
+        workspace=workspace,
+        transaction_type=FinancialTransactionType.EXPENSE,
+        transaction_date__gte=start,
+        transaction_date__lte=end,
+    )
+
+
+def expense_dashboard(*, workspace: Workspace, year: int | None = None, month: int | None = None) -> dict:
+    ensure_default_categories(workspace)
+    queryset = expense_base_queryset(workspace=workspace, year=year, month=month)
+    totals = queryset.exclude(status__in=[FinancialTransactionStatus.CANCELLED, FinancialTransactionStatus.REJECTED]).aggregate(
+        total_expenses=Sum("amount"),
+        pending_amount=Sum("amount", filter=Q(status=FinancialTransactionStatus.PENDING)),
+        pending_count=Count("id", filter=Q(status=FinancialTransactionStatus.PENDING)),
+        approved_amount=Sum("amount", filter=Q(status=FinancialTransactionStatus.VALIDATED)),
+        approved_count=Count("id", filter=Q(status=FinancialTransactionStatus.VALIDATED)),
+    )
+    _start, _end, period = expense_period_bounds(year=year, month=month)
+    if month:
+        month_queryset = queryset
+    else:
+        today = timezone.localdate()
+        month_start = today.replace(day=1) if today.year == period["year"] else date(period["year"], 12, 1)
+        month_queryset = queryset.filter(transaction_date__gte=month_start)
+    monthly_expenses = month_queryset.exclude(status__in=[FinancialTransactionStatus.CANCELLED, FinancialTransactionStatus.REJECTED]).aggregate(total=Sum("amount"))["total"] or ZERO
+    return {
+        "total_expenses": totals["total_expenses"] or ZERO,
+        "monthly_expenses": monthly_expenses,
+        "pending_amount": totals["pending_amount"] or ZERO,
+        "pending_count": totals["pending_count"] or 0,
+        "approved_amount": totals["approved_amount"] or ZERO,
+        "approved_count": totals["approved_count"] or 0,
+        "currency": workspace.currency,
+        "period": period,
+    }
+
+
+def expense_budget_cards(*, workspace: Workspace, year: int | None = None, month: int | None = None) -> list[dict]:
+    from apps.budgets.models import Budget, BudgetAssignment
+    from apps.budgets.statuses import BudgetStatus
+
+    start, end, _period = expense_period_bounds(year=year, month=month)
+    budgets = Budget.objects.filter(workspace=workspace, start_date__lte=end, end_date__gte=start).exclude(status=BudgetStatus.ARCHIVED).select_related("workspace", "project", "event").prefetch_related("lines__category")
+    rows = (
+        BudgetAssignment.objects.filter(
+            workspace=workspace,
+            budget__in=budgets,
+            transaction__transaction_type=FinancialTransactionType.EXPENSE,
+            transaction__status=FinancialTransactionStatus.VALIDATED,
+            transaction__transaction_date__gte=start,
+            transaction__transaction_date__lte=end,
+        )
+        .values("budget_id")
+        .annotate(spent=Sum("transaction__amount"))
+    )
+    spent_by_budget = {row["budget_id"]: row["spent"] or ZERO for row in rows}
+    cards = []
+    for budget in budgets:
+        planned = budget.total_amount
+        spent = spent_by_budget.get(budget.id, ZERO)
+        remaining = planned - spent
+        rate = round((spent / planned) * 100, 2) if planned else Decimal("0.00")
+        if rate > 100:
+            state = "Budget depasse"
+        elif rate >= 80:
+            state = "Presque epuise"
+        elif rate >= 50:
+            state = "A surveiller"
+        elif spent == ZERO:
+            state = "Budget non consomme"
+        else:
+            state = "Normal"
+        cards.append(
+            {
+                "id": budget.id,
+                "name": budget.name,
+                "status": budget.status,
+                "scope_type": budget.scope_type,
+                "category": ", ".join(line.category.name for line in budget.lines.all()[:2]) or "",
+                "budget_total": planned,
+                "spent": spent,
+                "remaining": remaining,
+                "consumption_rate": rate,
+                "overrun": max(spent - planned, ZERO),
+                "state": state,
+                "currency": budget.currency or workspace.currency,
+            }
+        )
+    return cards
 
 
 def finance_totals(queryset) -> dict:

@@ -10,6 +10,7 @@ class FinancialTransactionStatus(models.TextChoices):
     DRAFT = "DRAFT", "Brouillon"
     PENDING = "PENDING", "En attente"
     VALIDATED = "VALIDATED", "Validee"
+    REJECTED = "REJECTED", "Refusee"
     CANCELLED = "CANCELLED", "Annulee"
 
 

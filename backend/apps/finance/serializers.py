@@ -53,6 +53,12 @@ class CostCenterSerializer(serializers.ModelSerializer):
 class FinancialTransactionSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source="category.name", read_only=True)
     budget_line = serializers.PrimaryKeyRelatedField(queryset=BudgetLine.objects.none(), required=False, allow_null=True, write_only=True)
+    budget_id = serializers.SerializerMethodField()
+    budget_name = serializers.SerializerMethodField()
+    budget_line_id = serializers.SerializerMethodField()
+    budget_line_name = serializers.SerializerMethodField()
+    created_by_name = serializers.CharField(source="created_by.get_full_name", read_only=True)
+    documents_count = serializers.IntegerField(source="documents.count", read_only=True)
 
     class Meta:
         model = FinancialTransaction
@@ -77,8 +83,14 @@ class FinancialTransactionSerializer(serializers.ModelSerializer):
             "payment_method",
             "requires_receipt",
             "budget_line",
+            "budget_id",
+            "budget_name",
+            "budget_line_id",
+            "budget_line_name",
             "notes",
             "cancellation_reason",
+            "created_by_name",
+            "documents_count",
             "cancelled_at",
             "created_at",
             "updated_at",
@@ -121,6 +133,28 @@ class FinancialTransactionSerializer(serializers.ModelSerializer):
         if category and transaction_type == FinancialTransactionType.EXPENSE and category.kind != FinancialCategoryKind.EXPENSE_CATEGORY:
             raise serializers.ValidationError({"category": "La categorie doit etre une categorie de depense."})
         return attrs
+
+    def _assignment(self, obj):
+        try:
+            return obj.budget_assignment
+        except Exception:
+            return None
+
+    def get_budget_id(self, obj):
+        assignment = self._assignment(obj)
+        return assignment.budget_id if assignment else None
+
+    def get_budget_name(self, obj):
+        assignment = self._assignment(obj)
+        return assignment.budget.name if assignment else ""
+
+    def get_budget_line_id(self, obj):
+        assignment = self._assignment(obj)
+        return assignment.budget_line_id if assignment else None
+
+    def get_budget_line_name(self, obj):
+        assignment = self._assignment(obj)
+        return assignment.budget_line.category.name if assignment else ""
 
 
 class FinancialDocumentSerializer(serializers.ModelSerializer):

@@ -3,6 +3,8 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.views import APIView
 
 from apps.audit_logs.models import AuditLog
+from apps.budgets.models import BudgetLine
+from apps.budgets.statuses import BudgetStatus
 from common.permissions.workspace import RequireWorkspacePermission
 from .models import CostCenter, FinancialCategory, FinancialTransaction, FiscalPeriod
 from .serializers import (
@@ -14,12 +16,36 @@ from .serializers import (
     FiscalPeriodSerializer,
     TransactionCancelSerializer,
 )
-from .services import attach_transaction_document, cancel_transaction, close_fiscal_period, create_expense, create_income, ensure_default_categories, finance_dashboard, finance_journal, financial_settings, period_is_closed, validate_expense
+from .services import (
+    attach_transaction_document,
+    cancel_transaction,
+    close_fiscal_period,
+    create_expense,
+    create_income,
+    ensure_default_categories,
+    expense_budget_cards,
+    expense_dashboard,
+    finance_dashboard,
+    finance_journal,
+    financial_settings,
+    period_is_closed,
+    reject_expense,
+    validate_expense,
+)
 from .statuses import FinancialCategoryKind, FinancialTransactionStatus, FinancialTransactionType
 
 
 def current_workspace(request):
     return request.user.workspace_memberships.get(workspace__slug=request.headers.get("X-Workspace"), status="active").workspace
+
+
+def period_query_params(request):
+    year = request.query_params.get("year")
+    month = request.query_params.get("month")
+    return {
+        "year": int(year) if year else None,
+        "month": int(month) if month and month != "all" else None,
+    }
 
 
 class FinanceDashboardView(APIView):
@@ -215,12 +241,28 @@ class IncomeViewSet(FinancialTransactionViewSet):
 
 class ExpenseViewSet(FinancialTransactionViewSet):
     def get_permissions(self):
-        if self.action == "create":
-            return [RequireWorkspacePermission.for_permission("finance.create_expense")()]
+        permission_map = {
+            "create": "finance.create_expense",
+            "dashboard": "finance.view",
+            "budgets": "finance.view",
+            "categories": "finance.view",
+            "budget_lines": "finance.view",
+            "reject": "finance.validate_expense",
+        }
+        if self.action in permission_map:
+            return [RequireWorkspacePermission.for_permission(permission_map[self.action])()]
         return super().get_permissions()
 
     def get_queryset(self):
-        return super().get_queryset().filter(transaction_type=FinancialTransactionType.EXPENSE)
+        queryset = super().get_queryset().filter(transaction_type=FinancialTransactionType.EXPENSE).select_related("budget_assignment", "budget_assignment__budget", "budget_assignment__budget_line", "budget_assignment__budget_line__category", "created_by").prefetch_related("documents")
+        params = period_query_params(self.request)
+        if params["year"]:
+            queryset = queryset.filter(transaction_date__year=params["year"])
+        if params["month"]:
+            queryset = queryset.filter(transaction_date__month=params["month"])
+        if self.request.query_params.get("budget"):
+            queryset = queryset.filter(budget_assignment__budget_id=self.request.query_params["budget"])
+        return queryset
 
     def create(self, request, *args, **kwargs):
         data = request.data.copy()
@@ -232,6 +274,53 @@ class ExpenseViewSet(FinancialTransactionViewSet):
         except ValueError as exc:
             return response.Response({"message": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return response.Response(self.get_serializer(transaction_obj).data, status=status.HTTP_201_CREATED)
+
+    @decorators.action(detail=False, methods=["get"])
+    def dashboard(self, request):
+        return response.Response(expense_dashboard(workspace=current_workspace(request), **period_query_params(request)))
+
+    @decorators.action(detail=False, methods=["get"])
+    def budgets(self, request):
+        return response.Response(expense_budget_cards(workspace=current_workspace(request), **period_query_params(request)))
+
+    @decorators.action(detail=False, methods=["get"], url_path="categories")
+    def categories(self, request):
+        workspace = current_workspace(request)
+        ensure_default_categories(workspace, actor=request.user)
+        queryset = FinancialCategory.objects.filter(workspace=workspace, kind=FinancialCategoryKind.EXPENSE_CATEGORY, is_active=True).order_by("name")
+        return response.Response(FinancialCategorySerializer(queryset, many=True).data)
+
+    @decorators.action(detail=False, methods=["get"], url_path="budget-lines")
+    def budget_lines(self, request):
+        from apps.budgets.services import line_summary
+
+        workspace = current_workspace(request)
+        queryset = BudgetLine.objects.filter(workspace=workspace, is_active=True, budget__status=BudgetStatus.ACTIVE).select_related("budget", "category").order_by("budget__name", "category__name")
+        return response.Response(
+            [
+                {
+                    "id": line.id,
+                    "budget_id": line.budget_id,
+                    "budget_name": line.budget.name,
+                    "category_id": line.category_id,
+                    "category_name": line.category.name,
+                    "planned_amount": line.planned_amount,
+                    "currency": line.budget.currency,
+                    "remaining": line_summary(line)["remaining"],
+                }
+                for line in queryset
+            ]
+        )
+
+    @decorators.action(detail=True, methods=["post"])
+    def reject(self, request, pk=None):
+        serializer = TransactionCancelSerializer(data=request.data or {"reason": "Depense refusee"})
+        serializer.is_valid(raise_exception=True)
+        try:
+            transaction_obj = reject_expense(transaction_obj=self.get_object(), actor=request.user, reason=serializer.validated_data["reason"])
+        except ValueError as exc:
+            return response.Response({"message": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(self.get_serializer(transaction_obj).data)
 
 
 class CostCenterViewSet(viewsets.ModelViewSet):

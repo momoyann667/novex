@@ -43,6 +43,7 @@ const moreMobileNav = [
   { label: "Documents", path: "documents", icon: FileText },
   { label: "Paiements", path: "payments", icon: CreditCard },
   { label: "Finances", path: "finance", icon: Wallet },
+  { label: "Depenses", path: "finance/expenses", icon: Wallet },
   { label: "Budgets", path: "budgets", icon: Landmark },
   { label: "Projets", path: "projects", icon: FolderKanban },
   { label: "Rapports", path: "reports", icon: FileText },
