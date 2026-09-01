@@ -6,6 +6,7 @@ import { AlertTriangle, Archive, CheckCircle2, FileText, HardDrive, Lock, Plus, 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
+import { workspacePath } from "@/lib/workspace/routing";
 import { getDocumentAnalytics } from "./api";
 import { DOCUMENT_CATEGORIES } from "./document-status";
 
@@ -42,7 +43,7 @@ export function DocumentDashboardView({ workspaceSlug }: Readonly<{ workspaceSlu
       <PageHeader
         title="Dashboard documents"
         description="Stockage, activite, categories, documents sensibles et validations."
-        actions={<Button asChild><Link href={`/app/${workspaceSlug}/documents/upload`}><Upload className="size-4" /> Upload</Link></Button>}
+        actions={<Button asChild><Link href={workspacePath(workspaceSlug, "documents/upload")}><Upload className="size-4" /> Upload</Link></Button>}
       />
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
         {dashboardKpis.map(([value, label, Icon]) => (
@@ -78,7 +79,7 @@ export function DocumentDashboardView({ workspaceSlug }: Readonly<{ workspaceSlu
         <Card>
           <CardHeader><CardTitle className="text-base text-slate-900">Documents a valider</CardTitle></CardHeader>
           <CardContent className="grid gap-3 text-sm">
-            {analytics?.recent_items.filter((item) => item.status === "pending").map((item) => <div className="flex items-center justify-between rounded-md border border-border p-3" key={item.id}><span>{item.name}</span><Button asChild type="button" variant="outline"><Link href={`/app/${workspaceSlug}/documents/${item.id}`}><CheckCircle2 className="size-4" /> Valider</Link></Button></div>)}
+            {analytics?.recent_items.filter((item) => item.status === "pending").map((item) => <div className="flex items-center justify-between rounded-md border border-border p-3" key={item.id}><span>{item.name}</span><Button asChild type="button" variant="outline"><Link href={workspacePath(workspaceSlug, `documents/${item.id}`)}><CheckCircle2 className="size-4" /> Valider</Link></Button></div>)}
             {!analytics?.recent_items.filter((item) => item.status === "pending").length ? <div className="rounded-md border border-border p-3 text-slate-500">Aucun document en attente.</div> : null}
             <Button type="button" variant="outline"><Plus className="size-4" /> Ajouter une demande</Button>
           </CardContent>

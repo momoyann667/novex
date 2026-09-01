@@ -3,6 +3,7 @@
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, ImagePlus, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { isInvalidWorkspaceSlug } from "@/lib/workspace/routing";
 
 export type WorkspaceProfile = {
   country: string;
@@ -23,7 +24,7 @@ const defaultProfile: WorkspaceProfile = {
 };
 
 function isValidWorkspaceSlug(workspaceSlug: string) {
-  return Boolean(workspaceSlug && workspaceSlug !== "undefined" && workspaceSlug !== "null");
+  return !isInvalidWorkspaceSlug(workspaceSlug);
 }
 
 function storageKey(workspaceSlug: string) {

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileSpreadsheet, FileText, Folder, FolderArchive, FolderLock, MoreVertical, Plus, Search, SlidersHorizontal, Star } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { workspacePath } from "@/lib/workspace/routing";
 import { createFolder, getDocumentAnalytics, listDocuments, listFolders } from "./api";
 import type { DocumentResource } from "./api";
 
@@ -119,7 +120,7 @@ export function DocumentsView({ workspaceSlug }: Readonly<{ workspaceSlug: strin
             <button className="text-sm font-black text-blue-700" type="button" onClick={() => setShowFolderForm((current) => !current)}>
               Creer un dossier
             </button>
-            <Link className="text-sm font-black text-blue-700" href={`/app/${workspaceSlug}/documents/dashboard`}>
+            <Link className="text-sm font-black text-blue-700" href={workspacePath(workspaceSlug, "documents/dashboard")}>
               Voir tout
             </Link>
           </div>
@@ -155,7 +156,7 @@ export function DocumentsView({ workspaceSlug }: Readonly<{ workspaceSlug: strin
           })}
           {!folders.length ? <div className="w-full rounded-lg bg-white p-4 text-sm text-slate-500 shadow-sm ring-1 ring-slate-200">{foldersQuery.isLoading ? "Chargement des dossiers..." : "Aucun dossier."}</div> : null}
         </div>
-        <Link className="mt-4 flex min-h-14 items-center justify-center gap-3 rounded-xl bg-blue-700 px-4 text-sm font-black text-white shadow-lg shadow-blue-700/20" href={`/app/${workspaceSlug}/documents/upload`}>
+        <Link className="mt-4 flex min-h-14 items-center justify-center gap-3 rounded-xl bg-blue-700 px-4 text-sm font-black text-white shadow-lg shadow-blue-700/20" href={workspacePath(workspaceSlug, "documents/upload")}>
           <span className="grid size-8 place-items-center rounded-full bg-white/15">
             <Plus className="size-5" />
           </span>
@@ -166,7 +167,7 @@ export function DocumentsView({ workspaceSlug }: Readonly<{ workspaceSlug: strin
       <section className="mb-7">
         <h2 className="mb-3 text-xl font-black tracking-normal">En evidence</h2>
         {featured ? (
-          <Link className="relative block overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200" href={`/app/${workspaceSlug}/documents/${featured.id}`}>
+          <Link className="relative block overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200" href={workspacePath(workspaceSlug, `documents/${featured.id}`)}>
             <div className="grid h-36 place-items-center bg-slate-200">
               <div className="h-28 w-28 rounded-sm bg-white/70 p-3 text-[7px] leading-3 text-slate-400">
                 {featured.name}
@@ -195,7 +196,7 @@ export function DocumentsView({ workspaceSlug }: Readonly<{ workspaceSlug: strin
           {recentDocuments.map((document) => {
             const Icon = fileIcon(document.file_type);
             return (
-              <Link className="flex min-h-16 items-center gap-3 rounded-xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-200" href={`/app/${workspaceSlug}/documents/${document.id}`} key={document.id}>
+              <Link className="flex min-h-16 items-center gap-3 rounded-xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-200" href={workspacePath(workspaceSlug, `documents/${document.id}`)} key={document.id}>
                 <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700">
                   <Icon className="size-5" />
                 </span>

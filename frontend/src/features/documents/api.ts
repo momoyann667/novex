@@ -1,4 +1,5 @@
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { isInvalidWorkspaceSlug } from "@/lib/workspace/routing";
 
 export type DocumentCategory =
   | "administrative"
@@ -128,6 +129,10 @@ export type DocumentFilters = {
 };
 
 function workspaceHeaders(workspaceSlug: string) {
+  if (isInvalidWorkspaceSlug(workspaceSlug)) {
+    throw new ApiError("Workspace invalide. Reconnecte-toi pour ouvrir ton association.", 400);
+  }
+
   return { "X-Workspace": workspaceSlug };
 }
 

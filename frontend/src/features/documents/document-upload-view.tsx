@@ -7,6 +7,7 @@ import { ArrowLeft, Camera, CheckCircle2, FileUp, Image, RotateCcw, ShieldCheck,
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
+import { workspacePath } from "@/lib/workspace/routing";
 import { listFolders, uploadDocument } from "./api";
 import { DOCUMENT_CATEGORIES } from "./document-status";
 
@@ -103,7 +104,7 @@ export function DocumentUploadView({ workspaceSlug }: Readonly<{ workspaceSlug: 
         actions={
           <>
             <Button asChild className="rounded-xl" type="button" variant="outline">
-              <Link href={`/app/${workspaceSlug}/documents`}><ArrowLeft className="size-4" /> Retour</Link>
+              <Link href={workspacePath(workspaceSlug, "documents")}><ArrowLeft className="size-4" /> Retour</Link>
             </Button>
             <Button className="rounded-xl bg-blue-700 px-5 text-white hover:bg-blue-800" type="button" disabled={!pendingItems.length || mutation.isPending} onClick={sendQueue}><UploadCloud className="size-4" /> Envoyer</Button>
           </>

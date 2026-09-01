@@ -6,6 +6,7 @@ import { useState, type ReactNode } from "react";
 import { Bell, Bot, Calendar, CreditCard, FileText, FolderKanban, Home, Landmark, Menu, MessageSquare, Search, Settings, Users, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { isInvalidWorkspaceSlug, workspacePath } from "@/lib/workspace/routing";
 
 const nav = [
   { label: "Dashboard", path: "dashboard", icon: Home, permission: "dashboard.view" },
@@ -51,8 +52,12 @@ const moreMobileNav = [
 export function AssociationShell({ children, workspaceSlug }: Readonly<{ children: ReactNode; workspaceSlug: string }>) {
   const pathname = usePathname();
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const hasInvalidWorkspace = isInvalidWorkspaceSlug(workspaceSlug);
 
   function isActive(path: string) {
+    if (hasInvalidWorkspace) {
+      return false;
+    }
     return pathname === `/app/${workspaceSlug}/${path}` || pathname.startsWith(`/app/${workspaceSlug}/${path}/`);
   }
 
@@ -72,7 +77,7 @@ export function AssociationShell({ children, workspaceSlug }: Readonly<{ childre
           {nav.map(({ label, path, icon: Icon }) => (
             <Link
               className={`flex min-h-10 items-center gap-3 rounded-md px-3 text-sm ${isActive(path) ? "bg-blue-50 font-semibold text-blue-700" : "text-slate-700 hover:bg-slate-100"}`}
-              href={`/app/${workspaceSlug}/${path}`}
+              href={workspacePath(workspaceSlug, path)}
               key={path}
             >
               <Icon className="size-4" />
@@ -89,7 +94,7 @@ export function AssociationShell({ children, workspaceSlug }: Readonly<{ childre
             </Button>
             <div>
               <strong>Association active</strong>
-              <div className="text-xs text-slate-500">Workspace: {workspaceSlug}</div>
+              <div className="text-xs text-slate-500">Workspace: {hasInvalidWorkspace ? "invalide" : workspaceSlug}</div>
             </div>
           </div>
           <div className="hidden min-w-72 items-center gap-2 rounded-md border border-border bg-white px-3 py-2 text-sm text-slate-500 lg:flex">
@@ -116,7 +121,7 @@ export function AssociationShell({ children, workspaceSlug }: Readonly<{ childre
               {moreMobileNav.map(({ label, path, icon: Icon }) => (
                 <Link
                   className={`grid min-h-20 place-items-center rounded-lg border px-2 text-center text-xs font-black ${isActive(path) ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-700"}`}
-                  href={`/app/${workspaceSlug}/${path}`}
+                  href={workspacePath(workspaceSlug, path)}
                   key={path}
                   onClick={() => setShowMoreMenu(false)}
                 >
@@ -131,7 +136,7 @@ export function AssociationShell({ children, workspaceSlug }: Readonly<{ childre
 
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-border bg-white px-1 pb-[env(safe-area-inset-bottom)] shadow-[0_-10px_30px_rgba(15,23,42,0.08)] md:hidden">
         {primaryMobileNav.map(([label, path, Icon]) => (
-          <Link className={`grid min-h-16 place-items-center rounded-md text-[10px] font-bold ${isActive(path) ? "text-blue-700" : "text-slate-600"}`} href={`/app/${workspaceSlug}/${path}`} key={path}>
+          <Link className={`grid min-h-16 place-items-center rounded-md text-[10px] font-bold ${isActive(path) ? "text-blue-700" : "text-slate-600"}`} href={workspacePath(workspaceSlug, path)} key={path}>
             <span className={`grid size-8 place-items-center rounded-md ${isActive(path) ? "bg-blue-50" : ""}`}>
               <Icon className="size-5" />
             </span>

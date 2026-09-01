@@ -6,6 +6,7 @@ import { Archive, Clock3, Download, Eye, FileText, Folder, GitBranch, Lock, Rota
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
+import { workspacePath } from "@/lib/workspace/routing";
 import { archiveDocument, downloadDocument, getDocument, getDocumentActivity, getDocumentVersions, restoreDocument, restoreDocumentVersion, trashDocument } from "./api";
 import { DOCUMENT_CATEGORIES, statusTone } from "./document-status";
 
@@ -127,10 +128,10 @@ export function DocumentDetailView({ documentId, workspaceSlug }: Readonly<{ doc
           <Card>
             <CardHeader><CardTitle className="text-base text-slate-900">Relations</CardTitle></CardHeader>
             <CardContent className="grid gap-2 text-sm">
-              {document?.project ? <Link className="rounded-md border border-border p-3 hover:bg-slate-50" href={`/app/${workspaceSlug}/projects/${document.project}`}>Projet associe: {document.project_name || document.project}</Link> : null}
-              {document?.event ? <Link className="rounded-md border border-border p-3 hover:bg-slate-50" href={`/app/${workspaceSlug}/events/${document.event}`}>Evenement associe: {document.event_name || document.event}</Link> : null}
-              {document?.financial_transaction ? <Link className="rounded-md border border-border p-3 hover:bg-slate-50" href={`/app/${workspaceSlug}/finance`}>Transaction associee: #{document.financial_transaction}</Link> : null}
-              {document?.member ? <Link className="rounded-md border border-border p-3 hover:bg-slate-50" href={`/app/${workspaceSlug}/members/${document.member}`}>Membre associe: {document.member_name || document.member}</Link> : null}
+              {document?.project ? <Link className="rounded-md border border-border p-3 hover:bg-slate-50" href={workspacePath(workspaceSlug, `projects/${document.project}`)}>Projet associe: {document.project_name || document.project}</Link> : null}
+              {document?.event ? <Link className="rounded-md border border-border p-3 hover:bg-slate-50" href={workspacePath(workspaceSlug, `events/${document.event}`)}>Evenement associe: {document.event_name || document.event}</Link> : null}
+              {document?.financial_transaction ? <Link className="rounded-md border border-border p-3 hover:bg-slate-50" href={workspacePath(workspaceSlug, "finance")}>Transaction associee: #{document.financial_transaction}</Link> : null}
+              {document?.member ? <Link className="rounded-md border border-border p-3 hover:bg-slate-50" href={workspacePath(workspaceSlug, `members/${document.member}`)}>Membre associe: {document.member_name || document.member}</Link> : null}
               {!document?.project && !document?.event && !document?.financial_transaction && !document?.member ? <div className="rounded-md border border-border p-3 text-slate-500">Aucune relation associee.</div> : null}
             </CardContent>
           </Card>
