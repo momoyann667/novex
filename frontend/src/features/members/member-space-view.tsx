@@ -5,23 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CalendarDays, CheckCircle2, CreditCard, Download, Edit3, FileText, IdCard, QrCode } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { currentMemberProfile } from "./current-member-profile";
 
 type Tab = "profile" | "contributions" | "payments" | "attendance" | "events" | "documents" | "history";
 
-const profile = {
-  firstName: "Mohamed",
-  lastName: "Tangora",
-  fullName: "Mohamed Tangora",
-  function: "Membre",
-  status: "Actif",
-  membershipNumber: "NOV-000125",
-  joinedAt: "2026-01-12",
-  phone: "+225 07 18 42 90 10",
-  email: "mohamed.tangora@example.com",
-  occupation: "",
-  city: "Abidjan",
-  completion: 83
-};
+const profile = currentMemberProfile;
 
 const association = {
   name: "NOVEX",

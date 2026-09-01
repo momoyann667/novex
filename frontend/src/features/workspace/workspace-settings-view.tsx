@@ -17,6 +17,7 @@ import {
   Users
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { currentMemberProfile } from "@/features/members/current-member-profile";
 import { getWorkspaceSettings, updateWorkspaceSettings, type WorkspaceSettingsResource, type WorkspaceSettingsUpdatePayload } from "./api";
 
 type SettingsSection = "association" | "members" | "finance" | "users" | "security" | "subscription";
@@ -63,12 +64,12 @@ const defaultSettings: WorkspaceSettingsResource = {
 };
 
 const settingsRows: Array<{ id: SettingsSection; title: string; subtitle: string; icon: typeof Building2 }> = [
-  { id: "association", title: "Association", subtitle: "Name, logo, currency", icon: Building2 },
-  { id: "members", title: "Members", subtitle: "Categories, status rules", icon: Users },
-  { id: "finance", title: "Finance", subtitle: "Accounts, payment methods", icon: CreditCard },
-  { id: "users", title: "Users", subtitle: "Roles, permissions", icon: Users },
-  { id: "security", title: "Security", subtitle: "Password, 2FA", icon: ShieldCheck },
-  { id: "subscription", title: "Subscription", subtitle: "Plan, billing", icon: Star }
+  { id: "association", title: "Association", subtitle: "Nom, logo, devise", icon: Building2 },
+  { id: "members", title: "Membres", subtitle: "Categories, statuts", icon: Users },
+  { id: "finance", title: "Finance", subtitle: "Comptes, paiements", icon: CreditCard },
+  { id: "users", title: "Utilisateurs", subtitle: "Roles, permissions", icon: Users },
+  { id: "security", title: "Securite", subtitle: "Mot de passe, 2FA", icon: ShieldCheck },
+  { id: "subscription", title: "Abonnement", subtitle: "Plan, facturation", icon: Star }
 ];
 
 function boolSetting(source: Record<string, unknown>, key: string) {
@@ -181,7 +182,7 @@ export function WorkspaceSettingsView({ workspaceSlug }: Readonly<{ workspaceSlu
         <button className="flex size-9 items-center justify-center rounded-full text-slate-700" type="button" onClick={() => (activeSection ? setActiveSection(null) : router.back())} aria-label="Retour">
           <ArrowLeft className="size-5" />
         </button>
-        <h1 className="text-center text-sm font-black">{activeSection ? sectionTitle(activeSection) : "Settings"}</h1>
+        <h1 className="text-center text-sm font-black">{activeSection ? sectionTitle(activeSection) : "Parametres"}</h1>
         <span />
       </header>
 
@@ -200,11 +201,15 @@ export function WorkspaceSettingsView({ workspaceSlug }: Readonly<{ workspaceSlu
           <section className="mt-5 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-center gap-3">
               <div className="size-14 overflow-hidden rounded-full bg-slate-200">
-                <img className="size-full object-cover" src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=80" alt="Admin" />
+                {currentMemberProfile.photoUrl ? (
+                  <img className="size-full object-cover" src={currentMemberProfile.photoUrl} alt={currentMemberProfile.fullName} />
+                ) : (
+                  <div className="grid size-full place-items-center bg-[#0f2347] text-sm font-black text-white">{currentMemberProfile.initials}</div>
+                )}
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="truncate text-base font-black">Admin User</h2>
-                <p className="truncate text-xs font-semibold text-slate-500">{form.primary_contact_email || form.profile.contact_email || "admin@novex.com"}</p>
+                <h2 className="truncate text-base font-black">{currentMemberProfile.fullName}</h2>
+                <p className="truncate text-xs font-semibold text-slate-500">{currentMemberProfile.email}</p>
                 <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700">
                   <span className="size-2 rounded-full bg-emerald-500" />
                   En ligne
@@ -236,7 +241,7 @@ export function WorkspaceSettingsView({ workspaceSlug }: Readonly<{ workspaceSlu
 
           <button className="mt-6 flex min-h-14 w-full items-center justify-center gap-2 rounded-lg bg-red-100 text-sm font-black text-red-700" type="button" onClick={signOut} disabled={isSigningOut}>
             <LogOut className="size-4" />
-            {isSigningOut ? "Deconnexion..." : "Sign Out"}
+            {isSigningOut ? "Deconnexion..." : "Se deconnecter"}
           </button>
 
           <p className="mt-8 text-center text-[10px] font-bold text-slate-400">NOVEX v2.4.1</p>
@@ -273,7 +278,7 @@ export function WorkspaceSettingsView({ workspaceSlug }: Readonly<{ workspaceSlu
 
           {activeSection === "members" ? (
             <div className={cardClass}>
-              <h2 className="text-lg font-black">Members</h2>
+              <h2 className="text-lg font-black">Membres</h2>
               <div className="mt-4 grid gap-3">
                 <label className="flex min-h-12 items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 text-sm font-black">Validation manuelle<input className="size-5 accent-blue-700" type="checkbox" checked={boolSetting(form.member_preferences, "manual_approval")} onChange={(event) => updateJson("member_preferences", "manual_approval", event.target.checked)} /></label>
                 <p className="rounded-md bg-slate-50 p-3 text-xs font-bold text-slate-500">Les categories et statuts seront relies au module Gestion des membres.</p>
@@ -293,7 +298,7 @@ export function WorkspaceSettingsView({ workspaceSlug }: Readonly<{ workspaceSlu
 
           {activeSection === "users" ? (
             <div className={cardClass}>
-              <h2 className="text-lg font-black">Users</h2>
+              <h2 className="text-lg font-black">Utilisateurs</h2>
               <div className="mt-4 grid gap-3">
                 {[["in_app", "Notification in-app"], ["email", "Email"], ["sms", "SMS"], ["whatsapp", "WhatsApp"]].map(([key, label]) => (
                   <label className="flex min-h-12 items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 text-sm font-black" key={key}>
@@ -307,9 +312,9 @@ export function WorkspaceSettingsView({ workspaceSlug }: Readonly<{ workspaceSlu
 
           {activeSection === "security" ? (
             <div className={cardClass}>
-              <h2 className="text-lg font-black">Security</h2>
+              <h2 className="text-lg font-black">Securite</h2>
               <div className="mt-4 grid gap-3 text-sm font-semibold text-slate-600">
-                <p>Password gere au niveau du compte utilisateur.</p>
+                <p>Mot de passe gere au niveau du compte utilisateur.</p>
                 <p>2FA: {boolSetting(form.security_preferences, "two_factor_available") ? "Disponible" : "Non configure"}</p>
                 <p>Sessions: {boolSetting(form.security_preferences, "session_review_available") ? "Disponible" : "Non configure"}</p>
               </div>
@@ -318,7 +323,7 @@ export function WorkspaceSettingsView({ workspaceSlug }: Readonly<{ workspaceSlu
 
           {activeSection === "subscription" ? (
             <div className={cardClass}>
-              <h2 className="text-lg font-black">Subscription</h2>
+              <h2 className="text-lg font-black">Abonnement</h2>
               <div className="mt-4 grid gap-3">
                 <div className="rounded-md bg-slate-50 p-3 text-sm font-bold">Plan: {form.subscription?.plan_name || "Freemium"}</div>
                 <div className="rounded-md bg-slate-50 p-3 text-sm font-bold">Statut: {form.subscription?.status || "active"}</div>
@@ -337,5 +342,5 @@ export function WorkspaceSettingsView({ workspaceSlug }: Readonly<{ workspaceSlu
 }
 
 function sectionTitle(section: SettingsSection) {
-  return settingsRows.find((row) => row.id === section)?.title || "Settings";
+  return settingsRows.find((row) => row.id === section)?.title || "Parametres";
 }
