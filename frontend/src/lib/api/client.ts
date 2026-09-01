@@ -46,7 +46,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
       headers
     });
   } catch {
-    throw new ApiError("Backend indisponible. Lance Django sur le port 8002 puis reessaie.", 503);
+    throw new ApiError("Backend indisponible. Verifie que Django tourne sur http://127.0.0.1:8002.", 503);
   }
 
   if (!response.ok) {

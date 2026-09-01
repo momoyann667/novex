@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
+import { backendApiBaseUrl, backendUnavailableMessage } from "@/lib/api/server";
 
-const apiBaseUrl = process.env.BACKEND_API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8002/api/v1";
+const apiBaseUrl = backendApiBaseUrl();
 
 export async function POST(request: Request) {
   const body = await request.text();
@@ -23,10 +24,10 @@ export async function POST(request: Request) {
 
     const text = await response.text();
     return NextResponse.json({ message: text || "Une erreur est survenue." }, { status: response.status });
-  } catch {
+  } catch (error) {
     return NextResponse.json(
       {
-        message: "Backend indisponible. Lance le serveur Django sur le port 8002 puis reessaie."
+        message: backendUnavailableMessage(error)
       },
       { status: 503 }
     );
