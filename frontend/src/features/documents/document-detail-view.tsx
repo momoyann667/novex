@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, Clock3, Download, Eye, FileText, Folder, GitBranch, Lock, RotateCcw, Share2, ShieldCheck, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
 import { workspacePath } from "@/lib/workspace/routing";
-import { archiveDocument, downloadDocument, getDocument, getDocumentActivity, getDocumentVersions, restoreDocument, restoreDocumentVersion, trashDocument } from "./api";
+import { archiveDocument, downloadDocument, getDocument, getDocumentActivity, getDocumentVersions, previewDocument, restoreDocument, restoreDocumentVersion, trashDocument } from "./api";
 import { DOCUMENT_CATEGORIES, statusTone } from "./document-status";
 
 const statusLabels: Record<string, string> = {
@@ -38,6 +39,8 @@ function categoryLabel(category?: string) {
 
 export function DocumentDetailView({ documentId, workspaceSlug }: Readonly<{ documentId: string; workspaceSlug: string }>) {
   const queryClient = useQueryClient();
+  const [preview, setPreview] = useState<{ url: string; contentType: string } | null>(null);
+  const [previewError, setPreviewError] = useState("");
   const documentQuery = useQuery({
     queryKey: ["document", workspaceSlug, documentId],
     queryFn: () => getDocument(workspaceSlug, documentId)
@@ -53,6 +56,31 @@ export function DocumentDetailView({ documentId, workspaceSlug }: Readonly<{ doc
 
   const document = documentQuery.data;
   const versions = versionsQuery.data || [];
+
+  useEffect(() => {
+    let objectUrl = "";
+    setPreview(null);
+    setPreviewError("");
+
+    if (!document) {
+      return undefined;
+    }
+
+    previewDocument(workspaceSlug, documentId)
+      .then((result) => {
+        objectUrl = result.url;
+        setPreview(result);
+      })
+      .catch((error) => {
+        setPreviewError(error instanceof Error ? error.message : "Apercu impossible.");
+      });
+
+    return () => {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [document, documentId, workspaceSlug]);
 
   async function refreshDocument() {
     await queryClient.invalidateQueries({ queryKey: ["document", workspaceSlug, documentId] });
@@ -101,11 +129,17 @@ export function DocumentDetailView({ documentId, workspaceSlug }: Readonly<{ doc
           <CardHeader><CardTitle className="flex items-center gap-2 text-base text-slate-900"><Eye className="size-4" /> Apercu securise</CardTitle></CardHeader>
           <CardContent>
             <div className="grid min-h-[520px] place-items-center rounded-md border border-dashed border-border bg-slate-50 text-center">
+              {preview?.contentType.startsWith("image/") ? (
+                <img alt={document?.name || "Document"} className="max-h-[520px] w-full rounded-md object-contain" src={preview.url} />
+              ) : preview?.contentType.includes("pdf") || preview?.contentType.startsWith("text/") ? (
+                <iframe className="h-[520px] w-full rounded-md bg-white" src={preview.url} title={document?.name || "Apercu document"} />
+              ) : (
               <div>
                 <FileText className="mx-auto size-14 text-blue-700" />
-                <strong className="mt-4 block">Apercu PDF / image / TXT</strong>
+                <strong className="mt-4 block">{previewError || "Apercu PDF / image / TXT"}</strong>
                 <p className="mt-2 max-w-md text-sm text-slate-500">{documentQuery.isLoading ? "Chargement du document..." : "Le fichier prive reste accessible uniquement apres controle du workspace, de la visibilite et des permissions."}</p>
               </div>
+              )}
             </div>
           </CardContent>
         </Card>

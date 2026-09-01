@@ -293,6 +293,24 @@ export async function downloadDocument(workspaceSlug: string, documentId: string
   URL.revokeObjectURL(url);
 }
 
+export async function previewDocument(workspaceSlug: string, documentId: string) {
+  const baseUrl = "/api/backend";
+  const response = await fetch(`${baseUrl}/documents/${documentId}/preview/`, {
+    credentials: "include",
+    headers: workspaceHeaders(workspaceSlug)
+  });
+
+  if (!response.ok) {
+    throw new ApiError(response.status === 415 ? "Apercu non disponible pour ce format." : "Apercu impossible.", response.status);
+  }
+
+  const blob = await response.blob();
+  return {
+    url: URL.createObjectURL(blob),
+    contentType: response.headers.get("content-type") || blob.type
+  };
+}
+
 export async function exportDocuments(workspaceSlug: string) {
   const baseUrl = "/api/backend";
   const response = await fetch(`${baseUrl}/documents/export/`, {

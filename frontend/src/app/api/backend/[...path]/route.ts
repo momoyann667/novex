@@ -43,14 +43,21 @@ async function proxy(request: Request, context: RouteContext) {
       cache: "no-store"
     });
     const contentType = response.headers.get("content-type") || "";
-    const payload = contentType.includes("application/json") ? await response.json() : await response.text();
+    const payload = contentType.includes("application/json") ? await response.json() : await response.arrayBuffer();
     const nextResponse = contentType.includes("application/json")
       ? NextResponse.json(payload, { status: response.status })
       : new NextResponse(payload, { status: response.status });
     const setCookie = response.headers.get("set-cookie");
+    const contentDisposition = response.headers.get("content-disposition");
 
     if (setCookie) {
       nextResponse.headers.set("set-cookie", setCookie);
+    }
+    if (contentType) {
+      nextResponse.headers.set("content-type", contentType);
+    }
+    if (contentDisposition) {
+      nextResponse.headers.set("content-disposition", contentDisposition);
     }
 
     return nextResponse;

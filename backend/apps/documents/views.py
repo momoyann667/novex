@@ -135,6 +135,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
             "partial_update": "documents.update",
             "destroy": "documents.delete",
             "download": "documents.download",
+            "preview": "documents.view",
             "archive": "documents.archive",
             "restore": "documents.restore",
             "versions": "documents.manage_versions",
@@ -201,6 +202,16 @@ class DocumentViewSet(viewsets.ModelViewSet):
             raise Http404("Fichier introuvable.")
         record_access(document=document, actor=request.user, action=DocumentActivityAction.DOWNLOADED)
         return FileResponse(document.file.open("rb"), as_attachment=True, filename=document.original_filename or document.name)
+
+    @decorators.action(detail=True, methods=["get"])
+    def preview(self, request, pk=None):
+        document = self.get_object()
+        if not document.file or document.status in {DocumentStatus.TRASH, DocumentStatus.ARCHIVED}:
+            raise Http404("Apercu indisponible.")
+        if document.mime_type not in {"application/pdf", "image/jpeg", "image/png", "image/webp", "text/plain", "text/csv"}:
+            return response.Response({"message": "Apercu non disponible pour ce format."}, status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
+        record_access(document=document, actor=request.user, action=DocumentActivityAction.DOWNLOADED)
+        return FileResponse(document.file.open("rb"), as_attachment=False, filename=document.original_filename or document.name, content_type=document.mime_type)
 
     @decorators.action(detail=True, methods=["post"])
     def archive(self, request, pk=None):
@@ -329,4 +340,3 @@ class DocumentViewSet(viewsets.ModelViewSet):
     @decorators.action(detail=True, methods=["get"])
     def activity(self, request, pk=None):
         return response.Response(DocumentActivitySerializer(self.get_object().activities.order_by("-created_at")[:100], many=True).data)
-
