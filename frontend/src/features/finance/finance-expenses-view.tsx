@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Banknote, CheckCircle2, ChevronLeft, ChevronRight, Eye, FileText, Loader2, Plus, RotateCcw, Search, ShieldCheck, X, XCircle } from "lucide-react";
+import { AlertTriangle, Banknote, CheckCircle2, ChevronLeft, ChevronRight, Download, Eye, FileText, Loader2, Plus, RotateCcw, Search, ShieldCheck, SlidersHorizontal, TrendingDown, X, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
 import { cn } from "@/lib/utils";
 import {
@@ -62,6 +62,14 @@ const paymentMethods = [
 function money(value: string | number | undefined, currency = "FCFA") {
   const amount = Number(value ?? 0);
   return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(amount)} ${currency === "XOF" ? "FCFA" : currency}`;
+}
+
+function compactMoney(value: string | number | undefined, currency = "FCFA") {
+  const amount = Number(value ?? 0);
+  const suffix = currency === "XOF" ? "FCFA" : currency;
+  if (Math.abs(amount) >= 1000000) return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 }).format(amount / 1000000)}M ${suffix}`;
+  if (Math.abs(amount) >= 1000) return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(amount / 1000)}K ${suffix}`;
+  return money(amount, suffix);
 }
 
 function dateLabel(value: string | null | undefined) {
@@ -273,11 +281,13 @@ export function FinanceExpensesView({ workspaceSlug }: Readonly<{ workspaceSlug:
   const dashboard = dashboardQuery.data;
   const currency = dashboard?.currency ?? "FCFA";
   const totalPages = Math.max(1, Math.ceil((expensesQuery.data?.count ?? 0) / 4));
+  const budgetTotal = budgetsQuery.data?.reduce((sum, item) => sum + Number(item.budget_total || 0), 0) ?? 0;
+  const monthlyBudgetRate = budgetTotal > 0 ? Math.round((Number(dashboard?.monthly_expenses || 0) / budgetTotal) * 100) : null;
   const kpis = [
-    ["Total depenses", money(dashboard?.total_expenses, currency), "Periode selectionnee", Banknote],
-    [month === "all" ? "Depenses de l'annee" : "Depenses du mois", money(dashboard?.monthly_expenses, currency), dashboard?.period.label ?? "", FileText],
-    ["En attente d'approbation", money(dashboard?.pending_amount, currency), `${dashboard?.pending_count ?? 0} demandes en attente`, AlertTriangle],
-    ["Depenses validees", money(dashboard?.approved_amount, currency), `${dashboard?.approved_count ?? 0} depenses approuvees`, ShieldCheck]
+    ["Total Depenses (YTD)", compactMoney(dashboard?.total_expenses, currency), dashboard?.period.label ?? "", TrendingDown, "text-emerald-700"],
+    ["Depenses du mois", compactMoney(dashboard?.monthly_expenses, currency), monthlyBudgetRate === null ? "Budget non defini" : `${monthlyBudgetRate}% du budget`, Banknote, "text-blue-700"],
+    ["En attente d'approbation", compactMoney(dashboard?.pending_amount, currency), `${dashboard?.pending_count ?? 0} requetes`, AlertTriangle, "text-blue-700"],
+    ["Depenses Validees (Mois)", compactMoney(dashboard?.approved_amount, currency), `${dashboard?.approved_count ?? 0} approuvees`, ShieldCheck, "text-emerald-700"]
   ] as const;
 
   return (
@@ -300,19 +310,100 @@ export function FinanceExpensesView({ workspaceSlug }: Readonly<{ workspaceSlug:
         </Button>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {dashboardQuery.isLoading ? [1, 2, 3, 4].map((item) => <SkeletonCard key={item} />) : kpis.map(([label, value, sub, Icon]) => (
-          <Card key={label}>
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between gap-3">
-                <CardTitle>{label}</CardTitle>
-                <Icon className="size-5 text-blue-700" />
+      <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        {dashboardQuery.isLoading ? [1, 2, 3, 4].map((item) => <SkeletonCard key={item} />) : kpis.map(([label, value, sub, Icon, tone]) => (
+          <Card className="rounded-md" key={label}>
+            <CardContent className="p-4">
+              <CardTitle className="text-[11px] font-semibold leading-tight text-slate-600">{label}</CardTitle>
+              <div className="mt-3 text-2xl font-black tracking-normal text-slate-950">{value}</div>
+              <div className="mt-3 flex items-center gap-2 text-[11px] font-bold text-slate-500">
+                <Icon className={cn("size-4", tone)} />
+                {sub}
               </div>
-              <div className="mt-4 text-3xl font-black tracking-normal text-slate-950">{value}</div>
-              <p className="mt-2 text-sm font-medium text-slate-500">{sub}</p>
             </CardContent>
           </Card>
         ))}
+      </section>
+
+      <section className="overflow-hidden rounded-md border border-border bg-white shadow-sm">
+        <div className="flex items-center justify-between gap-3 p-4">
+          <div>
+            <h2 className="text-lg font-black leading-tight text-slate-950">Historique des transactions</h2>
+          </div>
+          <div className="flex gap-2">
+            <button className="grid size-10 place-items-center rounded-md border border-border text-slate-700" type="button" aria-label="Filtrer les depenses">
+              <SlidersHorizontal className="size-4" />
+            </button>
+            <button className="grid size-10 place-items-center rounded-md border border-border text-slate-700" type="button" aria-label="Exporter les depenses">
+              <Download className="size-4" />
+            </button>
+          </div>
+        </div>
+        <div className="grid gap-3 border-y border-border bg-slate-50 p-3 md:grid-cols-5">
+          <label className="flex min-h-10 items-center gap-2 rounded-md border border-border bg-white px-3 md:col-span-2">
+            <Search className="size-4 text-slate-400" />
+            <input className="w-full bg-transparent text-sm outline-none" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Rechercher une depense..." />
+          </label>
+          <select className="min-h-10 rounded-md border border-border bg-white px-3 text-sm outline-none" value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}>
+            <option value="">Tous les statuts</option>
+            {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+          <select className="min-h-10 rounded-md border border-border bg-white px-3 text-sm outline-none" value={category} onChange={(event) => { setCategory(event.target.value); setPage(1); }}>
+            <option value="">Toutes categories</option>
+            {categoriesQuery.data?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+          <select className="min-h-10 rounded-md border border-border bg-white px-3 text-sm outline-none" value={budget} onChange={(event) => { setBudget(event.target.value); setPage(1); }}>
+            <option value="">Tous budgets</option>
+            {budgetsQuery.data?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        </div>
+        {expensesQuery.error ? <div className="border-b border-red-100 bg-red-50 p-4 text-sm font-bold text-red-700">{expensesQuery.error.message}</div> : null}
+        <table className="w-full table-fixed text-left">
+          <thead className="text-[10px] font-black uppercase tracking-normal text-slate-500">
+            <tr>
+              <th className="w-[28%] px-3 py-3">Date</th>
+              <th className="w-[46%] px-3 py-3">Description</th>
+              <th className="w-[26%] px-3 py-3 text-right">Montant</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border text-xs">
+            {expensesQuery.isLoading ? [1, 2, 3, 4].map((item) => (
+              <tr key={item}>
+                <td className="px-3 py-5"><div className="h-3 w-14 animate-pulse rounded bg-slate-100" /></td>
+                <td className="px-3 py-5"><div className="h-3 w-28 animate-pulse rounded bg-slate-100" /></td>
+                <td className="px-3 py-5"><div className="ml-auto h-3 w-16 animate-pulse rounded bg-slate-100" /></td>
+              </tr>
+            )) : null}
+            {!expensesQuery.isLoading && !expensesQuery.data?.results.length ? (
+              <tr>
+                <td className="px-3 py-10 text-center text-sm font-semibold text-slate-500" colSpan={3}>Aucune transaction trouvee.</td>
+              </tr>
+            ) : null}
+            {expensesQuery.data?.results.map((expense) => (
+              <tr className="align-top" key={expense.id}>
+                <td className="px-3 py-4 font-medium text-slate-700">{dateLabel(expense.transaction_date)}</td>
+                <td className="px-3 py-4">
+                  <button className="block w-full text-left" type="button" onClick={() => setSelectedExpense(expense)}>
+                    <span className="line-clamp-2 font-black leading-tight text-slate-950">{expense.description}</span>
+                    <span className="mt-1 block line-clamp-1 text-[11px] font-medium text-slate-500">{expense.budget_name || expense.category_name || "Sans budget"}</span>
+                  </button>
+                </td>
+                <td className="px-3 py-4 text-right font-black text-slate-950">{money(expense.amount, expense.currency)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="flex items-center justify-between border-t border-border p-3">
+          <span className="text-[11px] font-medium text-slate-500">Affichage {expensesQuery.data?.count ? `${(page - 1) * 4 + 1}-${Math.min(page * 4, expensesQuery.data.count)}` : "0"} sur {expensesQuery.data?.count ?? 0}</span>
+          <div className="flex gap-1">
+            <button className="grid size-9 place-items-center rounded-md text-slate-500 disabled:opacity-40" disabled={page <= 1} type="button" aria-label="Page precedente" onClick={() => setPage((value) => Math.max(1, value - 1))}>
+              <ChevronLeft className="size-4" />
+            </button>
+            <button className="grid size-9 place-items-center rounded-md text-slate-700 disabled:opacity-40" disabled={page >= totalPages} type="button" aria-label="Page suivante" onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>
+              <ChevronRight className="size-4" />
+            </button>
+          </div>
+        </div>
       </section>
 
       <section className="grid gap-3">
@@ -352,78 +443,6 @@ export function FinanceExpensesView({ workspaceSlug }: Readonly<{ workspaceSlug:
               </Link>
             );
           })}
-        </div>
-      </section>
-
-      <section className="grid gap-3 pb-24">
-        <div>
-          <h2 className="text-lg font-black text-slate-950">Historique des depenses</h2>
-          <p className="text-sm text-slate-500">4 depenses par page, avec filtres conserves pendant la navigation.</p>
-        </div>
-        <div className="grid gap-3 rounded-card border border-border bg-white p-4 shadow-sm md:grid-cols-5">
-          <label className="flex min-h-11 items-center gap-2 rounded-md border border-border px-3 md:col-span-2">
-            <Search className="size-4 text-slate-400" />
-            <input className="w-full bg-transparent text-sm outline-none" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Rechercher une depense..." />
-          </label>
-          <select className="min-h-11 rounded-md border border-border bg-white px-3 text-sm outline-none" value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}>
-            <option value="">Tous les statuts</option>
-            {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
-          <select className="min-h-11 rounded-md border border-border bg-white px-3 text-sm outline-none" value={category} onChange={(event) => { setCategory(event.target.value); setPage(1); }}>
-            <option value="">Toutes categories</option>
-            {categoriesQuery.data?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select>
-          <select className="min-h-11 rounded-md border border-border bg-white px-3 text-sm outline-none" value={budget} onChange={(event) => { setBudget(event.target.value); setPage(1); }}>
-            <option value="">Tous budgets</option>
-            {budgetsQuery.data?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select>
-        </div>
-        {expensesQuery.error ? <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">{expensesQuery.error.message}</div> : null}
-        {expensesQuery.isLoading ? <div className="grid gap-3">{[1, 2, 3, 4].map((item) => <SkeletonCard key={item} />)}</div> : null}
-        {!expensesQuery.isLoading && !expensesQuery.data?.results.length ? (
-          <Card><CardContent className="grid place-items-center p-10 text-center"><FileText className="size-9 text-blue-700" /><h3 className="mt-3 font-black">Aucune depense enregistree</h3><p className="mt-1 text-sm text-slate-500">Vous pourrez creer votre premiere depense avec le bouton +.</p></CardContent></Card>
-        ) : null}
-        <div className="grid gap-3 lg:hidden">
-          {expensesQuery.data?.results.map((expense) => (
-            <Card key={expense.id}>
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="truncate font-black text-slate-950">{expense.description}</h3>
-                    <p className="text-sm text-slate-500">{expense.budget_name || "Sans budget"} - {dateLabel(expense.transaction_date)}</p>
-                  </div>
-                  <span className={cn("rounded-md border px-2 py-1 text-xs font-bold", statusTone(expense.status))}>{statusLabels[expense.status]}</span>
-                </div>
-                <div className="mt-4 flex items-center justify-between">
-                  <strong className="text-xl text-slate-950">{money(expense.amount, expense.currency)}</strong>
-                  <Button type="button" variant="outline" onClick={() => setSelectedExpense(expense)}><Eye className="size-4" /> Voir</Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-        <div className="hidden overflow-hidden rounded-card border border-border bg-white shadow-sm lg:block">
-          <table className="w-full table-fixed text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr>{["Intitule", "Budget", "Montant", "Date", "Createur", "Statut", "Actions"].map((item) => <th className="px-4 py-3" key={item}>{item}</th>)}</tr></thead>
-            <tbody>
-              {expensesQuery.data?.results.map((expense) => (
-                <tr className="border-t border-border" key={expense.id}>
-                  <td className="truncate px-4 py-4 font-bold">{expense.description}</td>
-                  <td className="truncate px-4 py-4">{expense.budget_name || "Sans budget"}</td>
-                  <td className="px-4 py-4 font-black">{money(expense.amount, expense.currency)}</td>
-                  <td className="px-4 py-4">{dateLabel(expense.transaction_date)}</td>
-                  <td className="truncate px-4 py-4">{expense.created_by_name || "NOVEX"}</td>
-                  <td className="px-4 py-4"><span className={cn("rounded-md border px-2 py-1 text-xs font-bold", statusTone(expense.status))}>{statusLabels[expense.status]}</span></td>
-                  <td className="px-4 py-4"><Button type="button" variant="outline" onClick={() => setSelectedExpense(expense)}><Eye className="size-4" /> Detail</Button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="flex items-center justify-between rounded-card border border-border bg-white p-3">
-          <Button disabled={page <= 1} type="button" variant="outline" onClick={() => setPage((value) => Math.max(1, value - 1))}><ChevronLeft className="size-4" /> Precedent</Button>
-          <span className="text-sm font-black text-slate-700">Page {page} / {totalPages}</span>
-          <Button disabled={page >= totalPages} type="button" variant="outline" onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Suivant <ChevronRight className="size-4" /></Button>
         </div>
       </section>
 
