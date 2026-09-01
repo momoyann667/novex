@@ -272,7 +272,7 @@ export function EventsView({ workspaceSlug }: Readonly<{ workspaceSlug: string }
         </div>
 
         <div className="mt-4 grid grid-cols-7 gap-y-2 text-center text-xs font-black text-blue-900">
-          {["L", "M", "M", "J", "V", "S", "D"].map((day) => <span key={day}>{day}</span>)}
+          {["L", "M", "M", "J", "V", "S", "D"].map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}
         </div>
         <div className="mt-2 grid grid-cols-7 gap-y-2">
           {calendarDays.map(({ day, date, outside }, index) => {

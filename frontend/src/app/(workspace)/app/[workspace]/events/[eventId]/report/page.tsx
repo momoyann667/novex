@@ -1,5 +1,6 @@
 import { EventReportView } from "@/features/events/event-report-view";
 
-export default function EventReportPage({ params }: Readonly<{ params: { workspace: string; eventId: string } }>) {
-  return <EventReportView eventId={params.eventId} workspaceSlug={params.workspace} />;
+export default async function EventReportPage({ params }: Readonly<{ params: Promise<{ workspace: string; eventId: string }> }>) {
+  const { workspace, eventId } = await params;
+  return <EventReportView eventId={eventId} workspaceSlug={workspace} />;
 }

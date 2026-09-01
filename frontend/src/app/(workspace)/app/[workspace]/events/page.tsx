@@ -1,5 +1,6 @@
 import { EventsView } from "@/features/events/events-view";
 
-export default function EventsPage({ params }: Readonly<{ params: { workspace: string } }>) {
-  return <EventsView workspaceSlug={params.workspace} />;
+export default async function EventsPage({ params }: Readonly<{ params: Promise<{ workspace: string }> }>) {
+  const { workspace } = await params;
+  return <EventsView workspaceSlug={workspace} />;
 }
