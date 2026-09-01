@@ -202,6 +202,7 @@ class EventSerializer(serializers.ModelSerializer):
             "code",
             "title",
             "description",
+            "cover_image",
             "event_type",
             "event_type_label",
             "status",

@@ -2,7 +2,8 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CalendarPlus, Save } from "lucide-react";
+import { CalendarPlus, ImagePlus, Save } from "lucide-react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
@@ -59,6 +60,7 @@ function toPayload(values: EventFormValues): EventFormPayload {
 export function EventForm({ workspaceSlug }: Readonly<{ workspaceSlug: string }>) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const [coverImage, setCoverImage] = useState<File | null>(null);
   const form = useForm<EventFormValues>({
     resolver: zodResolver(eventSchema),
     defaultValues: {
@@ -79,7 +81,7 @@ export function EventForm({ workspaceSlug }: Readonly<{ workspaceSlug: string }>
     },
   });
   const mutation = useMutation({
-    mutationFn: (values: EventFormValues) => createEvent(workspaceSlug, toPayload(values)),
+    mutationFn: (values: EventFormValues) => createEvent(workspaceSlug, { ...toPayload(values), cover_image: coverImage }),
     onSuccess: async (event) => {
       await queryClient.invalidateQueries({ queryKey: ["events"] });
       await queryClient.invalidateQueries({ queryKey: ["events-overview", workspaceSlug] });
@@ -105,6 +107,19 @@ export function EventForm({ workspaceSlug }: Readonly<{ workspaceSlug: string }>
           <label className={labelClass}>
             Description
             <textarea className={`${fieldClass} min-h-28 resize-none py-3 leading-5`} placeholder="Decrivez l'objectif et le programme de l'evenement..." {...form.register("description")} />
+          </label>
+          <label className={labelClass}>
+            Image de l'evenement
+            <span className="grid min-h-28 cursor-pointer place-items-center rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center transition hover:border-blue-300 hover:bg-blue-50">
+              <span className="grid justify-items-center gap-2">
+                <span className="grid size-11 place-items-center rounded-full bg-blue-100 text-blue-700">
+                  <ImagePlus className="size-5" />
+                </span>
+                <span className="max-w-full truncate text-sm font-black text-slate-800">{coverImage ? coverImage.name : "Ajouter une image de couverture"}</span>
+                <span className="text-xs font-semibold text-slate-500">JPG, PNG ou WEBP</span>
+              </span>
+              <input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setCoverImage(event.target.files?.[0] ?? null)} />
+            </span>
           </label>
         </div>
       </section>

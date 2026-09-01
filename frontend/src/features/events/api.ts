@@ -52,6 +52,7 @@ export type EventResource = {
   code: string;
   title: string;
   description: string;
+  cover_image: string;
   event_type: EventType;
   event_type_label: string;
   status: EventStatus;
@@ -103,6 +104,7 @@ export type EventFormPayload = {
   recurrence: string;
   registration_required?: boolean;
   registration_deadline?: string | null;
+  cover_image?: File | null;
 };
 
 type Paginated<T> = {
@@ -145,10 +147,20 @@ export async function getEventsOverview(workspaceSlug: string) {
 }
 
 export async function createEvent(workspaceSlug: string, payload: EventFormPayload) {
+  const body = new FormData();
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value === undefined || value === null) return;
+    if (value instanceof File) {
+      body.append(key, value);
+      return;
+    }
+    body.append(key, String(value));
+  });
+
   return apiFetch<EventResource>("/events/", {
     method: "POST",
     headers: workspaceHeaders(workspaceSlug),
-    body: JSON.stringify(payload)
+    body
   });
 }
 

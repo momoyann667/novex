@@ -27,6 +27,7 @@ class Event(models.Model):
     code = models.CharField(max_length=32, blank=True)
     title = models.CharField(max_length=180)
     description = models.TextField(blank=True)
+    cover_image = models.ImageField(upload_to="event-covers/", blank=True)
     event_type = models.CharField(max_length=32, choices=EventType.choices, default=EventType.OTHER)
     status = models.CharField(max_length=24, choices=EventStatus.choices, default=EventStatus.DRAFT)
     visibility = models.CharField(max_length=16, choices=EventVisibility.choices, default=EventVisibility.WORKSPACE)

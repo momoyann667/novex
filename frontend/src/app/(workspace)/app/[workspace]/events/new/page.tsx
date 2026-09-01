@@ -1,5 +1,6 @@
 import { EventNewView } from "@/features/events/event-new-view";
 
-export default function NewEventPage({ params }: Readonly<{ params: { workspace: string } }>) {
-  return <EventNewView workspaceSlug={params.workspace} />;
+export default async function NewEventPage({ params }: Readonly<{ params: Promise<{ workspace: string }> }>) {
+  const { workspace } = await params;
+  return <EventNewView workspaceSlug={workspace} />;
 }

@@ -26,7 +26,8 @@ async function proxy(request: Request, context: RouteContext) {
   const cookieHeader = request.headers.get("cookie") || "";
   const headers = new Headers();
 
-  headers.set("Content-Type", request.headers.get("content-type") || "application/json");
+  const contentType = request.headers.get("content-type");
+  if (contentType) headers.set("Content-Type", contentType);
   if (cookieHeader) headers.set("Cookie", cookieHeader);
   if (request.headers.get("x-workspace")) headers.set("X-Workspace", request.headers.get("x-workspace") || "");
 
@@ -37,7 +38,7 @@ async function proxy(request: Request, context: RouteContext) {
     const response = await fetch(targetUrl, {
       method: request.method,
       headers,
-      body: ["GET", "HEAD"].includes(request.method) ? undefined : await request.text(),
+      body: ["GET", "HEAD"].includes(request.method) ? undefined : await request.arrayBuffer(),
       cache: "no-store"
     });
     const contentType = response.headers.get("content-type") || "";
