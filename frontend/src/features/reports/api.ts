@@ -72,8 +72,7 @@ export function requestReportExport(workspaceSlug: string, reportType: string, p
   });
 }
 
-export function downloadJsonExport(filename: string, payload: unknown) {
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+function saveBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -82,4 +81,87 @@ export function downloadJsonExport(filename: string, payload: unknown) {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+function textValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function escapeHtml(value: unknown): string {
+  return textValue(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function flattenPayload(payload: unknown, prefix = ""): Array<[string, string]> {
+  if (!payload || typeof payload !== "object") {
+    return [[prefix || "valeur", textValue(payload)]];
+  }
+
+  return Object.entries(payload as Record<string, unknown>).flatMap(([key, value]) => {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return flattenPayload(value, path);
+    }
+    return [[path, textValue(value)]];
+  });
+}
+
+function minimalPdf(lines: string[]) {
+  const escapedLines = lines.map((line) =>
+    line
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^\x20-\x7E]/g, "")
+      .replaceAll("\\", "\\\\")
+      .replaceAll("(", "\\(")
+      .replaceAll(")", "\\)")
+  );
+  const content = [
+    "BT",
+    "/F1 18 Tf",
+    "50 790 Td",
+    "(NOVEX - Rapport) Tj",
+    "/F1 10 Tf",
+    "0 -28 Td",
+    ...escapedLines.slice(0, 42).flatMap((line) => [`(${line.slice(0, 95)}) Tj`, "0 -16 Td"]),
+    "ET"
+  ].join("\n");
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(pdf.length);
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xrefOffset = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  offsets.slice(1).forEach((offset) => {
+    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  });
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return pdf;
+}
+
+export function downloadPdfExport(filename: string, payload: unknown) {
+  const lines = flattenPayload(payload).map(([label, value]) => `${label}: ${value}`);
+  saveBlob(filename, new Blob([minimalPdf(lines)], { type: "application/pdf" }));
+}
+
+export function downloadExcelExport(filename: string, payload: unknown) {
+  const rows = flattenPayload(payload)
+    .map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(value)}</td></tr>`)
+    .join("");
+  const workbook = `<!doctype html><html><head><meta charset="utf-8" /></head><body><table><thead><tr><th>Indicateur</th><th>Valeur</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+  saveBlob(filename, new Blob([workbook], { type: "application/vnd.ms-excel;charset=utf-8" }));
 }

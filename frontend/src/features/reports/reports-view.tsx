@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { workspacePath } from "@/lib/workspace/routing";
 import { AnalyticsTable, EmptyAnalyticsState, KpiCard, MetricChart, PeriodFilter, ReportHeader } from "./report-components";
-import { downloadJsonExport, getReportSection, getReportsOverview, requestReportExport } from "./api";
+import { downloadExcelExport, downloadPdfExport, getReportSection, getReportsOverview, requestReportExport } from "./api";
 import type { KpiPayload, PeriodCode, ReportsOverview } from "./api";
 
 const reportTabs = [
@@ -90,7 +90,12 @@ function savedRows(data?: ReportsOverview): string[][] {
 
 function downloadExportPayload(reportType: string, payload: unknown) {
   const today = new Date().toISOString().slice(0, 10);
-  downloadJsonExport(`NOVEX_Rapport_${reportType}_${today}.json`, payload);
+  downloadPdfExport(`NOVEX_Rapport_${reportType}_${today}.pdf`, payload);
+}
+
+function downloadExcelPayload(reportType: string, payload: unknown) {
+  const today = new Date().toISOString().slice(0, 10);
+  downloadExcelExport(`NOVEX_Rapport_${reportType}_${today}.xls`, payload);
 }
 
 function MiniLine({ values, tone = "blue" }: Readonly<{ values: number[]; tone?: "blue" | "emerald" | "slate" }>) {
@@ -174,7 +179,13 @@ export function ReportsView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
   });
   const exportMutation = useMutation({
     mutationFn: (format: "pdf" | "xlsx") => requestReportExport(workspaceSlug, "overview", period, format),
-    onSuccess: (exportRequest) => downloadExportPayload(`global_${exportRequest.export_format}`, exportRequest.result)
+    onSuccess: (exportRequest) => {
+      if (exportRequest.export_format === "xlsx") {
+        downloadExcelPayload("global", exportRequest.result);
+      } else {
+        downloadExportPayload("global", exportRequest.result);
+      }
+    }
   });
   const data = overviewQuery.data;
   const finance = data?.financial;
@@ -184,12 +195,15 @@ export function ReportsView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
   const events = data?.events;
   const performance = data?.performance;
   const cashFlowValues = useMemo(() => seriesValues(nested(finance, "cash_flow") || nested(contributions, "monthly")), [finance, contributions]);
+  const periodLabel = data?.period?.label || "Ce mois";
+  const isRefreshing = overviewQuery.isFetching && !overviewQuery.isLoading;
 
   return (
     <main className="min-h-screen bg-[#f5f7f8] px-4 pb-24 pt-5 text-slate-950">
       <header className="mb-5">
         <h1 className="text-3xl font-black tracking-normal">Rapports</h1>
         <p className="mt-2 text-sm leading-5 text-slate-600">Vue d'ensemble et analyses detaillees de votre association.</p>
+        <p className="mt-2 text-xs font-bold text-blue-700">{isRefreshing ? "Actualisation..." : `Periode active : ${periodLabel}`}</p>
       </header>
 
       <div className="mb-5 grid grid-cols-2 gap-3">
@@ -214,9 +228,9 @@ export function ReportsView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
           iconTone="bg-blue-50 text-blue-700"
           title="Financier"
           subtitle="Bilan et tresorerie"
-          leftLabel="Recettes (YTD)"
+          leftLabel={`Recettes (${periodLabel})`}
           leftValue={formatMoney(nested(finance, "income.value"))}
-          rightLabel="Depenses (YTD)"
+          rightLabel={`Depenses (${periodLabel})`}
           rightValue={formatMoney(nested(finance, "expense.value"))}
         >
           <MiniLine values={cashFlowValues} />
@@ -244,7 +258,7 @@ export function ReportsView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
           subtitle="Croissance et engagement"
           leftLabel="Total actifs"
           leftValue={formatNumber(nested(members, "active_members"))}
-          rightLabel="Nouveaux (Mois)"
+          rightLabel={`Nouveaux (${periodLabel})`}
           rightValue={`+${formatNumber(nested(members, "new_members"))}`}
         >
           <MiniLine values={seriesValues(nested(members, "monthly_growth"), ["count"])} tone="slate" />
