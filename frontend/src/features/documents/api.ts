@@ -272,7 +272,7 @@ export async function restoreDocumentVersion(workspaceSlug: string, documentId: 
 }
 
 export async function downloadDocument(workspaceSlug: string, documentId: string, filename: string) {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "/api/backend";
+  const baseUrl = "/api/backend";
   const response = await fetch(`${baseUrl}/documents/${documentId}/download/`, {
     credentials: "include",
     headers: workspaceHeaders(workspaceSlug)
@@ -294,7 +294,7 @@ export async function downloadDocument(workspaceSlug: string, documentId: string
 }
 
 export async function exportDocuments(workspaceSlug: string) {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "/api/backend";
+  const baseUrl = "/api/backend";
   const response = await fetch(`${baseUrl}/documents/export/`, {
     credentials: "include",
     headers: workspaceHeaders(workspaceSlug)

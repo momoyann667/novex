@@ -33,7 +33,7 @@ function errorMessageFromPayload(payload: unknown): string {
 }
 
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "/api/backend";
+  const baseUrl = "/api/backend";
   const headers = new Headers(init.headers);
   if (!(init.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
