@@ -135,7 +135,7 @@ export function DocumentsView({ workspaceSlug }: Readonly<{ workspaceSlug: strin
             <button className="min-h-11 rounded-lg bg-black px-4 text-sm font-black text-white disabled:opacity-50" disabled={createFolderMutation.isPending || folderName.trim().length < 2} type="button" onClick={submitFolder}>
               Creer
             </button>
-            {createFolderMutation.isError ? <p className="text-xs font-semibold text-red-600">Impossible de creer le dossier.</p> : null}
+            {createFolderMutation.isError ? <p className="text-xs font-semibold text-red-600">{createFolderMutation.error instanceof Error ? createFolderMutation.error.message : "Impossible de creer le dossier."}</p> : null}
           </div>
         ) : null}
         <div className="flex gap-3 overflow-x-auto pb-1">
