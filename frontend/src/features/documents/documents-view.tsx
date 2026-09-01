@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { FileSpreadsheet, FileText, Folder, FolderArchive, FolderLock, MoreVertical, Search, SlidersHorizontal, Star } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { FileSpreadsheet, FileText, Folder, FolderArchive, FolderLock, MoreVertical, Plus, Search, SlidersHorizontal, Star } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { getDocumentAnalytics, listDocuments, listFolders } from "./api";
+import { createFolder, getDocumentAnalytics, listDocuments, listFolders } from "./api";
 import type { DocumentResource } from "./api";
 
 const chips = [
@@ -39,6 +39,9 @@ function shortDate(value: string) {
 export function DocumentsView({ workspaceSlug }: Readonly<{ workspaceSlug: string }>) {
   const [search, setSearch] = useState("");
   const [activeChip, setActiveChip] = useState<(typeof chips)[number]>(chips[0]);
+  const [showFolderForm, setShowFolderForm] = useState(false);
+  const [folderName, setFolderName] = useState("");
+  const queryClient = useQueryClient();
 
   const analyticsQuery = useQuery({
     queryKey: ["document-analytics", workspaceSlug],
@@ -62,6 +65,20 @@ export function DocumentsView({ workspaceSlug }: Readonly<{ workspaceSlug: strin
   const documents = documentsQuery.data || [];
   const featured = documents[0];
   const recentDocuments = featured ? documents.slice(1, 6) : documents.slice(0, 6);
+  const createFolderMutation = useMutation({
+    mutationFn: () => createFolder(workspaceSlug, folderName.trim()),
+    onSuccess: async () => {
+      setFolderName("");
+      setShowFolderForm(false);
+      await queryClient.invalidateQueries({ queryKey: ["document-folders", workspaceSlug] });
+    }
+  });
+
+  function submitFolder() {
+    if (folderName.trim().length > 1) {
+      createFolderMutation.mutate();
+    }
+  }
 
   return (
     <main className="min-h-screen bg-[#f5f7f8] px-4 pb-24 pt-5 text-slate-950">
@@ -98,10 +115,29 @@ export function DocumentsView({ workspaceSlug }: Readonly<{ workspaceSlug: strin
       <section className="mb-7">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-xl font-black tracking-normal">Dossiers</h2>
-          <Link className="text-sm font-black text-blue-700" href={`/app/${workspaceSlug}/documents/dashboard`}>
-            Voir tout
-          </Link>
+          <div className="flex items-center gap-3">
+            <button className="text-sm font-black text-blue-700" type="button" onClick={() => setShowFolderForm((current) => !current)}>
+              Creer un dossier
+            </button>
+            <Link className="text-sm font-black text-blue-700" href={`/app/${workspaceSlug}/documents/dashboard`}>
+              Voir tout
+            </Link>
+          </div>
         </div>
+        {showFolderForm ? (
+          <div className="mb-3 grid gap-2 rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-200">
+            <input
+              className="min-h-11 rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none"
+              placeholder="Nom du dossier"
+              value={folderName}
+              onChange={(event) => setFolderName(event.target.value)}
+            />
+            <button className="min-h-11 rounded-lg bg-black px-4 text-sm font-black text-white disabled:opacity-50" disabled={createFolderMutation.isPending || folderName.trim().length < 2} type="button" onClick={submitFolder}>
+              Creer
+            </button>
+            {createFolderMutation.isError ? <p className="text-xs font-semibold text-red-600">Impossible de creer le dossier.</p> : null}
+          </div>
+        ) : null}
         <div className="flex gap-3 overflow-x-auto pb-1">
           {folders.slice(0, 6).map((folder, index) => {
             const Icon = folderIcon(index);
@@ -119,6 +155,12 @@ export function DocumentsView({ workspaceSlug }: Readonly<{ workspaceSlug: strin
           })}
           {!folders.length ? <div className="w-full rounded-lg bg-white p-4 text-sm text-slate-500 shadow-sm ring-1 ring-slate-200">{foldersQuery.isLoading ? "Chargement des dossiers..." : "Aucun dossier."}</div> : null}
         </div>
+        <Link className="mt-4 flex min-h-14 items-center justify-center gap-3 rounded-xl bg-blue-700 px-4 text-sm font-black text-white shadow-lg shadow-blue-700/20" href={`/app/${workspaceSlug}/documents/upload`}>
+          <span className="grid size-8 place-items-center rounded-full bg-white/15">
+            <Plus className="size-5" />
+          </span>
+          Ajouter des documents
+        </Link>
       </section>
 
       <section className="mb-7">

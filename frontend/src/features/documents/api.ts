@@ -168,6 +168,14 @@ export async function listFolders(workspaceSlug: string) {
   return unwrapList(payload);
 }
 
+export async function createFolder(workspaceSlug: string, name: string) {
+  return apiFetch<DocumentFolder>("/documents/folders/", {
+    method: "POST",
+    headers: workspaceHeaders(workspaceSlug),
+    body: JSON.stringify({ name })
+  });
+}
+
 export async function getDocumentAnalytics(workspaceSlug: string) {
   return apiFetch<DocumentAnalytics>("/documents/analytics/", {
     headers: workspaceHeaders(workspaceSlug),
