@@ -2,21 +2,82 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, Loader2, MessageSquarePlus, Send, ShieldCheck } from "lucide-react";
+import { Bell, Bot, Grid2X2, Loader2, MessageSquarePlus, Paperclip, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createAIConversation, listAIConversations, sendAIMessage, type AIConversation, type AIMessage } from "./api";
 
 const suggestions = [
-  "Combien de membres sont actifs ?",
-  "Resume les finances de l'association.",
-  "Qui est en retard de cotisation ?",
+  "Analyse les depenses",
+  "Membres en retard",
   "Quels sont les prochains evenements ?",
   "Qu'avons-nous cette semaine ?",
-  "Trouve les statuts de l'association."
+  "Resume les finances",
+  "Trouve les statuts"
 ];
 
 function visibleMessages(conversation?: AIConversation): AIMessage[] {
   return (conversation?.messages || []).filter((message) => message.role === "user" || message.role === "assistant");
+}
+
+function formatMoney(value: unknown) {
+  const amount = Number(value || 0);
+  return `${amount.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} FCFA`;
+}
+
+function toolDataFor(message: AIMessage, conversation?: AIConversation) {
+  if (!conversation || message.role !== "assistant") return null;
+  const messageIndex = conversation.messages.findIndex((item) => item.id === message.id);
+  const previousTools = conversation.messages.slice(0, messageIndex).filter((item) => item.role === "tool");
+  return previousTools.at(-1)?.metadata?.data as Record<string, unknown> | undefined;
+}
+
+function AssistantBubble({ item, conversation }: Readonly<{ item: AIMessage; conversation?: AIConversation }>) {
+  const isUser = item.role === "user";
+  const toolData = toolDataFor(item, conversation);
+  const income = Number(toolData?.income || 0);
+  const expense = toolData?.expense;
+  const balance = Number(toolData?.balance || 0);
+  const showFinanceCard = !isUser && expense !== undefined;
+  const chartValues = [income, Number(expense || 0), Math.max(balance, 0)];
+  const maxChartValue = Math.max(...chartValues, 1);
+
+  return (
+    <div className={`flex items-start gap-2 ${isUser ? "justify-end" : "justify-start"}`}>
+      {!isUser ? (
+        <span className="mt-1 grid size-8 shrink-0 place-items-center rounded-full bg-[#0f7ff2] text-white shadow-sm">
+          <Bot className="size-4" />
+        </span>
+      ) : null}
+      <article className={`max-w-[82%] rounded-2xl px-4 py-3 text-[13px] font-semibold leading-5 shadow-sm ${isUser ? "rounded-br-sm bg-[#0863cf] text-white" : "rounded-bl-sm border border-slate-200 bg-white text-slate-800"}`}>
+        <p className="whitespace-pre-line">{item.content}</p>
+        {showFinanceCard ? (
+          <div className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-white p-3 text-slate-950">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase tracking-normal text-slate-500">Total depenses</span>
+              <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-600">Donnees NOVEX</span>
+            </div>
+            <strong className="text-2xl font-black tracking-normal">{formatMoney(expense)}</strong>
+            <div className="rounded-lg border border-slate-100 p-3">
+              <p className="text-[10px] font-black text-slate-500">Synthese financiere</p>
+              <div className="mt-8 flex h-12 items-end justify-around gap-2">
+                {chartValues.map((value, index) => {
+                  const height = Math.max(8, Math.round((value / maxChartValue) * 48));
+                  return (
+                  <span className="w-8 rounded-t bg-blue-100" style={{ height }} key={index} />
+                  );
+                })}
+              </div>
+              <div className="mt-2 grid grid-cols-3 text-center text-[10px] font-black text-slate-600">
+                <span>Rec.</span>
+                <span>Dep.</span>
+                <span>Solde</span>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </article>
+    </div>
+  );
 }
 
 export function AssistantView({ workspaceSlug }: Readonly<{ workspaceSlug: string }>) {
@@ -61,91 +122,51 @@ export function AssistantView({ workspaceSlug }: Readonly<{ workspaceSlug: strin
   }
 
   return (
-    <main className="min-h-screen bg-[#f5f7f8] px-4 pb-28 pt-5 text-slate-950 md:rounded-[28px] md:px-6">
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <p className="inline-flex items-center gap-2 text-xs font-black uppercase text-blue-700">
-            <Bot className="size-4" />
-            Assistant IA
-          </p>
-          <h1 className="mt-2 text-3xl font-black tracking-normal">Assistant NOVEX</h1>
-          <p className="mt-2 max-w-md text-sm font-semibold leading-5 text-slate-600">
-            Posez une question sur vos membres, finances, cotisations, projets, evenements, documents ou rapports.
-          </p>
-        </div>
-        <Button className="hidden min-h-11 px-4 md:inline-flex" type="button" variant="outline" onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
-          <MessageSquarePlus className="size-4" />
-          Nouveau
-        </Button>
+    <main className="min-h-screen bg-[#f6f8fb] pb-24 text-slate-950 md:rounded-[28px]">
+      <header className="sticky top-0 z-10 grid min-h-14 grid-cols-[44px_1fr_44px] items-center border-b border-slate-200 bg-[#f8fafc]/95 px-3 backdrop-blur">
+        <button className="grid size-9 place-items-center rounded-full text-slate-700" type="button" aria-label="Menu">
+          <Grid2X2 className="size-4" />
+        </button>
+        <strong className="text-center text-xs font-black tracking-normal">NOVEX</strong>
+        <button className="grid size-9 place-items-center rounded-full text-slate-700" type="button" aria-label="Notifications">
+          <Bell className="size-4" />
+        </button>
       </header>
 
-      <section className="mt-5 rounded-lg border border-slate-200 bg-slate-950 p-4 text-white shadow-sm">
-        <div className="flex items-start gap-3">
-          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-blue-700">
-            <ShieldCheck className="size-5" />
-          </span>
-          <div>
-            <h2 className="text-lg font-black">IA securisee et contextualisee</h2>
-            <p className="mt-1 text-sm font-semibold leading-6 text-white/75">
-              Les reponses utilisent uniquement les outils read-only autorises pour ce workspace. Aucune action sensible n'est executee sans confirmation.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section className="mt-5 grid gap-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-black">Conversation</h2>
-          <Button className="min-h-10 px-3 md:hidden" type="button" variant="outline" onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
+      <section className="mx-auto grid max-w-md gap-4 px-3 py-4 md:max-w-2xl">
+        <div className="flex justify-end">
+          <Button className="min-h-9 rounded-full px-3 text-xs" type="button" variant="outline" onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
             <MessageSquarePlus className="size-4" />
             Nouveau
           </Button>
         </div>
 
-        {conversations.length > 1 ? (
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {conversations.slice(0, 8).map((conversation) => (
-              <button
-                className={`min-h-10 shrink-0 rounded-md border px-3 text-xs font-black ${activeConversation?.id === conversation.id ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600"}`}
-                key={conversation.id}
-                type="button"
-                onClick={() => setConversationId(conversation.id)}
-              >
-                {conversation.title}
-              </button>
-            ))}
-          </div>
-        ) : null}
-
-        <div className="grid min-h-[360px] content-end gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="grid min-h-[calc(100vh-230px)] content-start gap-4">
           {conversationsQuery.isLoading ? (
-            <p className="text-center text-sm font-bold text-slate-500">Chargement de l'assistant...</p>
+            <p className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-500 shadow-sm">Chargement de l'assistant...</p>
           ) : messages.length ? (
-            messages.map((item) => (
-              <article className={`max-w-[88%] rounded-lg px-4 py-3 text-sm font-semibold leading-6 ${item.role === "user" ? "ml-auto bg-blue-700 text-white" : "bg-slate-100 text-slate-800"}`} key={item.id}>
-                {item.content}
-              </article>
-            ))
+            messages.map((item) => <AssistantBubble item={item} conversation={activeConversation} key={item.id} />)
           ) : (
-            <div className="grid gap-3 text-center">
-              <span className="mx-auto grid size-14 place-items-center rounded-full bg-blue-50 text-blue-700">
-                <Bot className="size-7" />
+            <div className="flex items-start gap-2">
+              <span className="mt-1 grid size-8 shrink-0 place-items-center rounded-full bg-[#0f7ff2] text-white shadow-sm">
+                <Bot className="size-4" />
               </span>
-              <h3 className="text-xl font-black">Comment puis-je vous aider ?</h3>
-              <p className="text-sm font-semibold text-slate-500">Choisissez une suggestion ou posez une question precise.</p>
+              <div className="max-w-[82%] rounded-2xl rounded-bl-sm border border-slate-200 bg-white px-4 py-3 text-[13px] font-semibold leading-5 text-slate-800 shadow-sm">
+                Bonjour, je suis l'assistant NOVEX. Comment puis-je vous aider aujourd'hui ?
+              </div>
             </div>
           )}
           {sendMutation.isPending ? (
-            <p className="inline-flex items-center gap-2 text-sm font-bold text-blue-700">
+            <p className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-2 text-xs font-black text-blue-700">
               <Loader2 className="size-4 animate-spin" />
-              Analyse des donnees NOVEX...
+              Analyse des donnees...
             </p>
           ) : null}
         </div>
 
         <div className="flex gap-2 overflow-x-auto pb-1">
           {suggestions.map((item) => (
-            <button className="min-h-10 shrink-0 rounded-full border border-slate-200 bg-white px-3 text-xs font-black text-slate-700" key={item} type="button" onClick={() => submit(item)}>
+            <button className="min-h-8 shrink-0 rounded-full border border-blue-100 bg-white px-3 text-[11px] font-black text-blue-700 shadow-sm" key={item} type="button" onClick={() => submit(item)}>
               {item}
             </button>
           ))}
@@ -156,19 +177,22 @@ export function AssistantView({ workspaceSlug }: Readonly<{ workspaceSlug: strin
             Impossible de contacter l'assistant IA pour le moment.
           </p>
         ) : null}
-
-        <form className="sticky bottom-20 grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-sm md:bottom-0" onSubmit={(event) => { event.preventDefault(); submit(); }}>
-          <input
-            className="min-h-12 min-w-0 rounded-md bg-slate-50 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-100"
-            placeholder="Ex: Resume les depenses du mois..."
-            value={message}
-            onChange={(event) => setMessage(event.target.value)}
-          />
-          <Button className="min-h-12 px-4" type="submit" disabled={sendMutation.isPending || !message.trim()} aria-label="Envoyer">
-            <Send className="size-5" />
-          </Button>
-        </form>
       </section>
+
+      <form className="fixed inset-x-0 bottom-20 z-20 mx-auto grid max-w-md grid-cols-[34px_minmax(0,1fr)_42px] items-center gap-2 border-t border-slate-200 bg-white/95 px-3 py-2 shadow-[0_-12px_28px_rgba(15,23,42,0.08)] backdrop-blur md:bottom-0 md:max-w-2xl md:rounded-t-2xl md:border md:border-slate-200" onSubmit={(event) => { event.preventDefault(); submit(); }}>
+        <button className="grid size-8 place-items-center rounded-full bg-slate-100 text-slate-500" type="button" aria-label="Joindre un fichier">
+          <Paperclip className="size-4" />
+        </button>
+        <input
+          className="min-h-10 min-w-0 rounded-full bg-slate-100 px-4 text-sm font-semibold outline-none placeholder:text-slate-500 focus:ring-2 focus:ring-blue-100"
+          placeholder="Posez une question..."
+          value={message}
+          onChange={(event) => setMessage(event.target.value)}
+        />
+        <Button className="grid size-10 place-items-center rounded-full bg-[#0863cf] p-0 text-white" type="submit" disabled={sendMutation.isPending || !message.trim()} aria-label="Envoyer">
+          <Send className="size-5" />
+        </Button>
+      </form>
     </main>
   );
 }
