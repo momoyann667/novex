@@ -1,3 +1,5 @@
+import json
+
 from rest_framework import serializers
 
 from .models import OrganizationProfile, Workspace, WorkspaceSettings
@@ -34,6 +36,29 @@ class WorkspaceSettingsSerializer(serializers.ModelSerializer):
     description = serializers.CharField(source="workspace.description", required=False, allow_blank=True)
     profile = OrganizationProfileSerializer(source="workspace.organization_profile", required=False)
     subscription = serializers.SerializerMethodField()
+
+    def to_internal_value(self, data):
+        if hasattr(data, "copy"):
+            data = data.copy()
+        for key in [
+            "profile",
+            "money_format",
+            "finance_preferences",
+            "contribution_preferences",
+            "notification_preferences",
+            "member_preferences",
+            "project_preferences",
+            "event_preferences",
+            "document_preferences",
+            "security_preferences",
+        ]:
+            value = data.get(key) if hasattr(data, "get") else None
+            if isinstance(value, str):
+                try:
+                    data[key] = json.loads(value)
+                except json.JSONDecodeError as exc:
+                    raise serializers.ValidationError({key: "JSON invalide."}) from exc
+        return super().to_internal_value(data)
 
     class Meta:
         model = WorkspaceSettings
@@ -108,6 +133,34 @@ class WorkspaceSettingsSerializer(serializers.ModelSerializer):
         allowed = {"Africa/Abidjan", "UTC", "Europe/Paris"}
         if value not in allowed:
             raise serializers.ValidationError("Timezone non supportee.")
+        return value
+
+    def validate_money_format(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Format monetaire invalide.")
+        decimals = value.get("decimals", 0)
+        if not isinstance(decimals, int) or decimals < 0 or decimals > 4:
+            raise serializers.ValidationError("Le nombre de decimales doit etre compris entre 0 et 4.")
+        symbol_position = value.get("symbol_position", "after")
+        if symbol_position not in {"before", "after"}:
+            raise serializers.ValidationError("La position du symbole est invalide.")
+        return value
+
+    def validate_member_preferences(self, value):
+        return self._validate_preferences(value, ["categories", "statuses", "groups", "functions", "custom_fields"])
+
+    def validate_finance_preferences(self, value):
+        return self._validate_preferences(value, ["expense_categories", "revenue_categories", "payment_methods", "accounts"])
+
+    def _validate_preferences(self, value, list_keys):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Preferences invalides.")
+        for key in list_keys:
+            items = value.get(key)
+            if items is None:
+                continue
+            if not isinstance(items, list) or any(not isinstance(item, str) or len(item) > 120 for item in items):
+                raise serializers.ValidationError({key: "La liste contient une valeur invalide."})
         return value
 
     def update(self, instance, validated_data):

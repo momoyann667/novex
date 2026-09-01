@@ -77,6 +77,44 @@ def test_workspace_settings_reject_invalid_currency(api_client, django_user_mode
 
 
 @pytest.mark.django_db
+def test_workspace_settings_persist_member_and_finance_preferences(api_client, django_user_model):
+    workspace, owner = make_workspace(django_user_model, "settings-preferences")
+    api_client.force_authenticate(owner)
+
+    response = api_client.patch(
+        f"/api/v1/workspaces/{workspace.slug}/settings/",
+        {
+            "member_preferences": {"categories": ["Membre actif"], "functions": ["Tresorier"]},
+            "finance_preferences": {"expense_categories": ["Transport"], "payment_methods": ["Wave"]},
+            "money_format": {"symbol": "FCFA", "symbol_position": "after", "decimals": 0},
+        },
+        format="json",
+        HTTP_X_WORKSPACE=workspace.slug,
+    )
+
+    workspace.settings.refresh_from_db()
+    assert response.status_code == 200
+    assert workspace.settings.member_preferences["functions"] == ["Tresorier"]
+    assert workspace.settings.finance_preferences["payment_methods"] == ["Wave"]
+    assert workspace.settings.money_format["symbol"] == "FCFA"
+
+
+@pytest.mark.django_db
+def test_workspace_settings_reject_invalid_preferences(api_client, django_user_model):
+    workspace, owner = make_workspace(django_user_model, "settings-invalid-preferences")
+    api_client.force_authenticate(owner)
+
+    response = api_client.patch(
+        f"/api/v1/workspaces/{workspace.slug}/settings/",
+        {"member_preferences": {"categories": [{"name": "Membre"}]}},
+        format="json",
+        HTTP_X_WORKSPACE=workspace.slug,
+    )
+
+    assert response.status_code == 400
+
+
+@pytest.mark.django_db
 def test_user_cannot_update_another_workspace_settings(api_client, django_user_model):
     workspace, _owner = make_workspace(django_user_model, "settings-a")
     other_workspace, other_owner = make_workspace(django_user_model, "settings-b")
