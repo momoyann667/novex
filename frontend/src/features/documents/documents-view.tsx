@@ -2,46 +2,138 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, BarChart3, CheckCircle2, Clock3, Download, Eye, File, FileImage, FileSpreadsheet, FileText, Filter, Folder, Grid2X2, HardDrive, History, List, Lock, Plus, Search, Share2, Star, Trash2, Upload } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
+import { archiveDocument, downloadDocument, exportDocuments, getDocumentAnalytics, listDocuments, listFolders, restoreDocument, trashDocument } from "./api";
+import type { DocumentCategory, DocumentResource, DocumentStatus } from "./api";
 import { DOCUMENT_CATEGORIES, DOCUMENT_STATUSES, DOCUMENT_VIEWS, statusTone } from "./document-status";
 
-const kpis = [
-  ["1 284", "Documents totaux", FileText],
-  ["46", "Recents", Clock3],
-  ["128", "Partages", Share2],
-  ["312", "Archives", Archive],
-  ["18", "A valider", CheckCircle2],
-  ["76", "Favoris", Star],
-  ["2.4 GB", "Espace utilise", HardDrive],
-  ["7.6 GB", "Disponible", HardDrive],
-] as const;
+const categoryColors: Record<DocumentCategory, string> = {
+  administrative: "bg-blue-700",
+  financial: "bg-emerald-600",
+  members: "bg-rose-600",
+  contributions: "bg-sky-600",
+  project: "bg-indigo-600",
+  event: "bg-cyan-600",
+  legal: "bg-amber-500",
+  report: "bg-violet-600",
+  communication: "bg-teal-600",
+  other: "bg-slate-600",
+};
 
-const categoryStats = [
-  ["Administratif", "286", "480 MB", "bg-blue-700"],
-  ["Financier", "342", "860 MB", "bg-emerald-600"],
-  ["Projets", "208", "420 MB", "bg-indigo-600"],
-  ["Evenements", "166", "380 MB", "bg-cyan-600"],
-  ["Juridique", "74", "190 MB", "bg-amber-500"],
-  ["Membres", "118", "260 MB", "bg-rose-600"],
-  ["Rapports", "52", "110 MB", "bg-violet-600"],
-  ["Autres", "38", "90 MB", "bg-slate-600"],
-] as const;
+const statusLabels: Record<DocumentStatus, string> = {
+  draft: "Brouillon",
+  pending: "A valider",
+  active: "Actif",
+  approved: "Approuve",
+  rejected: "Rejete",
+  archived: "Archive",
+  trash: "Corbeille",
+};
 
-const folders = ["Administration", "Finances", "Membres", "Cotisations", "Projets", "Evenements", "Rapports", "Juridique", "Communication", "Archives"];
+function categoryLabel(category: string) {
+  return DOCUMENT_CATEGORIES.find((item) => item.value === category)?.label || "Autres";
+}
 
-const rows = [
-  { id: "doc-2026-001", name: "PV assemblee generale 2026.pdf", type: "PDF", size: "2.8 MB", author: "Awa Kone", date: "30 Aout 2026", status: "A valider", category: "Administratif", icon: FileText, sensitive: false },
-  { id: "doc-2026-002", name: "Facture ciment centre communautaire.pdf", type: "PDF", size: "640 KB", author: "Yao Kouame", date: "29 Aout 2026", status: "Actif", category: "Financier", icon: FileText, sensitive: true },
-  { id: "doc-2026-003", name: "Budget gala annuel.xlsx", type: "XLSX", size: "1.2 MB", author: "Mariam Traore", date: "28 Aout 2026", status: "Approuve", category: "Evenements", icon: FileSpreadsheet, sensitive: false },
-  { id: "doc-2026-004", name: "Affiche formation tresorerie.png", type: "PNG", size: "4.6 MB", author: "Ibrahima Diallo", date: "27 Aout 2026", status: "Actif", category: "Communication", icon: FileImage, sensitive: false },
-] as const;
+function fileIcon(type: string): LucideIcon {
+  if (["jpg", "jpeg", "png", "webp"].includes(type.toLowerCase())) return FileImage;
+  if (["xls", "xlsx", "csv"].includes(type.toLowerCase())) return FileSpreadsheet;
+  if (["pdf", "doc", "docx", "txt"].includes(type.toLowerCase())) return FileText;
+  return File;
+}
+
+function formatBytes(bytes = 0) {
+  if (!bytes) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / 1024 ** index).toFixed(index ? 1 : 0)} ${units[index]}`;
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
+}
+
+function viewToApi(view: (typeof DOCUMENT_VIEWS)[number]) {
+  if (view === "Archives") return "archives";
+  if (view === "Corbeille") return "trash";
+  if (view === "Favoris") return "favorites";
+  return undefined;
+}
 
 export function DocumentsView({ workspaceSlug }: Readonly<{ workspaceSlug: string }>) {
   const [view, setView] = useState<(typeof DOCUMENT_VIEWS)[number]>("Vue d'ensemble");
   const [visualMode, setVisualMode] = useState<"list" | "grid">("list");
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("");
+  const [status, setStatus] = useState("");
+  const [visibility, setVisibility] = useState("");
+  const [folder, setFolder] = useState("");
+  const queryClient = useQueryClient();
+
+  const analyticsQuery = useQuery({
+    queryKey: ["document-analytics", workspaceSlug],
+    queryFn: () => getDocumentAnalytics(workspaceSlug)
+  });
+  const foldersQuery = useQuery({
+    queryKey: ["document-folders", workspaceSlug],
+    queryFn: () => listFolders(workspaceSlug)
+  });
+  const documentsQuery = useQuery({
+    queryKey: ["documents", workspaceSlug, view, search, category, status, visibility, folder],
+    queryFn: () =>
+      listDocuments(workspaceSlug, {
+        search,
+        category,
+        status,
+        visibility,
+        folder,
+        view: viewToApi(view)
+      })
+  });
+
+  const analytics = analyticsQuery.data;
+  const documents = documentsQuery.data || [];
+  const kpis = [
+    [String(analytics?.total_documents ?? 0), "Documents totaux", FileText],
+    [String(analytics?.recent_documents ?? 0), "Recents", Clock3],
+    [String(analytics?.shared_documents ?? 0), "Partages", Share2],
+    [String(analytics?.archived_documents ?? 0), "Archives", Archive],
+    [String(analytics?.pending_documents ?? 0), "A valider", CheckCircle2],
+    [String(analytics?.favorite_documents ?? 0), "Favoris", Star],
+    [formatBytes(analytics?.storage_usage.used ?? 0), "Espace utilise", HardDrive],
+    [formatBytes(analytics?.storage_usage.available ?? 0), "Disponible", HardDrive],
+  ] as const;
+
+  async function refreshDocuments() {
+    await queryClient.invalidateQueries({ queryKey: ["documents", workspaceSlug] });
+    await queryClient.invalidateQueries({ queryKey: ["document-analytics", workspaceSlug] });
+  }
+
+  async function handleDownload(document: DocumentResource) {
+    await downloadDocument(workspaceSlug, String(document.id), document.original_filename || document.name);
+  }
+
+  async function handleArchive(document: DocumentResource) {
+    await archiveDocument(workspaceSlug, String(document.id));
+    await refreshDocuments();
+  }
+
+  async function handleTrash(document: DocumentResource) {
+    if (document.status === "trash") {
+      await restoreDocument(workspaceSlug, String(document.id));
+    } else {
+      await trashDocument(workspaceSlug, String(document.id));
+    }
+    await refreshDocuments();
+  }
+
+  async function handleExport() {
+    await exportDocuments(workspaceSlug);
+  }
 
   return (
     <div className="grid gap-6">
@@ -68,13 +160,17 @@ export function DocumentsView({ workspaceSlug }: Readonly<{ workspaceSlug: strin
         ))}
       </section>
       <section className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
-        <Card>
+          <Card>
           <CardHeader><CardTitle className="flex items-center gap-2 text-base text-slate-900"><Folder className="size-4" /> Dossiers</CardTitle></CardHeader>
           <CardContent className="grid gap-2">
-            {folders.map((folder) => (
-              <button className="flex min-h-10 items-center gap-3 rounded-md px-3 text-left text-sm hover:bg-slate-100" key={folder} type="button">
+            <button className={`flex min-h-10 items-center gap-3 rounded-md px-3 text-left text-sm hover:bg-slate-100 ${folder === "" ? "bg-slate-100" : ""}`} type="button" onClick={() => setFolder("")}>
+              <Folder className="size-4 text-blue-700" />
+              <span className="font-medium">Racine Documents</span>
+            </button>
+            {foldersQuery.data?.map((item) => (
+              <button className={`flex min-h-10 items-center gap-3 rounded-md px-3 text-left text-sm hover:bg-slate-100 ${folder === String(item.id) ? "bg-slate-100" : ""}`} key={item.id} type="button" onClick={() => setFolder(String(item.id))}>
                 <Folder className="size-4 text-blue-700" />
-                <span className="font-medium">{folder}</span>
+                <span className="font-medium">{item.name}</span>
               </button>
             ))}
           </CardContent>
@@ -84,17 +180,20 @@ export function DocumentsView({ workspaceSlug }: Readonly<{ workspaceSlug: strin
             <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_150px_150px_150px_120px]">
               <label className="flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-slate-500">
                 <Search className="size-4" />
-                <input className="w-full bg-transparent outline-none" placeholder="Rechercher nom, description, type, auteur, dossier..." />
+                <input className="w-full bg-transparent outline-none" placeholder="Rechercher nom, description, type, auteur, dossier..." value={search} onChange={(event) => setSearch(event.target.value)} />
               </label>
-              <select className="min-h-10 rounded-md border border-border px-3 text-sm"><option>Categorie</option>{DOCUMENT_CATEGORIES.map((category) => <option key={category.value}>{category.label}</option>)}</select>
-              <select className="min-h-10 rounded-md border border-border px-3 text-sm"><option>Statut</option>{DOCUMENT_STATUSES.map((item) => <option key={item.value}>{item.label}</option>)}</select>
-              <select className="min-h-10 rounded-md border border-border px-3 text-sm"><option>Visibilite</option><option>Prive</option><option>Membres</option><option>Workspace</option><option>Partage</option></select>
-              <Button type="button" variant="outline"><Filter className="size-4" /> Filtres</Button>
+              <select className="min-h-10 rounded-md border border-border px-3 text-sm" value={category} onChange={(event) => setCategory(event.target.value)}><option value="">Categorie</option>{DOCUMENT_CATEGORIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
+              <select className="min-h-10 rounded-md border border-border px-3 text-sm" value={status} onChange={(event) => setStatus(event.target.value)}><option value="">Statut</option>{DOCUMENT_STATUSES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
+              <select className="min-h-10 rounded-md border border-border px-3 text-sm" value={visibility} onChange={(event) => setVisibility(event.target.value)}><option value="">Visibilite</option><option value="private">Prive</option><option value="members">Membres</option><option value="workspace">Workspace</option><option value="shared">Partage</option></select>
+              <Button type="button" variant="outline" onClick={() => { setSearch(""); setCategory(""); setStatus(""); setVisibility(""); setFolder(""); }}><Filter className="size-4" /> Filtres</Button>
             </div>
           </div>
           <div className="flex items-center justify-between rounded-card border border-border bg-white p-3">
-            <div className="flex items-center gap-2 text-sm text-slate-500"><span>Documents / Finances / 2026 / Factures</span></div>
-            <Button type="button" variant="outline" onClick={() => setVisualMode(visualMode === "list" ? "grid" : "list")}>{visualMode === "list" ? <Grid2X2 className="size-4" /> : <List className="size-4" />} Vue</Button>
+            <div className="flex items-center gap-2 text-sm text-slate-500"><span>Documents{folder ? ` / ${foldersQuery.data?.find((item) => String(item.id) === folder)?.breadcrumb.map((crumb) => crumb.name).join(" / ") || ""}` : ""}</span></div>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={handleExport}><Download className="size-4" /> Export</Button>
+              <Button type="button" variant="outline" onClick={() => setVisualMode(visualMode === "list" ? "grid" : "list")}>{visualMode === "list" ? <Grid2X2 className="size-4" /> : <List className="size-4" />} Vue</Button>
+            </div>
           </div>
           {visualMode === "list" ? (
             <div className="rounded-card border border-border bg-white p-4">
@@ -102,25 +201,33 @@ export function DocumentsView({ workspaceSlug }: Readonly<{ workspaceSlug: strin
                 <span>Document</span><span>Type</span><span>Taille</span><span>Auteur</span><span>Modifie</span><span>Statut</span><span>Actions</span>
               </div>
               <div className="grid gap-2 pt-3">
-                {rows.map(({ id, name, type, size, author, date, status, category, icon: Icon, sensitive }) => (
-                  <Link className="grid gap-3 rounded-md border border-border p-3 text-sm hover:border-blue-200 hover:bg-slate-50 lg:grid-cols-[minmax(240px,1fr)_90px_100px_130px_130px_120px_170px]" href={`/app/${workspaceSlug}/documents/${id}`} key={id}>
-                    <span className="flex items-center gap-3"><Icon className="size-5 text-blue-700" /><span><strong>{name}</strong><span className="block text-xs text-slate-500">{category} {sensitive ? "- sensible" : ""}</span></span></span>
-                    <span>{type}</span><span>{size}</span><span>{author}</span><span>{date}</span>
-                    <span><span className={`rounded-md border px-2 py-1 text-xs font-semibold ${statusTone(status)}`}>{status}</span></span>
-                    <span className="flex gap-1"><Eye className="size-4" /><Download className="size-4" /><Share2 className="size-4" /><Archive className="size-4" /><Trash2 className="size-4" /></span>
+                {documents.map((document) => {
+                  const Icon = fileIcon(document.file_type);
+                  return (
+                  <Link className="grid gap-3 rounded-md border border-border p-3 text-sm hover:border-blue-200 hover:bg-slate-50 lg:grid-cols-[minmax(240px,1fr)_90px_100px_130px_130px_120px_170px]" href={`/app/${workspaceSlug}/documents/${document.id}`} key={document.id}>
+                    <span className="flex items-center gap-3"><Icon className="size-5 text-blue-700" /><span><strong>{document.name}</strong><span className="block text-xs text-slate-500">{categoryLabel(document.category)} {document.sensitivity === "sensitive" ? "- sensible" : ""}</span></span></span>
+                    <span>{document.file_type.toUpperCase()}</span><span>{formatBytes(document.size)}</span><span>{document.uploaded_by ? `#${document.uploaded_by}` : "NOVEX"}</span><span>{formatDate(document.updated_at)}</span>
+                    <span><span className={`rounded-md border px-2 py-1 text-xs font-semibold ${statusTone(document.status)}`}>{statusLabels[document.status]}</span></span>
+                    <span className="flex gap-1" onClick={(event) => event.preventDefault()}><Eye className="size-4" /><button type="button" onClick={() => handleDownload(document)}><Download className="size-4" /></button><Share2 className="size-4" /><button type="button" onClick={() => handleArchive(document)}><Archive className="size-4" /></button><button type="button" onClick={() => handleTrash(document)}><Trash2 className="size-4" /></button></span>
                   </Link>
-                ))}
+                  );
+                })}
+                {!documents.length ? <div className="rounded-md border border-border p-4 text-sm text-slate-500">{documentsQuery.isLoading ? "Chargement des documents..." : "Aucun document trouve."}</div> : null}
               </div>
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              {rows.map(({ id, name, type, size, date, icon: Icon, sensitive }) => (
-                <Link href={`/app/${workspaceSlug}/documents/${id}`} key={id}>
+              {documents.map((document) => {
+                const Icon = fileIcon(document.file_type);
+                return (
+                <Link href={`/app/${workspaceSlug}/documents/${document.id}`} key={document.id}>
                   <Card className="h-full transition hover:border-blue-200 hover:shadow-md">
-                    <CardContent className="p-5"><Icon className="size-8 text-blue-700" /><strong className="mt-4 block break-words">{name}</strong><p className="mt-2 text-sm text-slate-500">{type} - {size} - {date}</p>{sensitive ? <span className="mt-3 inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700"><Lock className="size-3" /> Sensible</span> : null}</CardContent>
+                    <CardContent className="p-5"><Icon className="size-8 text-blue-700" /><strong className="mt-4 block break-words">{document.name}</strong><p className="mt-2 text-sm text-slate-500">{document.file_type.toUpperCase()} - {formatBytes(document.size)} - {formatDate(document.updated_at)}</p>{document.sensitivity === "sensitive" ? <span className="mt-3 inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700"><Lock className="size-3" /> Sensible</span> : null}</CardContent>
                   </Card>
                 </Link>
-              ))}
+                );
+              })}
+              {!documents.length ? <div className="rounded-md border border-border bg-white p-4 text-sm text-slate-500">{documentsQuery.isLoading ? "Chargement des documents..." : "Aucun document trouve."}</div> : null}
             </div>
           )}
         </section>
@@ -129,12 +236,12 @@ export function DocumentsView({ workspaceSlug }: Readonly<{ workspaceSlug: strin
         <Card>
           <CardHeader><CardTitle className="text-base text-slate-900">Stockage par categorie</CardTitle></CardHeader>
           <CardContent className="grid gap-3">
-            {categoryStats.map(([label, count, size, color]) => (
-              <div className="grid gap-2" key={label}>
-                <div className="flex items-center justify-between text-sm"><strong>{label}</strong><span className="text-slate-500">{count} docs - {size}</span></div>
-                <div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className={`h-full ${color}`} style={{ width: `${Math.min(Number(count) / 4, 100)}%` }} /></div>
+            {analytics?.documents_by_category.map(({ category: categoryValue, count, size }) => (
+              <div className="grid gap-2" key={categoryValue}>
+                <div className="flex items-center justify-between text-sm"><strong>{categoryLabel(categoryValue)}</strong><span className="text-slate-500">{count} docs - {formatBytes(size || 0)}</span></div>
+                <div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className={`h-full ${categoryColors[categoryValue]}`} style={{ width: `${Math.min(count * 8, 100)}%` }} /></div>
               </div>
-            ))}
+            )) || <div className="text-sm text-slate-500">Aucune categorie.</div>}
           </CardContent>
         </Card>
         <Card>

@@ -26,7 +26,7 @@ from apps.users.models import User
 
 @pytest.fixture
 def owner(db):
-    return User.objects.create_user(email="owner@example.com", password="secret")
+    return User.objects.create_user(username="owner", email="owner@example.com", password="secret")
 
 
 @pytest.fixture
@@ -66,7 +66,7 @@ def test_document_versioning_and_restore_preserves_history(workspace, owner):
 
 @pytest.mark.django_db
 def test_search_and_workspace_isolation(workspace, owner):
-    other_owner = User.objects.create_user(email="other@example.com", password="secret")
+    other_owner = User.objects.create_user(username="other", email="other@example.com", password="secret")
     other = Workspace.objects.create(name="Association B", slug="assoc-b", organization_type=Workspace.OrganizationType.ASSOCIATION, owner=other_owner)
     create_document(workspace=workspace, actor=owner, name="Facture ciment", category=DocumentCategory.FINANCIAL, file=upload("facture.pdf"))
     create_document(workspace=other, actor=other_owner, name="Facture cachee", category=DocumentCategory.FINANCIAL, file=upload("hidden.pdf"))

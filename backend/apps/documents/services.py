@@ -243,6 +243,7 @@ def add_document_version(*, document: Document, actor, file, change_note: str = 
 
 @transaction.atomic
 def restore_document_version(*, document: Document, version: DocumentVersion, actor, change_note: str = "") -> DocumentVersion:
+    document = Document.objects.select_for_update().get(id=document.id)
     if version.document_id != document.id:
         raise ValueError("Cette version n'appartient pas au document.")
     new_version_number = document.current_version + 1
