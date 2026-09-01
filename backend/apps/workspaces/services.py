@@ -5,7 +5,7 @@ from django.utils import timezone
 from django.utils.text import slugify
 
 from apps.subscriptions.models import Plan, Subscription
-from .models import OrganizationProfile, Permission, Role, RolePermission, Workspace, WorkspaceMembership
+from .models import OrganizationProfile, Permission, Role, RolePermission, Workspace, WorkspaceMembership, WorkspaceSettings
 
 
 SYSTEM_ROLES = {
@@ -62,6 +62,7 @@ def create_workspace_for_owner(*, owner, name: str, organization_type: str, **at
         description=attrs.get("description", ""),
     )
     OrganizationProfile.objects.create(workspace=workspace)
+    ensure_workspace_settings(workspace)
     roles = {code: Role.objects.create(workspace=workspace, code=code, label=label, is_system=True) for code, label in SYSTEM_ROLES.items()}
     permissions = {code: Permission.objects.get_or_create(code=code, defaults={"description": description})[0] for code, description in MEMBER_PERMISSIONS.items()}
     for role_code, permission_codes in ROLE_MEMBER_PERMISSIONS.items():
@@ -75,6 +76,28 @@ def create_workspace_for_owner(*, owner, name: str, organization_type: str, **at
 
     ensure_default_folders(workspace, actor=owner)
     return workspace
+
+
+def ensure_workspace_settings(workspace: Workspace) -> WorkspaceSettings:
+    settings, _created = WorkspaceSettings.objects.get_or_create(
+        workspace=workspace,
+        defaults={
+            "money_format": {"thousand_separator": " ", "decimals": 0, "symbol_position": "after"},
+            "finance_preferences": {"expense_validation_enabled": True, "income_validation_enabled": False},
+            "contribution_preferences": {"periodicity": "MONTHLY", "due_day": 30, "reminders": ["before_due", "due_day", "after_due"]},
+            "notification_preferences": {
+                "channels": {"in_app": True, "email": True, "sms": False, "whatsapp": False},
+                "topics": {"contributions": True, "payments": True, "events": True, "projects": True, "documents": True, "members": True, "reports": True, "security": True},
+            },
+            "member_preferences": {"manual_approval": True, "required_fields": ["first_name", "last_name", "email"]},
+            "project_preferences": {"budget_alert_threshold": 80},
+            "event_preferences": {"default_reminders": [1440, 60], "attendance_confirmation": True},
+            "document_preferences": {"retention_months": 60, "sensitive_documents_require_review": True},
+            "integration_states": {"payment": "connected", "email": "connected", "sms": "not_connected", "whatsapp": "not_connected"},
+            "security_preferences": {"two_factor_available": False, "session_review_available": False},
+        },
+    )
+    return settings
 
 
 def unique_workspace_slug(name: str, *, exclude_id: int | None = None) -> str:
