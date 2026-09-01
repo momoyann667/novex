@@ -1,15 +1,15 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarPlus, ImagePlus, Save } from "lucide-react";
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { EVENT_STATUSES, EVENT_TYPES } from "./event-status";
-import { createEvent, type EventFormPayload } from "./api";
+import { createEvent, listMemberOptions, listProjectOptions, type EventFormPayload } from "./api";
 
 const eventSchema = z.object({
   title: z.string().min(2),
@@ -19,10 +19,14 @@ const eventSchema = z.object({
   start_time: z.string().min(1),
   end_date: z.string().min(1),
   end_time: z.string().min(1),
+  location_type: z.enum(["PHYSICAL", "ONLINE"]),
   location: z.string().optional(),
-  responsible: z.string().optional(),
+  online_url: z.string().optional(),
+  responsible_member: z.string().optional(),
   status: z.enum(["DRAFT", "PUBLISHED", "PLANNED", "REGISTRATION_OPEN", "REGISTRATION_CLOSED", "ONGOING", "COMPLETED", "CANCELLED", "POSTPONED", "ARCHIVED"]),
+  limit_capacity: z.boolean(),
   capacity: z.coerce.number().min(0).optional(),
+  ticket_price: z.coerce.number().min(0).optional(),
   budget: z.coerce.number().min(0),
   project: z.string().optional(),
   recurrence: z.enum(["none", "daily", "weekly", "monthly", "yearly"]),
@@ -39,7 +43,8 @@ const sectionClass = "rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
 const sectionTitleClass = "border-b border-slate-100 pb-3 text-base font-black text-slate-950";
 
 function toPayload(values: EventFormValues): EventFormPayload {
-  const capacity = Number(values.capacity || 0);
+  const capacity = values.limit_capacity ? Number(values.capacity || 0) : 0;
+  const ticketPrice = Number(values.ticket_price || 0);
   return {
     title: values.title,
     description: values.description,
@@ -48,10 +53,14 @@ function toPayload(values: EventFormValues): EventFormPayload {
     start_at: `${values.start_date}T${values.start_time}:00`,
     end_at: `${values.end_date}T${values.end_time}:00`,
     timezone: "Africa/Abidjan",
-    location_type: "PHYSICAL",
-    location: values.location,
+    location_type: values.location_type,
+    location: values.location_type === "PHYSICAL" ? values.location : "",
+    online_url: values.location_type === "ONLINE" ? values.online_url : "",
     capacity: capacity > 0 ? capacity : null,
     budget: Number(values.budget || 0),
+    ticket_price: ticketPrice > 0 ? ticketPrice : 0,
+    project: values.project ? Number(values.project) : null,
+    responsible_member: values.responsible_member ? Number(values.responsible_member) : null,
     recurrence: values.recurrence,
     registration_required: values.status === "REGISTRATION_OPEN"
   };
@@ -71,10 +80,14 @@ export function EventForm({ workspaceSlug }: Readonly<{ workspaceSlug: string }>
       start_time: "",
       end_date: "",
       end_time: "",
+      location_type: "PHYSICAL",
       location: "",
-      responsible: "",
+      online_url: "",
+      responsible_member: "",
       status: "DRAFT",
+      limit_capacity: false,
       capacity: 0,
+      ticket_price: 0,
       budget: 0,
       project: "",
       recurrence: "none",
@@ -87,6 +100,16 @@ export function EventForm({ workspaceSlug }: Readonly<{ workspaceSlug: string }>
       await queryClient.invalidateQueries({ queryKey: ["events-overview", workspaceSlug] });
       router.push(`/app/${workspaceSlug}/events/${event.id}`);
     }
+  });
+  const locationType = useWatch({ control: form.control, name: "location_type" });
+  const limitCapacity = useWatch({ control: form.control, name: "limit_capacity" });
+  const projectsQuery = useQuery({
+    queryKey: ["project-options", workspaceSlug],
+    queryFn: () => listProjectOptions(workspaceSlug)
+  });
+  const membersQuery = useQuery({
+    queryKey: ["member-options", workspaceSlug],
+    queryFn: () => listMemberOptions(workspaceSlug)
   });
 
   return (
@@ -104,6 +127,20 @@ export function EventForm({ workspaceSlug }: Readonly<{ workspaceSlug: string }>
               {EVENT_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
             </select>
           </label>
+          <div className="grid gap-2">
+            <span className="text-xs font-black text-slate-700">Format de l'evenement</span>
+            <div className="grid grid-cols-2 gap-2 rounded-md border border-slate-200 bg-slate-50 p-1">
+              {[
+                ["PHYSICAL", "Presentiel"],
+                ["ONLINE", "En ligne"]
+              ].map(([value, label]) => (
+                <label className={`flex min-h-10 items-center justify-center gap-2 rounded-md text-sm font-black ${locationType === value ? "bg-blue-700 text-white" : "bg-white text-slate-700"}`} key={value}>
+                  <input className="sr-only" type="radio" value={value} {...form.register("location_type")} />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </div>
           <label className={labelClass}>
             Description
             <textarea className={`${fieldClass} min-h-28 resize-none py-3 leading-5`} placeholder="Decrivez l'objectif et le programme de l'evenement..." {...form.register("description")} />
@@ -147,10 +184,17 @@ export function EventForm({ workspaceSlug }: Readonly<{ workspaceSlug: string }>
               <input className={fieldClass} type="time" {...form.register("end_time")} />
             </label>
           </div>
-          <label className={labelClass}>
-            Lieu ou adresse
-            <input className={fieldClass} placeholder="Rechercher une adresse..." {...form.register("location")} />
-          </label>
+          {locationType === "ONLINE" ? (
+            <label className={labelClass}>
+              Lien de l'evenement
+              <input className={fieldClass} placeholder="https://..." {...form.register("online_url")} />
+            </label>
+          ) : (
+            <label className={labelClass}>
+              Lieu ou adresse
+              <input className={fieldClass} placeholder="Rechercher une adresse..." {...form.register("location")} />
+            </label>
+          )}
           <div className="grid gap-2">
             <span className="text-xs font-black text-slate-700">Recurrence</span>
             <div className="flex min-h-12 items-center gap-3 rounded-md border border-slate-300 bg-white px-3">
@@ -170,15 +214,28 @@ export function EventForm({ workspaceSlug }: Readonly<{ workspaceSlug: string }>
       <section className={sectionClass}>
         <h2 className={sectionTitleClass}>Parametres d'inscription</h2>
         <div className="mt-4 grid gap-4">
-          <div className="grid grid-cols-2 gap-3">
+          <label className="flex min-h-12 items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 text-sm font-black text-slate-800">
+            <span>Limiter les places</span>
+            <input className="size-5 accent-blue-700" type="checkbox" {...form.register("limit_capacity")} />
+          </label>
+          {limitCapacity ? (
             <label className={labelClass}>
-              Capacite
-              <input className={fieldClass} min={0} type="number" {...form.register("capacity")} />
+              Nombre de places attendues
+              <input className={fieldClass} min={1} type="number" {...form.register("capacity")} />
             </label>
+          ) : null}
+          <div className="grid grid-cols-2 gap-3">
             <label className={labelClass}>
               Budget prevu
               <div className="flex min-h-12 rounded-md border border-slate-300 bg-white focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100">
                 <input className="min-w-0 flex-1 rounded-l-md px-3 text-sm font-semibold outline-none" min={0} step="1" type="number" {...form.register("budget")} />
+                <span className="grid place-items-center rounded-r-md border-l border-slate-200 px-3 text-xs font-black text-slate-600">FCFA</span>
+              </div>
+            </label>
+            <label className={labelClass}>
+              Tarif
+              <div className="flex min-h-12 rounded-md border border-slate-300 bg-white focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100">
+                <input className="min-w-0 flex-1 rounded-l-md px-3 text-sm font-semibold outline-none" min={0} step="1" type="number" placeholder="Vide si gratuit" {...form.register("ticket_price")} />
                 <span className="grid place-items-center rounded-r-md border-l border-slate-200 px-3 text-xs font-black text-slate-600">FCFA</span>
               </div>
             </label>
@@ -191,11 +248,17 @@ export function EventForm({ workspaceSlug }: Readonly<{ workspaceSlug: string }>
           </label>
           <label className={labelClass}>
             Projet associe
-            <input className={fieldClass} placeholder="Projet optionnel" {...form.register("project")} />
+            <select className={fieldClass} {...form.register("project")}>
+              <option value="">Aucun projet</option>
+              {(projectsQuery.data || []).map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}
+            </select>
           </label>
           <label className={labelClass}>
             Responsable
-            <input className={fieldClass} placeholder="Utilisateur ou membre du workspace" {...form.register("responsible")} />
+            <select className={fieldClass} {...form.register("responsible_member")}>
+              <option value="">Aucun responsable</option>
+              {(membersQuery.data || []).map((member) => <option value={member.id} key={member.id}>{member.full_name || `${member.first_name} ${member.last_name}`.trim() || member.function}</option>)}
+            </select>
           </label>
         </div>
       </section>

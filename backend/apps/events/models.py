@@ -54,6 +54,7 @@ class Event(models.Model):
     responsible_member = models.ForeignKey(Member, on_delete=models.SET_NULL, null=True, blank=True, related_name="responsible_events")
     capacity = models.PositiveIntegerField(null=True, blank=True)
     budget = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+    ticket_price = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
     project = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name="events")
     recurrence = models.CharField(max_length=16, choices=EventRecurrence.choices, default=EventRecurrence.NONE)
     reminder_offsets = models.JSONField(default=default_reminder_offsets, blank=True)

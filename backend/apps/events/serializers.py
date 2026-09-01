@@ -225,6 +225,7 @@ class EventSerializer(serializers.ModelSerializer):
             "responsible_member",
             "capacity",
             "budget",
+            "ticket_price",
             "project",
             "recurrence",
             "reminder_offsets",
@@ -279,6 +280,11 @@ class EventSerializer(serializers.ModelSerializer):
     def validate_budget(self, value):
         if value < 0:
             raise serializers.ValidationError("Le budget ne peut pas etre negatif.")
+        return value
+
+    def validate_ticket_price(self, value):
+        if value < 0:
+            raise serializers.ValidationError("Le tarif ne peut pas etre negatif.")
         return value
 
     def validate_reminder_offsets(self, value):

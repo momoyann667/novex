@@ -69,6 +69,7 @@ export type EventResource = {
   registration_deadline: string | null;
   capacity: number | null;
   budget: string;
+  ticket_price: string;
   project: number | null;
   recurrence: string;
   stats: EventStats;
@@ -105,6 +106,24 @@ export type EventFormPayload = {
   registration_required?: boolean;
   registration_deadline?: string | null;
   cover_image?: File | null;
+  online_url?: string;
+  ticket_price?: number;
+  project?: number | null;
+  responsible_member?: number | null;
+};
+
+export type ProjectOption = {
+  id: number;
+  code: string;
+  name: string;
+};
+
+export type MemberOption = {
+  id: number;
+  full_name: string;
+  first_name: string;
+  last_name: string;
+  function: string;
 };
 
 type Paginated<T> = {
@@ -144,6 +163,22 @@ export async function getEventsOverview(workspaceSlug: string) {
     headers: workspaceHeaders(workspaceSlug),
     cache: "no-store"
   });
+}
+
+export async function listProjectOptions(workspaceSlug: string) {
+  const payload = await apiFetch<ProjectOption[] | Paginated<ProjectOption>>("/projects/?ordering=name", {
+    headers: workspaceHeaders(workspaceSlug),
+    cache: "no-store"
+  });
+  return unwrapList(payload);
+}
+
+export async function listMemberOptions(workspaceSlug: string) {
+  const payload = await apiFetch<MemberOption[] | Paginated<MemberOption>>("/members/?ordering=last_name", {
+    headers: workspaceHeaders(workspaceSlug),
+    cache: "no-store"
+  });
+  return unwrapList(payload);
 }
 
 export async function createEvent(workspaceSlug: string, payload: EventFormPayload) {
