@@ -38,11 +38,16 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   if (!(init.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  const response = await fetch(`${baseUrl}${path}`, {
-    ...init,
-    credentials: "include",
-    headers
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}${path}`, {
+      ...init,
+      credentials: "include",
+      headers
+    });
+  } catch {
+    throw new ApiError("Backend indisponible. Lance Django sur le port 8002 puis reessaie.", 503);
+  }
 
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as { code?: string } | null;

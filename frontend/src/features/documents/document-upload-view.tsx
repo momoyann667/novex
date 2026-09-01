@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { ChangeEvent, DragEvent, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Camera, CheckCircle2, FileUp, Image, RotateCcw, ShieldCheck, UploadCloud, XCircle } from "lucide-react";
+import { ArrowLeft, Camera, CheckCircle2, FileUp, Image, RotateCcw, ShieldCheck, UploadCloud, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
@@ -99,7 +100,14 @@ export function DocumentUploadView({ workspaceSlug }: Readonly<{ workspaceSlug: 
       <PageHeader
         title="Ajouter un document"
         description="Importez vos fichiers, choisissez leur dossier et leur niveau d'acces."
-        actions={<Button className="rounded-xl bg-blue-700 px-5 text-white hover:bg-blue-800" type="button" disabled={!pendingItems.length || mutation.isPending} onClick={sendQueue}><UploadCloud className="size-4" /> Envoyer</Button>}
+        actions={
+          <>
+            <Button asChild className="rounded-xl" type="button" variant="outline">
+              <Link href={`/app/${workspaceSlug}/documents`}><ArrowLeft className="size-4" /> Retour</Link>
+            </Button>
+            <Button className="rounded-xl bg-blue-700 px-5 text-white hover:bg-blue-800" type="button" disabled={!pendingItems.length || mutation.isPending} onClick={sendQueue}><UploadCloud className="size-4" /> Envoyer</Button>
+          </>
+        }
       />
       <section className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="overflow-hidden rounded-2xl border-slate-200 shadow-sm">
