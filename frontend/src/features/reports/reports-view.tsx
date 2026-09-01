@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, BarChart3, CalendarDays, CreditCard, FileText, FolderKanban, Landmark, LineChart, Users, Wallet } from "lucide-react";
+import { AlertTriangle, BarChart3, CalendarDays, CreditCard, Download, FileSpreadsheet, FileText, FolderKanban, Landmark, LineChart, MoreVertical, Users, Wallet } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { workspacePath } from "@/lib/workspace/routing";
 import { AnalyticsTable, EmptyAnalyticsState, KpiCard, MetricChart, PeriodFilter, ReportHeader } from "./report-components";
 import { downloadJsonExport, getReportSection, getReportsOverview, requestReportExport } from "./api";
@@ -92,6 +93,79 @@ function downloadExportPayload(reportType: string, payload: unknown) {
   downloadJsonExport(`NOVEX_Rapport_${reportType}_${today}.json`, payload);
 }
 
+function MiniLine({ values, tone = "blue" }: Readonly<{ values: number[]; tone?: "blue" | "emerald" | "slate" }>) {
+  const color = tone === "emerald" ? "#047857" : tone === "slate" ? "#475569" : "#0b63ce";
+  const points = values.map((value, index) => `${(index / Math.max(values.length - 1, 1)) * 100},${100 - Math.min(Math.max(value, 0), 100)}`).join(" ");
+
+  return (
+    <div className="mt-4 h-9 rounded-md bg-[#eaf2ff] px-2 py-1">
+      <svg className="h-full w-full" preserveAspectRatio="none" viewBox="0 0 100 100" aria-hidden="true">
+        <polyline fill="none" points={points} stroke={color} strokeLinecap="round" strokeLinejoin="round" strokeWidth="5" />
+      </svg>
+    </div>
+  );
+}
+
+function ProgressLine({ value }: Readonly<{ value: unknown }>) {
+  return (
+    <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+      <div className="h-full rounded-full bg-emerald-700" style={{ width: `${Math.min(numberValue(value), 100)}%` }} />
+    </div>
+  );
+}
+
+function ReportMenuCard({
+  href,
+  icon: Icon,
+  iconTone,
+  title,
+  subtitle,
+  leftLabel,
+  leftValue,
+  rightLabel,
+  rightValue,
+  children
+}: Readonly<{
+  href: string;
+  icon: typeof Wallet;
+  iconTone: string;
+  title: string;
+  subtitle: string;
+  leftLabel: string;
+  leftValue: string;
+  rightLabel: string;
+  rightValue: string;
+  children: React.ReactNode;
+}>) {
+  return (
+    <Link className="block rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-200 hover:shadow-md" href={href}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className={`grid size-9 shrink-0 place-items-center rounded-lg ${iconTone}`}>
+            <Icon className="size-5" />
+          </span>
+          <span className="min-w-0">
+            <strong className="block truncate text-lg font-black leading-5 tracking-normal text-slate-950">{title}</strong>
+            <span className="mt-0.5 block truncate text-xs font-medium text-slate-500">{subtitle}</span>
+          </span>
+        </div>
+        <MoreVertical className="size-5 shrink-0 text-slate-700" />
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-4">
+        <div>
+          <p className="text-[11px] font-medium text-slate-500">{leftLabel}</p>
+          <p className="mt-1 text-2xl font-black leading-none tracking-normal text-slate-950">{leftValue}</p>
+        </div>
+        <div>
+          <p className="text-[11px] font-medium text-slate-500">{rightLabel}</p>
+          <p className="mt-1 text-2xl font-black leading-none tracking-normal text-slate-950">{rightValue}</p>
+        </div>
+      </div>
+      {children}
+    </Link>
+  );
+}
+
 export function ReportsView({ workspaceSlug }: Readonly<{ workspaceSlug: string }>) {
   const [period, setPeriod] = useState<PeriodCode>("month");
   const overviewQuery = useQuery({
@@ -99,8 +173,8 @@ export function ReportsView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
     queryFn: () => getReportsOverview(workspaceSlug, period)
   });
   const exportMutation = useMutation({
-    mutationFn: () => requestReportExport(workspaceSlug, "overview", period),
-    onSuccess: (exportRequest) => downloadExportPayload("global", exportRequest.result)
+    mutationFn: (format: "pdf" | "xlsx") => requestReportExport(workspaceSlug, "overview", period, format),
+    onSuccess: (exportRequest) => downloadExportPayload(`global_${exportRequest.export_format}`, exportRequest.result)
   });
   const data = overviewQuery.data;
   const finance = data?.financial;
@@ -112,24 +186,118 @@ export function ReportsView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
   const cashFlowValues = useMemo(() => seriesValues(nested(finance, "cash_flow") || nested(contributions, "monthly")), [finance, contributions]);
 
   return (
-    <div className="grid gap-6">
-      <ReportHeader title="Rapports & Analytics" description="Pilotage data-driven consolidant finance, membres, cotisations, projets, evenements et documents." workspaceSlug={workspaceSlug} lastUpdatedAt={data?.last_updated_at} exportDisabled={exportMutation.isPending || overviewQuery.isLoading} onExport={() => exportMutation.mutate()} />
+    <main className="min-h-screen bg-[#f5f7f8] px-4 pb-24 pt-5 text-slate-950">
+      <header className="mb-5">
+        <h1 className="text-3xl font-black tracking-normal">Rapports</h1>
+        <p className="mt-2 text-sm leading-5 text-slate-600">Vue d'ensemble et analyses detaillees de votre association.</p>
+      </header>
+
+      <div className="mb-5 grid grid-cols-2 gap-3">
+        <Button className="min-h-12 rounded-lg bg-[#0863cf] text-white hover:bg-[#0755b3]" disabled={exportMutation.isPending || overviewQuery.isLoading} type="button" onClick={() => exportMutation.mutate("pdf")}>
+          <Download className="size-4" />
+          Generer PDF
+        </Button>
+        <Button className="min-h-12 rounded-lg border-slate-300 bg-white text-slate-950" disabled={exportMutation.isPending || overviewQuery.isLoading} type="button" variant="outline" onClick={() => exportMutation.mutate("xlsx")}>
+          <FileSpreadsheet className="size-4" />
+          Exporter Excel
+        </Button>
+      </div>
+
       <PeriodFilter value={period} onChange={setPeriod} />
-      <section className="flex gap-2 overflow-x-auto border-b border-border pb-2">
+
+      {data?.empty_state ? <EmptyAnalyticsState /> : null}
+
+      <section className="mt-5 grid gap-4">
+        <ReportMenuCard
+          href={workspacePath(workspaceSlug, "reports/finance")}
+          icon={Wallet}
+          iconTone="bg-blue-50 text-blue-700"
+          title="Financier"
+          subtitle="Bilan et tresorerie"
+          leftLabel="Recettes (YTD)"
+          leftValue={formatMoney(nested(finance, "income.value"))}
+          rightLabel="Depenses (YTD)"
+          rightValue={formatMoney(nested(finance, "expense.value"))}
+        >
+          <MiniLine values={cashFlowValues} />
+        </ReportMenuCard>
+
+        <ReportMenuCard
+          href={workspacePath(workspaceSlug, "reports/contributions")}
+          icon={CreditCard}
+          iconTone="bg-emerald-50 text-emerald-700"
+          title="Cotisations"
+          subtitle="Taux de recouvrement"
+          leftLabel="Taux actuel"
+          leftValue={formatPercent(nested(contributions, "recovery_rate"))}
+          rightLabel="En attente"
+          rightValue={formatMoney(nested(contributions, "unpaid"))}
+        >
+          <ProgressLine value={nested(contributions, "recovery_rate")} />
+        </ReportMenuCard>
+
+        <ReportMenuCard
+          href={workspacePath(workspaceSlug, "reports/members")}
+          icon={Users}
+          iconTone="bg-slate-100 text-slate-950"
+          title="Membres"
+          subtitle="Croissance et engagement"
+          leftLabel="Total actifs"
+          leftValue={formatNumber(nested(members, "active_members"))}
+          rightLabel="Nouveaux (Mois)"
+          rightValue={`+${formatNumber(nested(members, "new_members"))}`}
+        >
+          <MiniLine values={seriesValues(nested(members, "monthly_growth"), ["count"])} tone="slate" />
+        </ReportMenuCard>
+
+        <ReportMenuCard
+          href={workspacePath(workspaceSlug, "reports/projects")}
+          icon={FolderKanban}
+          iconTone="bg-amber-50 text-amber-700"
+          title="Projets"
+          subtitle="Execution operationnelle"
+          leftLabel="Actifs"
+          leftValue={formatNumber(nested(projects, "active_projects"))}
+          rightLabel="En retard"
+          rightValue={formatNumber(nested(projects, "delayed_projects"))}
+        >
+          <ProgressLine value={nested(projects, "average_progress")} />
+        </ReportMenuCard>
+
+        <ReportMenuCard
+          href={workspacePath(workspaceSlug, "reports/events")}
+          icon={CalendarDays}
+          iconTone="bg-purple-50 text-purple-700"
+          title="Evenements"
+          subtitle="Participation et presence"
+          leftLabel="A venir"
+          leftValue={formatNumber(nested(events, "upcoming_events"))}
+          rightLabel="Presence"
+          rightValue={formatPercent(nested(events, "attendance_rate"))}
+        >
+          <ProgressLine value={nested(events, "attendance_rate")} />
+        </ReportMenuCard>
+
+        <ReportMenuCard
+          href={workspacePath(workspaceSlug, "reports/performance")}
+          icon={LineChart}
+          iconTone="bg-blue-50 text-blue-700"
+          title="Performance"
+          subtitle="Sante globale"
+          leftLabel="Score global"
+          leftValue={formatPercent(nested(performance, "overall"))}
+          rightLabel="Documents"
+          rightValue={formatNumber(nested(data?.documents, "total_documents"))}
+        >
+          <MiniLine values={[numberValue(nested(performance, "financial_health.score")), numberValue(nested(performance, "contribution_health.score")), numberValue(nested(performance, "project_health.score")), numberValue(nested(performance, "event_health.score")), numberValue(nested(performance, "overall"))]} />
+        </ReportMenuCard>
+      </section>
+
+      <section className="mt-5 flex gap-2 overflow-x-auto border-b border-border pb-2">
         {reportTabs.map(([label, path, Icon]) => <Link className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold text-slate-700 hover:bg-slate-100" href={workspacePath(workspaceSlug, path)} key={path}><Icon className="size-4" /> {label}</Link>)}
       </section>
-      {data?.empty_state ? <EmptyAnalyticsState /> : null}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard value={metricValue(kpiValue(finance, "income"), formatMoney)} label="Recettes" trend={formatTrend(kpiValue(finance, "income"))} direction={kpiValue(finance, "income").direction || "flat"} />
-        <KpiCard value={metricValue(kpiValue(finance, "expense"), formatMoney)} label="Depenses" trend={formatTrend(kpiValue(finance, "expense"))} direction={kpiValue(finance, "expense").direction || "flat"} />
-        <KpiCard value={formatPercent(nested(contributions, "recovery_rate"))} label="Taux de recouvrement" />
-        <KpiCard value={formatNumber(nested(members, "active_members"))} label="Membres actifs" />
-        <KpiCard value={formatMoney(nested(finance, "budget.total_budget"))} label="Budget total" />
-        <KpiCard value={formatPercent(nested(finance, "budget.consumption_rate"))} label="Budget consomme" />
-        <KpiCard value={formatNumber(nested(projects, "active_projects"))} label="Projets actifs" />
-        <KpiCard value={formatNumber(nested(events, "upcoming_events"))} label="Evenements a venir" />
-      </section>
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+
+      <section className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <MetricChart title="Cash flow mensuel" values={cashFlowValues} />
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2 text-base text-slate-900"><AlertTriangle className="size-4" /> Alertes</CardTitle></CardHeader>
@@ -139,11 +307,13 @@ export function ReportsView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
           </CardContent>
         </Card>
       </section>
-      <section className="grid gap-4 lg:grid-cols-2">
+
+      <section className="mt-5 grid gap-4 lg:grid-cols-2">
         <AnalyticsTable title="Budget par categorie" rows={dashboardRows(data)} />
         <AnalyticsTable title="Rapports enregistres" rows={savedRows(data)} />
       </section>
-      <section className="grid gap-4 md:grid-cols-4">
+
+      <section className="mt-5 grid gap-4 md:grid-cols-4">
         {([
           ["Sante financiere", nested(performance, "financial_health.score")],
           ["Sante membres", nested(members, "retention_rate")],
@@ -151,7 +321,7 @@ export function ReportsView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
           ["Engagement", nested(performance, "overall")],
         ] as Array<[string, unknown]>).map(([label, value]) => <Card key={label}><CardContent className="p-5"><Landmark className="size-5 text-blue-700" /><strong className="mt-3 block">{label} {formatPercent(value)}</strong><div className="mt-3 h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-blue-700" style={{ width: `${Math.min(numberValue(value), 100)}%` }} /></div></CardContent></Card>)}
       </section>
-    </div>
+    </main>
   );
 }
 
