@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     "apps.events",
     "apps.budgets",
     "apps.documents",
+    "apps.ai_assistant",
     "apps.analytics",
     "apps.reports",
     "apps.subscriptions",
