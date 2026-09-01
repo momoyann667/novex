@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowUpRight, BarChart3, CheckCircle2, ChevronLeft, ChevronRight, CreditCard, Download, Filter, Loader2, Plus, Search, Send, SlidersHorizontal, TrendingUp } from "lucide-react";
+import { AlertTriangle, BarChart3, CheckCircle2, ChevronLeft, ChevronRight, CreditCard, Download, Loader2, Plus, Search, Send, SlidersHorizontal, Sparkles, TrendingUp, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { workspacePath } from "@/lib/workspace/routing";
 import {
@@ -23,10 +23,10 @@ import { CONTRIBUTION_STATUSES } from "./contribution-status";
 const periods: Array<{ value: ContributionPeriod; label: string }> = [
   { value: "today", label: "Aujourd'hui" },
   { value: "week", label: "Cette semaine" },
-  { value: "month", label: "Cette annee" },
+  { value: "month", label: "Ce mois" },
   { value: "quarter", label: "Trimestre" },
   { value: "semester", label: "Semestre" },
-  { value: "year", label: "Annee" },
+  { value: "year", label: "Cette annee" },
   { value: "all", label: "Tout" }
 ];
 
@@ -117,11 +117,39 @@ function KpiTile({ title, value, icon, tone, pill, progressValue }: Readonly<{ t
   );
 }
 
-function ChartPanel({ period, onPeriodChange, rows }: Readonly<{ period: ContributionPeriod; onPeriodChange: (period: ContributionPeriod) => void; rows: Array<{ period: string; expected: string | number; collected: string | number }> }>) {
-  const values = rows.map((row) => numberValue(row.collected));
-  const max = Math.max(...values, 1);
-  const points = values.map((value, index) => `${(index / Math.max(values.length - 1, 1)) * 100},${94 - (value / max) * 76}`).join(" ");
+function PieChart({ segments, center, caption }: Readonly<{ segments: Array<{ label: string; value: number; color: string }>; center: string; caption: string }>) {
+  const total = Math.max(segments.reduce((sum, item) => sum + item.value, 0), 1);
+  let cursor = 0;
+  const gradient = segments
+    .map((item) => {
+      const start = cursor;
+      const end = cursor + (item.value / total) * 100;
+      cursor = end;
+      return `${item.color} ${start}% ${end}%`;
+    })
+    .join(", ");
 
+  return (
+    <div className="grid place-items-center gap-3">
+      <div className="relative grid size-40 place-items-center rounded-full" style={{ background: `conic-gradient(${gradient || "#e5e7eb 0% 100%"})` }}>
+        <div className="grid size-24 place-items-center rounded-full bg-white text-center shadow-inner">
+          <strong className="text-2xl font-black leading-none">{center}</strong>
+          <span className="text-[10px] font-bold text-slate-500">{caption}</span>
+        </div>
+      </div>
+      <div className="grid w-full grid-cols-2 gap-2">
+        {segments.map((item) => (
+          <div className="flex min-w-0 items-center gap-2 text-xs font-bold text-slate-600" key={item.label}>
+            <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
+            <span className="truncate">{item.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ChartPanel({ period, onPeriodChange, collected, remaining, overdue, rate }: Readonly<{ period: ContributionPeriod; onPeriodChange: (period: ContributionPeriod) => void; collected: number; remaining: number; overdue: number; rate: number }>) {
   return (
     <section className="w-full rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -130,22 +158,16 @@ function ChartPanel({ period, onPeriodChange, rows }: Readonly<{ period: Contrib
           {periods.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
         </select>
       </div>
-      <div className="mt-5 grid h-64 w-full place-items-center overflow-hidden rounded-lg border border-dashed border-slate-200 bg-[#f4f6f8]">
-        {rows.length ? (
-          <svg className="h-full w-full p-5" preserveAspectRatio="none" viewBox="0 0 100 100" role="img" aria-label="Evolution des collectes">
-            <polyline fill="none" points={points} stroke="#0b63ce" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" />
-            {rows.map((row, index) => (
-              <circle cx={(index / Math.max(rows.length - 1, 1)) * 100} cy={94 - (numberValue(row.collected) / max) * 76} fill="#0b63ce" key={`${row.period}-${index}`} r="2.8">
-                <title>{`${row.period}: ${formatMoney(row.collected)}`}</title>
-              </circle>
-            ))}
-          </svg>
-        ) : (
-          <div className="grid gap-3 text-center text-sm font-semibold text-slate-700">
-            <BarChart3 className="mx-auto size-6 text-slate-400" />
-            Zone graphique
-          </div>
-        )}
+      <div className="mt-5 w-full rounded-lg border border-slate-100 bg-[#f7f8fa] p-4">
+        <PieChart
+          caption="Recouvrement"
+          center={`${Math.round(rate)}%`}
+          segments={[
+            { label: "Collecte", value: collected, color: "#0b63ce" },
+            { label: "Reste", value: remaining, color: "#e5e7eb" },
+            { label: "Retard", value: overdue, color: "#ef4444" }
+          ]}
+        />
       </div>
     </section>
   );
@@ -230,6 +252,14 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
   const currency = contributions[0]?.currency || campaignsQuery.data?.[0]?.currency || "FCFA";
   const totalPages = Math.max(Math.ceil((contributionsQuery.data?.count || 0) / 6), 1);
   const error = dashboardQuery.error || analyticsQuery.error || contributionsQuery.error;
+  const paidCount = numberValue(dashboard?.members_paid);
+  const partialCount = numberValue(dashboard?.members_partial);
+  const unpaidCount = numberValue(dashboard?.members_unpaid);
+  const overdueCount = numberValue(dashboard?.members_overdue);
+  const collected = numberValue(dashboard?.total_collected);
+  const remaining = numberValue(dashboard?.total_remaining);
+  const overdueAmount = numberValue(dashboard?.total_overdue || analytics?.overdue_amount);
+  const collectionRate = progress(dashboard?.collection_rate);
 
   const refreshAll = async () => {
     await Promise.all([
@@ -262,16 +292,33 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
   });
 
   return (
-    <main className="mx-auto grid w-full max-w-[430px] gap-4 overflow-x-hidden px-3 pb-24 pt-4 text-slate-950">
+    <main className="grid min-w-0 w-full max-w-full gap-4 overflow-x-hidden px-4 pb-24 pt-4 text-slate-950">
       {notice ? <div className="rounded-xl bg-blue-50 px-4 py-3 text-sm font-black text-blue-800">{notice}</div> : null}
       {error ? <div className="rounded-xl bg-red-50 px-4 py-3 text-sm font-black text-red-700">Impossible de charger les cotisations.</div> : null}
 
-      <KpiTile icon={<BarChart3 className="size-4" />} pill="+4% vs le mois dernier" progressValue={dashboard?.collection_rate as number} title="Taux de recouvrement" tone="blue" value={`${Math.round(progress(dashboard?.collection_rate))}%`} />
+      <KpiTile icon={<BarChart3 className="size-4" />} pill="+4% vs le mois dernier" progressValue={collectionRate} title="Taux de recouvrement" tone="blue" value={`${Math.round(collectionRate)}%`} />
       <KpiTile icon={<CreditCard className="size-4" />} title="Montant attendu" tone="slate" value={compactMoney(dashboard?.total_expected, currency)} />
       <KpiTile icon={<TrendingUp className="size-4" />} title="Montant collecte" tone="green" value={compactMoney(dashboard?.total_collected, currency)} />
       <KpiTile icon={<AlertTriangle className="size-4" />} title="Impayes" tone="red" value={compactMoney(dashboard?.total_remaining, currency)} />
 
-      <ChartPanel onPeriodChange={setPeriod} period={period} rows={analytics?.series || []} />
+      <ChartPanel collected={collected} onPeriodChange={setPeriod} overdue={overdueAmount} period={period} rate={collectionRate} remaining={remaining} />
+
+      <section className="w-full rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-xl font-black tracking-normal">Repartition des statuts</h2>
+          <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-black text-slate-600">{formatNumber(paidCount + partialCount + unpaidCount + overdueCount)} membres</span>
+        </div>
+        <PieChart
+          caption="Membres"
+          center={`${Math.round(progress((paidCount / Math.max(paidCount + partialCount + unpaidCount + overdueCount, 1)) * 100))}%`}
+          segments={[
+            { label: "Payes", value: paidCount, color: "#10b981" },
+            { label: "Partiels", value: partialCount, color: "#f59e0b" },
+            { label: "En attente", value: unpaidCount, color: "#94a3b8" },
+            { label: "Impayes", value: overdueCount, color: "#ef4444" }
+          ]}
+        />
+      </section>
 
       <section className="w-full rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
@@ -374,6 +421,22 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
       </section>
 
       <section className="w-full rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-black"><Users className="size-5 text-blue-700" /> Membres non a jour</h2>
+        <div className="grid gap-3">
+          {(analytics?.top_unpaid || []).slice(0, 5).map((member) => (
+            <div className="flex min-w-0 items-center justify-between gap-3 rounded-lg bg-red-50 p-3" key={member.member_id}>
+              <div className="min-w-0">
+                <strong className="block truncate text-sm font-black">{member.member_name}</strong>
+                <span className="block truncate text-xs font-semibold text-red-700">{member.phone || "Telephone non renseigne"}</span>
+              </div>
+              <strong className="shrink-0 text-sm text-red-700">{compactMoney(member.amount_remaining, currency)}</strong>
+            </div>
+          ))}
+          {!analytics?.top_unpaid?.length ? <p className="text-sm font-bold text-slate-500">Aucun membre prioritaire pour le moment.</p> : null}
+        </div>
+      </section>
+
+      <section className="w-full rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="mb-3 text-lg font-black">Modes de paiement</h2>
         <div className="grid gap-2">
           {(analytics?.payment_methods || []).map((item) => (
@@ -383,6 +446,34 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
             </div>
           ))}
           {!analytics?.payment_methods?.length ? <p className="text-sm font-bold text-slate-500">Aucun paiement valide pour cette periode.</p> : null}
+        </div>
+      </section>
+
+      <section className="w-full rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="mb-3 text-lg font-black">Collecte par categorie</h2>
+        <div className="grid gap-3">
+          {(analytics?.type_performance || []).filter((item) => numberValue(item.expected) > 0 || numberValue(item.collected) > 0).slice(0, 6).map((item) => (
+            <div className="rounded-lg bg-slate-50 p-3" key={item.type}>
+              <div className="flex min-w-0 justify-between gap-3 text-sm font-black">
+                <span className="truncate">{item.label}</span>
+                <span className="shrink-0">{Math.round(progress(item.collection_rate))}%</span>
+              </div>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
+                <div className="h-full rounded-full bg-blue-700" style={{ width: `${progress(item.collection_rate)}%` }} />
+              </div>
+              <p className="mt-2 text-xs font-semibold text-slate-500">{formatMoney(item.collected, currency)} collectes sur {formatMoney(item.expected, currency)}</p>
+            </div>
+          ))}
+          {!analytics?.type_performance?.some((item) => numberValue(item.expected) > 0 || numberValue(item.collected) > 0) ? <p className="text-sm font-bold text-slate-500">Aucune categorie de collecte disponible.</p> : null}
+        </div>
+      </section>
+
+      <section className="w-full rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-black"><Sparkles className="size-5 text-blue-700" /> Insights</h2>
+        <div className="grid gap-3">
+          <div className="rounded-lg bg-blue-50 p-3 text-sm font-bold text-blue-900">NOVEX a collecte {compactMoney(collected, currency)} sur {compactMoney(dashboard?.total_expected, currency)} attendus.</div>
+          <div className="rounded-lg bg-amber-50 p-3 text-sm font-bold text-amber-900">Il reste {compactMoney(remaining, currency)} a collecter, dont {compactMoney(overdueAmount, currency)} en retard.</div>
+          <div className="rounded-lg bg-slate-50 p-3 text-sm font-bold text-slate-700">Les exports et relances respectent les filtres actifs du workspace.</div>
         </div>
       </section>
 
