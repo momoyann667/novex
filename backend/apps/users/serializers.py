@@ -45,9 +45,21 @@ class RegisterSerializer(serializers.Serializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    default_workspace = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ["id", "email", "phone", "email_verified_at"]
+        fields = ["id", "email", "phone", "email_verified_at", "default_workspace"]
+
+    def get_default_workspace(self, obj):
+        membership = obj.workspace_memberships.filter(status="active").select_related("workspace").order_by("id").first()
+        if not membership:
+            return None
+        return {
+            "id": membership.workspace_id,
+            "name": membership.workspace.name,
+            "slug": membership.workspace.slug,
+        }
 
 
 class LoginSerializer(serializers.Serializer):

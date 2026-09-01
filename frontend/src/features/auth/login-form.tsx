@@ -17,6 +17,12 @@ const schema = z.object({
 
 type LoginValues = z.infer<typeof schema>;
 
+type LoginPayload = {
+  default_workspace?: {
+    slug?: string;
+  } | null;
+};
+
 function errorMessageFromPayload(payload: unknown): string {
   if (!payload || typeof payload !== "object") {
     return "Impossible de se connecter pour le moment.";
@@ -56,13 +62,18 @@ export function LoginForm() {
         },
         body: JSON.stringify(values)
       });
-      const payload = (await response.json().catch(() => null)) as unknown;
+      const payload = (await response.json().catch(() => null)) as LoginPayload | null;
 
       if (!response.ok) {
         throw new ApiError(errorMessageFromPayload(payload), response.status);
       }
 
-      router.push("/app/demo/dashboard");
+      const workspaceSlug = payload?.default_workspace?.slug;
+      if (!workspaceSlug) {
+        throw new ApiError("Aucun workspace actif trouve pour ce compte.", 403);
+      }
+
+      router.push(`/app/${workspaceSlug}/dashboard`);
     } catch (error) {
       setSubmitError(error instanceof ApiError ? error.message : "Impossible de se connecter pour le moment.");
     }
