@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowDown, ArrowUp, Download, Minus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { PeriodCode } from "./api";
 
 export function TrendIndicator({ direction, value }: Readonly<{ direction: "up" | "down" | "flat"; value: string }>) {
   const Icon = direction === "up" ? ArrowUp : direction === "down" ? ArrowDown : Minus;
@@ -25,36 +26,53 @@ export function KpiCard({ value, label, trend, direction = "flat" }: Readonly<{ 
   );
 }
 
-export function PeriodFilter() {
+const periods: Array<{ code: PeriodCode; label: string }> = [
+  { code: "today", label: "Aujourd'hui" },
+  { code: "week", label: "Cette semaine" },
+  { code: "month", label: "Ce mois" },
+  { code: "quarter", label: "Trimestre" },
+  { code: "year", label: "Cette annee" },
+  { code: "previous_year", label: "Annee precedente" },
+];
+
+export function PeriodFilter({ value, onChange }: Readonly<{ value: PeriodCode; onChange: (period: PeriodCode) => void }>) {
   return (
     <div className="flex gap-2 overflow-x-auto">
-      {["Aujourd'hui", "Cette semaine", "Ce mois", "Trimestre", "Cette annee", "Annee precedente", "Personnalise"].map((period, index) => (
-        <button className={`min-h-9 shrink-0 rounded-md px-3 text-sm font-semibold ${index === 2 ? "bg-blue-700 text-white" : "bg-white text-slate-700 hover:bg-slate-100"}`} key={period} type="button">
-          {period}
+      {periods.map((period) => (
+        <button className={`min-h-9 shrink-0 rounded-md px-3 text-sm font-semibold ${value === period.code ? "bg-blue-700 text-white" : "bg-white text-slate-700 hover:bg-slate-100"}`} key={period.code} type="button" onClick={() => onChange(period.code)}>
+          {period.label}
         </button>
       ))}
     </div>
   );
 }
 
-export function ReportHeader({ title, description, workspaceSlug }: Readonly<{ title: string; description: string; workspaceSlug: string }>) {
+export function ReportHeader({
+  title,
+  description,
+  workspaceSlug,
+  lastUpdatedAt,
+  onExport,
+  exportDisabled = false
+}: Readonly<{ title: string; description: string; workspaceSlug: string; lastUpdatedAt?: string; onExport?: () => void; exportDisabled?: boolean }>) {
+  const lastUpdated = lastUpdatedAt ? new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(lastUpdatedAt)) : "En attente de donnees";
   return (
     <div className="grid gap-4 rounded-card border border-border bg-white p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
       <div>
         <h1 className="text-2xl font-bold tracking-normal">{title}</h1>
         <p className="mt-1 text-sm text-slate-500">{description}</p>
-        <p className="mt-3 inline-flex items-center gap-2 text-xs text-slate-500"><RefreshCw className="size-3" /> Derniere mise a jour : Aujourd'hui a 09:42</p>
+        <p className="mt-3 inline-flex items-center gap-2 text-xs text-slate-500"><RefreshCw className="size-3" /> Derniere mise a jour : {lastUpdated}</p>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button asChild variant="outline"><Link href={`/app/${workspaceSlug}/reports/annual`}>Rapport annuel</Link></Button>
-        <ExportButton />
+        <ExportButton disabled={exportDisabled} onClick={onExport} />
       </div>
     </div>
   );
 }
 
-export function ExportButton() {
-  return <Button type="button"><Download className="size-4" /> Export</Button>;
+export function ExportButton({ disabled = false, onClick }: Readonly<{ disabled?: boolean; onClick?: () => void }>) {
+  return <Button disabled={disabled} type="button" onClick={onClick}><Download className="size-4" /> Export</Button>;
 }
 
 export function MetricChart({ title, values }: Readonly<{ title: string; values: readonly number[] }>) {

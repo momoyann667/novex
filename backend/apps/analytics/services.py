@@ -84,7 +84,16 @@ def period_filter(field: str, period: AnalyticsPeriod) -> dict:
 
 
 def date_period_filter(field: str, period: AnalyticsPeriod) -> dict:
-    return {f"{field}__gte": period.start.date(), f"{field}__lt": period.end.date()}
+    end_lookup = "lt" if period.end.time() == timezone.datetime.min.time() else "lte"
+    return {f"{field}__gte": period.start.date(), f"{field}__{end_lookup}": period.end.date()}
+
+
+def date_or_datetime_iso(value) -> str:
+    if not value:
+        return ""
+    if hasattr(value, "date"):
+        value = value.date()
+    return value.isoformat()
 
 
 def kpi(value, previous=None) -> dict:
@@ -175,7 +184,7 @@ def members_analytics(*, workspace: Workspace, period: AnalyticsPeriod) -> dict:
         "growth_rate": percentage(new_members - left_members, start_count),
         "retention_rate": retention,
         "by_status": by_status,
-        "monthly_growth": [{"period": row["month"].date().isoformat() if row["month"] else "", "count": row["count"]} for row in monthly],
+        "monthly_growth": [{"period": date_or_datetime_iso(row["month"]), "count": row["count"]} for row in monthly],
         "engagement_formula": "40% cotisation a jour + 40% participation evenements + 20% activite auditee",
     }
 

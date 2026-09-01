@@ -28,7 +28,7 @@ from apps.workspaces.models import Role, Workspace, WorkspaceMembership
 
 @pytest.fixture
 def owner(db):
-    return User.objects.create_user(email="analytics@example.com", password="secret")
+    return User.objects.create_user(username="analytics@example.com", email="analytics@example.com", password="secret")
 
 
 @pytest.fixture
@@ -80,7 +80,7 @@ def test_members_projects_events_and_workspace_isolation(workspace, owner):
     member = Member.objects.filter(workspace=workspace).first()
     EventParticipant.objects.create(workspace=workspace, event=event, member=member, status=EventParticipantStatus.REGISTERED, attendance_status=EventParticipantStatus.ATTENDED)
 
-    other_owner = User.objects.create_user(email="other-analytics@example.com", password="secret")
+    other_owner = User.objects.create_user(username="other-analytics@example.com", email="other-analytics@example.com", password="secret")
     other = Workspace.objects.create(name="Analytics B", slug="analytics-b", organization_type=Workspace.OrganizationType.ASSOCIATION, owner=other_owner)
     Member.objects.create(workspace=other, membership_number="B-001", first_name="Hidden", last_name="User", status=Member.Status.ACTIVE)
 
