@@ -241,10 +241,10 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
       {settingsQuery.isError || updateMutation.isError ? <Alert tone="error" message="Impossible de charger ou enregistrer les parametres." /> : null}
 
       {activeSection ? (
-        <nav className="mt-4 flex gap-2 overflow-x-auto pb-1" aria-label="Sous-menus parametres">
+        <nav className="mt-4 grid grid-cols-2 gap-3" aria-label="Sous-menus parametres">
           {settingsRows.map((row) => (
-            <Link className={`min-h-10 shrink-0 rounded-full px-4 py-3 text-xs font-black ${activeSection === row.id ? "bg-blue-700 text-white" : "border border-slate-200 bg-white text-slate-700"}`} href={`/app/${workspaceSlug}/settings/${row.id}`} key={`shortcut-${row.id}`}>
-              {row.title}
+            <Link className={`flex min-h-20 items-center rounded-lg px-4 text-base font-black shadow-sm ${activeSection === row.id ? "bg-blue-700 text-white" : "border border-slate-200 bg-white text-slate-900"}`} href={`/app/${workspaceSlug}/settings/${row.id}`} key={`shortcut-${row.id}`}>
+              <span className="truncate">{row.title}</span>
             </Link>
           ))}
         </nav>
@@ -272,10 +272,10 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
             {settingsRows.map((row, index) => {
               const Icon = row.icon;
               return (
-                <Link className={`flex w-full items-center gap-3 px-4 py-3 text-left ${index ? "border-t border-slate-100" : ""}`} key={row.id} href={`/app/${workspaceSlug}/settings/${row.id}`}>
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-950"><Icon className="size-4" /></span>
-                  <span className="min-w-0 flex-1"><span className="block text-sm font-black">{row.title}</span><span className="block truncate text-xs font-semibold text-slate-500">{row.subtitle}</span></span>
-                  <ChevronRight className="size-4 shrink-0 text-slate-500" />
+                <Link className={`flex w-full items-center gap-4 px-4 py-5 text-left ${index ? "border-t border-slate-100" : ""}`} key={row.id} href={`/app/${workspaceSlug}/settings/${row.id}`}>
+                  <span className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-950"><Icon className="size-6" /></span>
+                  <span className="min-w-0 flex-1"><span className="block text-xl font-black tracking-normal">{row.title}</span><span className="mt-1 block truncate text-sm font-semibold text-slate-500">{row.subtitle}</span></span>
+                  <ChevronRight className="size-5 shrink-0 text-slate-500" />
                 </Link>
               );
             })}
