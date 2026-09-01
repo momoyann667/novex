@@ -240,6 +240,16 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
       {notice ? <Alert tone="success" message={notice} /> : null}
       {settingsQuery.isError || updateMutation.isError ? <Alert tone="error" message="Impossible de charger ou enregistrer les parametres." /> : null}
 
+      {activeSection ? (
+        <nav className="mt-4 flex gap-2 overflow-x-auto pb-1" aria-label="Sous-menus parametres">
+          {settingsRows.map((row) => (
+            <Link className={`min-h-10 shrink-0 rounded-full px-4 py-3 text-xs font-black ${activeSection === row.id ? "bg-blue-700 text-white" : "border border-slate-200 bg-white text-slate-700"}`} href={`/app/${workspaceSlug}/settings/${row.id}`} key={`shortcut-${row.id}`}>
+              {row.title}
+            </Link>
+          ))}
+        </nav>
+      ) : null}
+
       {!activeSection ? (
         <>
           <section className="mt-5 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -271,10 +281,6 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
             })}
           </section>
 
-          <button className="mt-6 flex min-h-14 w-full items-center justify-center gap-2 rounded-lg bg-red-100 text-sm font-black text-red-700" type="button" onClick={signOut} disabled={isSigningOut}>
-            <LogOut className="size-4" />
-            {isSigningOut ? "Deconnexion..." : "Se deconnecter"}
-          </button>
           <p className="mt-8 text-center text-[10px] font-bold text-slate-400">NOVEX v2.4.1</p>
         </>
       ) : (
@@ -391,6 +397,11 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
           </Button>
         </section>
       )}
+
+      <button className="mt-6 flex min-h-14 w-full items-center justify-center gap-2 rounded-lg bg-red-100 text-sm font-black text-red-700" type="button" onClick={signOut} disabled={isSigningOut}>
+        <LogOut className="size-4" />
+        {isSigningOut ? "Deconnexion..." : "Se deconnecter"}
+      </button>
     </main>
   );
 }
