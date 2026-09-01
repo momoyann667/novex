@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Building2, CheckCircle2, ChevronRight, CreditCard, LogOut, Pencil, Plus, Save, ShieldCheck, Star, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { activateContributionCampaign, createContributionCampaign, listContributionCampaigns } from "@/features/contributions/api";
 import { currentMemberProfile } from "@/features/members/current-member-profile";
 import { getWorkspaceSettings, updateWorkspaceSettings, type WorkspaceSettingsResource, type WorkspaceSettingsUpdatePayload } from "./api";
 
@@ -77,6 +78,13 @@ const settingsRows: Array<{ id: SettingsSection; title: string; subtitle: string
   { id: "subscription", title: "Abonnement", subtitle: "Plan, facturation", icon: Star }
 ];
 
+function defaultContributionDueDate(periodicity: string) {
+  const today = new Date();
+  const month = periodicity === "YEARLY" ? 11 : today.getMonth();
+  const end = new Date(today.getFullYear(), month + 1, 0);
+  return end.toISOString().slice(0, 10);
+}
+
 function boolSetting(source: Record<string, unknown>, key: string) {
   return Boolean(source[key]);
 }
@@ -110,9 +118,15 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [notice, setNotice] = useState("");
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [contributionDraft, setContributionDraft] = useState({ name: "", periodicity: "MONTHLY", amount: "" });
   const settingsQuery = useQuery({
     queryKey: ["workspace-settings", workspaceSlug],
     queryFn: () => getWorkspaceSettings(workspaceSlug)
+  });
+  const contributionCampaignsQuery = useQuery({
+    queryKey: ["contribution-campaigns", workspaceSlug],
+    queryFn: () => listContributionCampaigns(workspaceSlug),
+    enabled: activeSection === "finance"
   });
 
   useEffect(() => {
@@ -143,6 +157,26 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
       if (settings.workspace_slug && settings.workspace_slug !== workspaceSlug) {
         router.replace(`/app/${settings.workspace_slug}/settings${activeSection ? `/${activeSection}` : ""}`);
       }
+    }
+  });
+  const createContributionMutation = useMutation({
+    mutationFn: async () => {
+      const campaign = await createContributionCampaign(workspaceSlug, {
+        name: contributionDraft.name.trim(),
+        periodicity: contributionDraft.periodicity,
+        amount: contributionDraft.amount,
+        period_label: contributionDraft.periodicity === "MONTHLY" ? "Cotisation mensuelle" : contributionDraft.periodicity === "YEARLY" ? "Cotisation annuelle" : contributionDraft.periodicity === "QUARTERLY" ? "Cotisation trimestrielle" : "Cotisation",
+        due_date: defaultContributionDueDate(contributionDraft.periodicity),
+        status: "DRAFT"
+      });
+      await activateContributionCampaign(workspaceSlug, campaign.id);
+      return campaign;
+    },
+    onSuccess: async () => {
+      setContributionDraft({ name: "", periodicity: "MONTHLY", amount: "" });
+      setNotice("Cotisation creee dans le module Cotisations.");
+      await queryClient.invalidateQueries({ queryKey: ["contribution-campaigns", workspaceSlug] });
+      await queryClient.invalidateQueries({ queryKey: ["contributions-dashboard", workspaceSlug] });
     }
   });
 
@@ -347,6 +381,35 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
               <label className="flex min-h-12 items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 text-sm font-black">Validation depenses<input className="size-5 accent-blue-700" type="checkbox" checked={boolSetting(form.finance_preferences, "expense_validation_enabled")} onChange={(event) => updateRecord("finance_preferences", "expense_validation_enabled", event.target.checked)} /></label>
               <label className="flex min-h-12 items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 text-sm font-black">Validation recettes<input className="size-5 accent-blue-700" type="checkbox" checked={boolSetting(form.finance_preferences, "income_validation_enabled")} onChange={(event) => updateRecord("finance_preferences", "income_validation_enabled", event.target.checked)} /></label>
               <label className={labelClass}>Seuil validation depense<input className={fieldClass} type="number" value={numericSetting(form.finance_preferences, "expense_validation_threshold", 50000)} onChange={(event) => updateRecord("finance_preferences", "expense_validation_threshold", Number(event.target.value))} /></label>
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-black text-slate-950">Cotisations</h3>
+                    <p className="mt-1 text-xs font-bold text-slate-600">Cree les cotisations qui seront suivies dans le menu Cotisations.</p>
+                  </div>
+                  <CreditCard className="size-5 shrink-0 text-blue-700" />
+                </div>
+                <div className="grid gap-3">
+                  <label className={labelClass}>Nom de la cotisation<input className={fieldClass} placeholder="Ex: Cotisation mensuelle 2026" value={contributionDraft.name} onChange={(event) => setContributionDraft((current) => ({ ...current, name: event.target.value }))} /></label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className={labelClass}>Frequence<select className={fieldClass} value={contributionDraft.periodicity} onChange={(event) => setContributionDraft((current) => ({ ...current, periodicity: event.target.value }))}><option value="MONTHLY">Mensuelle</option><option value="QUARTERLY">Trimestrielle</option><option value="YEARLY">Annuelle</option><option value="ONE_TIME">Ponctuelle</option><option value="CUSTOM">Personnalisee</option></select></label>
+                    <label className={labelClass}>Montant<input className={fieldClass} min="1" placeholder="10000" type="number" value={contributionDraft.amount} onChange={(event) => setContributionDraft((current) => ({ ...current, amount: event.target.value }))} /></label>
+                  </div>
+                  <button className="min-h-11 rounded-md bg-blue-700 px-3 text-sm font-black text-white disabled:opacity-50" type="button" disabled={createContributionMutation.isPending || !contributionDraft.name.trim() || !contributionDraft.amount} onClick={() => createContributionMutation.mutate()}>
+                    {createContributionMutation.isPending ? "Creation..." : "Creer la cotisation"}
+                  </button>
+                  {createContributionMutation.isError ? <p className="text-xs font-bold text-red-600">Impossible de creer la cotisation.</p> : null}
+                  <div className="grid gap-2">
+                    {(contributionCampaignsQuery.data || []).slice(0, 5).map((campaign) => (
+                      <div className="flex min-w-0 items-center justify-between gap-3 rounded-md bg-white px-3 py-2 text-sm font-bold" key={campaign.id}>
+                        <span className="min-w-0 truncate">{campaign.name}</span>
+                        <span className="shrink-0 text-blue-700">{Number(campaign.amount).toLocaleString("fr-FR")} {campaign.currency || "FCFA"}</span>
+                      </div>
+                    ))}
+                    {contributionCampaignsQuery.isLoading ? <p className="text-xs font-bold text-slate-500">Chargement des cotisations...</p> : null}
+                  </div>
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <label className={labelClass}>Alerte budget (%)<input className={fieldClass} type="number" value={numericSetting(form.project_preferences, "budget_alert_threshold", 80)} onChange={(event) => updateRecord("project_preferences", "budget_alert_threshold", Number(event.target.value))} /></label>
                 <label className={labelClass}>Blocage budget (%)<input className={fieldClass} type="number" value={numericSetting(form.project_preferences, "budget_block_threshold", 100)} onChange={(event) => updateRecord("project_preferences", "budget_block_threshold", Number(event.target.value))} /></label>

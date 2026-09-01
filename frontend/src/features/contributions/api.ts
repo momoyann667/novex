@@ -117,6 +117,8 @@ export type ContributionFilters = {
   ordering?: string;
   page?: number;
   pageSize?: number;
+  dueAfter?: string;
+  dueBefore?: string;
 };
 
 export type ManualPaymentPayload = {
@@ -124,6 +126,16 @@ export type ManualPaymentPayload = {
   paid_at?: string;
   payment_method: string;
   document_reference?: string;
+};
+
+export type ContributionCampaignPayload = {
+  name: string;
+  amount: string;
+  periodicity: string;
+  contribution_type?: string;
+  period_label?: string;
+  due_date?: string;
+  status?: string;
 };
 
 function workspaceHeaders(workspaceSlug: string) {
@@ -196,7 +208,9 @@ export async function listContributions(workspaceSlug: string, filters: Contribu
       search: filters.search,
       ordering: filters.ordering || "due_date",
       page: filters.page,
-      page_size: filters.pageSize || 12
+      page_size: filters.pageSize || 12,
+      due_after: filters.dueAfter,
+      due_before: filters.dueBefore
     })}`,
     { headers: workspaceHeaders(workspaceSlug), cache: "no-store" }
   );
@@ -214,6 +228,25 @@ export async function listContributionMembers(workspaceSlug: string, filters: Pi
     `/contributions/members-summary/${buildQuery({ status: filters.status ? statusMap[filters.status] || filters.status : undefined })}`,
     { headers: workspaceHeaders(workspaceSlug), cache: "no-store" }
   );
+}
+
+export async function createContributionCampaign(workspaceSlug: string, payload: ContributionCampaignPayload) {
+  return apiFetch<ContributionCampaign>("/contributions/campaigns/", {
+    method: "POST",
+    headers: workspaceHeaders(workspaceSlug),
+    body: JSON.stringify({
+      contribution_type: "MONTHLY",
+      status: "ACTIVE",
+      ...payload
+    })
+  });
+}
+
+export async function activateContributionCampaign(workspaceSlug: string, campaignId: number) {
+  return apiFetch<{ created: number }>(`/contributions/campaigns/${campaignId}/activate/`, {
+    method: "POST",
+    headers: workspaceHeaders(workspaceSlug)
+  });
 }
 
 export async function recordContributionPayment(workspaceSlug: string, contributionId: number, payload: ManualPaymentPayload) {

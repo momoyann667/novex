@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, BarChart3, CheckCircle2, ChevronLeft, ChevronRight, CreditCard, Download, Loader2, Plus, Search, Send, SlidersHorizontal, Sparkles, TrendingUp, Users } from "lucide-react";
+import { AlertTriangle, BarChart3, CheckCircle2, ChevronLeft, ChevronRight, CreditCard, Download, Loader2, Plus, Search, Send, SlidersHorizontal, Sparkles, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { workspacePath } from "@/lib/workspace/routing";
 import {
@@ -48,6 +48,21 @@ const paymentMethods = [
   { value: "other", label: "Autre" }
 ] as const;
 
+const monthOptions = [
+  "Janvier",
+  "Fevrier",
+  "Mars",
+  "Avril",
+  "Mai",
+  "Juin",
+  "Juillet",
+  "Aout",
+  "Septembre",
+  "Octobre",
+  "Novembre",
+  "Decembre"
+];
+
 function numberValue(value: unknown) {
   const numeric = Number(value ?? 0);
   return Number.isFinite(numeric) ? numeric : 0;
@@ -85,6 +100,17 @@ function initials(name: string) {
 
 function shortCampaignLabel(item: ContributionResource) {
   return item.due_date ? `Cotisation ${new Date(item.due_date).getFullYear()}` : `Cotisation #${item.id}`;
+}
+
+function contributionName(item: ContributionResource, campaigns: Array<{ id: number; name: string }>) {
+  return campaigns.find((campaign) => campaign.id === item.campaign)?.name || shortCampaignLabel(item);
+}
+
+function tableStatus(item: ContributionResource, selectedMonth: number, selectedYear: number, today: Date) {
+  const style = statusStyles[item.status] || statusStyles.PENDING;
+  if (item.status !== "PENDING") return style;
+  const isSelectedCurrentMonth = selectedMonth === today.getMonth() && selectedYear === today.getFullYear();
+  return isSelectedCurrentMonth ? statusStyles.PENDING : { ...statusStyles.OVERDUE, label: "Impaye" };
 }
 
 function queryStatus(status: string) {
@@ -233,10 +259,21 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
   const [selectedContribution, setSelectedContribution] = useState<ContributionResource | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [notice, setNotice] = useState("");
+  const today = useMemo(() => new Date(), []);
+  const [tableMonth, setTableMonth] = useState(today.getMonth());
+  const [tableYear, setTableYear] = useState(today.getFullYear());
+  const tableBounds = useMemo(() => {
+    const start = new Date(tableYear, tableMonth, 1);
+    const end = new Date(tableYear, tableMonth + 1, 0);
+    return {
+      dueAfter: start.toISOString().slice(0, 10),
+      dueBefore: end.toISOString().slice(0, 10)
+    };
+  }, [tableMonth, tableYear]);
 
   const filters: ContributionFilters = useMemo(
-    () => ({ period, campaign, category, group, paymentMethod, status: queryStatus(status), search, ordering, page, pageSize: 6 }),
-    [campaign, category, group, ordering, page, paymentMethod, period, search, status]
+    () => ({ period, campaign, category, group, paymentMethod, status: queryStatus(status), search, ordering, page, pageSize: 8, dueAfter: tableBounds.dueAfter, dueBefore: tableBounds.dueBefore }),
+    [campaign, category, group, ordering, page, paymentMethod, period, search, status, tableBounds]
   );
 
   const dashboardQuery = useQuery({ queryKey: ["contributions-dashboard", workspaceSlug, period, campaign], queryFn: () => getContributionDashboard(workspaceSlug, period, campaign) });
@@ -245,12 +282,17 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
   const categoriesQuery = useQuery({ queryKey: ["contribution-categories", workspaceSlug], queryFn: () => listContributionCategories(workspaceSlug) });
   const groupsQuery = useQuery({ queryKey: ["contribution-groups", workspaceSlug], queryFn: () => listContributionGroups(workspaceSlug) });
   const contributionsQuery = useQuery({ queryKey: ["contributions", workspaceSlug, filters], queryFn: () => listContributions(workspaceSlug, filters) });
+  const latestContributionsQuery = useQuery({
+    queryKey: ["contributions-latest", workspaceSlug],
+    queryFn: () => listContributions(workspaceSlug, { period: "all", ordering: "-created_at", page: 1, pageSize: 5 })
+  });
 
   const dashboard = dashboardQuery.data;
   const analytics = analyticsQuery.data;
   const contributions = contributionsQuery.data?.results || [];
+  const latestContributions = latestContributionsQuery.data?.results || [];
   const currency = contributions[0]?.currency || campaignsQuery.data?.[0]?.currency || "FCFA";
-  const totalPages = Math.max(Math.ceil((contributionsQuery.data?.count || 0) / 6), 1);
+  const totalPages = Math.max(Math.ceil((contributionsQuery.data?.count || 0) / 8), 1);
   const error = dashboardQuery.error || analyticsQuery.error || contributionsQuery.error;
   const paidCount = numberValue(dashboard?.members_paid);
   const partialCount = numberValue(dashboard?.members_partial);
@@ -265,7 +307,8 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["contributions-dashboard", workspaceSlug] }),
       queryClient.invalidateQueries({ queryKey: ["contributions-analytics", workspaceSlug] }),
-      queryClient.invalidateQueries({ queryKey: ["contributions", workspaceSlug] })
+      queryClient.invalidateQueries({ queryKey: ["contributions", workspaceSlug] }),
+      queryClient.invalidateQueries({ queryKey: ["contributions-latest", workspaceSlug] })
     ]);
   };
 
@@ -322,7 +365,7 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
 
       <section className="w-full rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-xl font-black tracking-normal">Statut des paiements</h2>
+          <h2 className="text-xl font-black tracking-normal">Dernieres cotisations</h2>
           <button className="grid size-8 place-items-center rounded-lg text-blue-700 hover:bg-blue-50" type="button" onClick={() => setShowFilters((current) => !current)} aria-label="Afficher les filtres">
             <SlidersHorizontal className="size-5" />
           </button>
@@ -358,7 +401,7 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
         ) : null}
 
         <div className="grid gap-4">
-          {contributions.map((item) => {
+          {latestContributions.map((item) => {
             const style = statusStyles[item.status] || statusStyles.PENDING;
             return (
               <div className="flex min-w-0 items-center gap-3" key={item.id}>
@@ -367,16 +410,49 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
                 </Link>
                 <Link className="min-w-0 flex-1" href={workspacePath(workspaceSlug, `members/${item.member}`)}>
                   <strong className="block truncate text-sm font-black">{item.member_name}</strong>
-                  <span className="block truncate text-xs font-semibold text-slate-500">{shortCampaignLabel(item)}</span>
+                  <span className="block truncate text-xs font-semibold text-slate-500">{contributionName(item, campaignsQuery.data || [])}</span>
                 </Link>
                 <span className={`shrink-0 rounded px-2 py-1 text-xs font-black ${style.badge}`}>{style.label}</span>
               </div>
             );
           })}
-          {!contributions.length ? <div className="rounded-lg bg-slate-50 p-5 text-center text-sm font-bold text-slate-500">Aucune cotisation trouvee.</div> : null}
+          {!latestContributions.length ? <div className="rounded-lg bg-slate-50 p-5 text-center text-sm font-bold text-slate-500">Aucune cotisation recente.</div> : null}
         </div>
 
-        <Link className="mt-5 block text-center text-xs font-black text-blue-700" href={workspacePath(workspaceSlug, "members")}>Voir tous les membres</Link>
+        <a className="mt-5 block text-center text-xs font-black text-blue-700" href="#cotisations-table">Voir toutes les cotisations</a>
+      </section>
+
+      <section className="w-full rounded-xl border border-slate-200 bg-white p-4 shadow-sm" id="cotisations-table">
+        <div className="mb-4 grid gap-3">
+          <div>
+            <h2 className="text-xl font-black tracking-normal">Toutes les cotisations</h2>
+            <p className="mt-1 text-sm font-semibold text-slate-500">Choisis le mois et l'annee pour voir les cotisations des membres.</p>
+          </div>
+          <div className="grid grid-cols-[1fr_104px] gap-2">
+            <select className="min-h-11 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-black" value={tableMonth} onChange={(event) => { setTableMonth(Number(event.target.value)); setPage(1); }}>
+              {monthOptions.map((month, index) => <option key={month} value={index}>{month}</option>)}
+            </select>
+            <input className="min-h-11 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-black" max="2100" min="2000" type="number" value={tableYear} onChange={(event) => { setTableYear(Number(event.target.value)); setPage(1); }} />
+          </div>
+        </div>
+        <div className="grid min-w-0 overflow-hidden rounded-lg border border-slate-200">
+          <div className="grid grid-cols-[1.1fr_1fr_74px] gap-2 bg-slate-50 px-3 py-3 text-[11px] font-black uppercase text-slate-500">
+            <span>Nom</span>
+            <span>Cotisation</span>
+            <span className="text-right">Statut</span>
+          </div>
+          {contributions.map((item) => {
+            const style = tableStatus(item, tableMonth, tableYear, today);
+            return (
+              <div className="grid min-w-0 grid-cols-[1.1fr_1fr_74px] items-center gap-2 border-t border-slate-100 px-3 py-3" key={`table-${item.id}`}>
+                <Link className="min-w-0 truncate text-sm font-black text-slate-950" href={workspacePath(workspaceSlug, `members/${item.member}`)}>{item.member_name}</Link>
+                <span className="min-w-0 truncate text-xs font-bold text-slate-500">{contributionName(item, campaignsQuery.data || [])}</span>
+                <span className={`justify-self-end rounded px-2 py-1 text-[10px] font-black ${style.badge}`}>{style.label}</span>
+              </div>
+            );
+          })}
+          {!contributions.length ? <div className="border-t border-slate-100 p-5 text-center text-sm font-bold text-slate-500">Aucune cotisation pour ce mois.</div> : null}
+        </div>
       </section>
 
       <section className="grid w-full gap-3">
@@ -417,54 +493,6 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
           <Button className="min-h-10 px-3" type="button" variant="outline" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}><ChevronLeft className="size-4" /></Button>
           <span className="text-sm font-black text-slate-500">Page {page} / {totalPages}</span>
           <Button className="min-h-10 px-3" type="button" variant="outline" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)}><ChevronRight className="size-4" /></Button>
-        </div>
-      </section>
-
-      <section className="w-full rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="mb-3 flex items-center gap-2 text-lg font-black"><Users className="size-5 text-blue-700" /> Membres non a jour</h2>
-        <div className="grid gap-3">
-          {(analytics?.top_unpaid || []).slice(0, 5).map((member) => (
-            <div className="flex min-w-0 items-center justify-between gap-3 rounded-lg bg-red-50 p-3" key={member.member_id}>
-              <div className="min-w-0">
-                <strong className="block truncate text-sm font-black">{member.member_name}</strong>
-                <span className="block truncate text-xs font-semibold text-red-700">{member.phone || "Telephone non renseigne"}</span>
-              </div>
-              <strong className="shrink-0 text-sm text-red-700">{compactMoney(member.amount_remaining, currency)}</strong>
-            </div>
-          ))}
-          {!analytics?.top_unpaid?.length ? <p className="text-sm font-bold text-slate-500">Aucun membre prioritaire pour le moment.</p> : null}
-        </div>
-      </section>
-
-      <section className="w-full rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="mb-3 text-lg font-black">Modes de paiement</h2>
-        <div className="grid gap-2">
-          {(analytics?.payment_methods || []).map((item) => (
-            <div className="flex min-w-0 items-center justify-between gap-3 rounded-lg bg-slate-50 p-3 text-sm font-bold" key={item.method}>
-              <span className="truncate">{item.label}</span>
-              <span className="shrink-0">{compactMoney(item.amount, currency)}</span>
-            </div>
-          ))}
-          {!analytics?.payment_methods?.length ? <p className="text-sm font-bold text-slate-500">Aucun paiement valide pour cette periode.</p> : null}
-        </div>
-      </section>
-
-      <section className="w-full rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="mb-3 text-lg font-black">Collecte par categorie</h2>
-        <div className="grid gap-3">
-          {(analytics?.type_performance || []).filter((item) => numberValue(item.expected) > 0 || numberValue(item.collected) > 0).slice(0, 6).map((item) => (
-            <div className="rounded-lg bg-slate-50 p-3" key={item.type}>
-              <div className="flex min-w-0 justify-between gap-3 text-sm font-black">
-                <span className="truncate">{item.label}</span>
-                <span className="shrink-0">{Math.round(progress(item.collection_rate))}%</span>
-              </div>
-              <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
-                <div className="h-full rounded-full bg-blue-700" style={{ width: `${progress(item.collection_rate)}%` }} />
-              </div>
-              <p className="mt-2 text-xs font-semibold text-slate-500">{formatMoney(item.collected, currency)} collectes sur {formatMoney(item.expected, currency)}</p>
-            </div>
-          ))}
-          {!analytics?.type_performance?.some((item) => numberValue(item.expected) > 0 || numberValue(item.collected) > 0) ? <p className="text-sm font-bold text-slate-500">Aucune categorie de collecte disponible.</p> : null}
         </div>
       </section>
 
