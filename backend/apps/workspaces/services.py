@@ -50,7 +50,7 @@ ROLE_MEMBER_PERMISSIONS = {
 
 @transaction.atomic
 def create_workspace_for_owner(*, owner, name: str, organization_type: str, **attrs) -> Workspace:
-    slug = slugify(name)[:80]
+    slug = unique_workspace_slug(name)
     workspace = Workspace.objects.create(
         owner=owner,
         name=name,
@@ -75,3 +75,17 @@ def create_workspace_for_owner(*, owner, name: str, organization_type: str, **at
 
     ensure_default_folders(workspace, actor=owner)
     return workspace
+
+
+def unique_workspace_slug(name: str, *, exclude_id: int | None = None) -> str:
+    base_slug = slugify(name)[:80] or "workspace"
+    slug = base_slug
+    suffix = 2
+    queryset = Workspace.objects.all()
+    if exclude_id:
+        queryset = queryset.exclude(id=exclude_id)
+    while queryset.filter(slug=slug).exists():
+        suffix_text = f"-{suffix}"
+        slug = f"{base_slug[: 90 - len(suffix_text)]}{suffix_text}"
+        suffix += 1
+    return slug

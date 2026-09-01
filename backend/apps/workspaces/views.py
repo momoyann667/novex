@@ -1,11 +1,11 @@
 from rest_framework import mixins, viewsets
 
-from common.permissions.workspace import IsWorkspaceMember
+from common.permissions.workspace import IsWorkspaceMember, IsWorkspaceOwner
 from .models import Workspace
 from .serializers import WorkspaceCreateSerializer, WorkspaceSerializer
 
 
-class WorkspaceViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+class WorkspaceViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
     lookup_field = "slug"
 
     def get_queryset(self):
@@ -14,6 +14,8 @@ class WorkspaceViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, mixins.Re
     def get_permissions(self):
         if self.action == "create":
             return super().get_permissions()
+        if self.action in ["update", "partial_update"]:
+            return [IsWorkspaceOwner()]
         return [IsWorkspaceMember()]
 
     def get_serializer_class(self):

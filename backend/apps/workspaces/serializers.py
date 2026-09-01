@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from .models import Workspace
-from .services import create_workspace_for_owner
+from .services import create_workspace_for_owner, unique_workspace_slug
 
 
 class WorkspaceSerializer(serializers.ModelSerializer):
@@ -9,6 +9,12 @@ class WorkspaceSerializer(serializers.ModelSerializer):
         model = Workspace
         fields = ["id", "name", "slug", "organization_type", "logo", "currency", "country", "city", "description", "status", "created_at", "updated_at"]
         read_only_fields = ["id", "slug", "status", "created_at", "updated_at"]
+
+    def update(self, instance, validated_data):
+        name = validated_data.get("name")
+        if name and name != instance.name:
+            instance.slug = unique_workspace_slug(name, exclude_id=instance.id)
+        return super().update(instance, validated_data)
 
 
 class WorkspaceCreateSerializer(serializers.Serializer):

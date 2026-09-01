@@ -2,8 +2,11 @@
 
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, ImagePlus, Palette } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { ApiError } from "@/lib/api/client";
 import { isInvalidWorkspaceSlug } from "@/lib/workspace/routing";
+import { updateWorkspace } from "./api";
 
 export type WorkspaceProfile = {
   country: string;
@@ -31,6 +34,36 @@ function storageKey(workspaceSlug: string) {
   return `novex.workspace.${workspaceSlug}.profile`;
 }
 
+function countryCode(country: string) {
+  const countries: Record<string, string> = {
+    "Cote d'Ivoire": "CI",
+    Senegal: "SN",
+    Mali: "ML",
+    "Burkina Faso": "BF",
+    Cameroun: "CM",
+    France: "FR"
+  };
+  return countries[country] || country.slice(0, 2).toUpperCase();
+}
+
+function currencyCode(currency: string) {
+  return currency === "FCFA" ? "XOF" : currency;
+}
+
+function organizationTypeCode(associationType: string) {
+  const value = associationType.toLowerCase();
+  if (value.includes("ong")) {
+    return "ong";
+  }
+  if (value.includes("mutuelle")) {
+    return "mutuelle";
+  }
+  if (value.includes("cooperative")) {
+    return "cooperative";
+  }
+  return "association";
+}
+
 export function loadWorkspaceProfile(workspaceSlug: string): WorkspaceProfile | null {
   if (typeof window === "undefined" || !isValidWorkspaceSlug(workspaceSlug)) {
     return null;
@@ -56,6 +89,14 @@ export function saveWorkspaceProfile(workspaceSlug: string, profile: WorkspacePr
   window.localStorage.setItem(storageKey(workspaceSlug), JSON.stringify(profile));
 }
 
+function removeWorkspaceProfile(workspaceSlug: string) {
+  if (!isValidWorkspaceSlug(workspaceSlug)) {
+    return;
+  }
+
+  window.localStorage.removeItem(storageKey(workspaceSlug));
+}
+
 export function isWorkspaceSlugValid(workspaceSlug: string) {
   return isValidWorkspaceSlug(workspaceSlug);
 }
@@ -68,6 +109,9 @@ export function WorkspaceProfileSetup({
   const [step, setStep] = useState(1);
   const [profile, setProfile] = useState<WorkspaceProfile>(defaultProfile);
   const [isReady, setIsReady] = useState(mode === "settings");
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     const saved = loadWorkspaceProfile(workspaceSlug);
@@ -100,9 +144,29 @@ export function WorkspaceProfileSetup({
     reader.readAsDataURL(file);
   }
 
-  function submit() {
-    saveWorkspaceProfile(workspaceSlug, profile);
-    onComplete?.(profile);
+  async function submit() {
+    setSubmitError(null);
+    setIsSaving(true);
+    try {
+      const workspace = await updateWorkspace(workspaceSlug, {
+        name: profile.associationName.trim(),
+        organization_type: organizationTypeCode(profile.associationType),
+        currency: currencyCode(profile.currency),
+        country: countryCode(profile.country)
+      });
+      saveWorkspaceProfile(workspace.slug, profile);
+      if (workspace.slug !== workspaceSlug) {
+        removeWorkspaceProfile(workspaceSlug);
+      }
+      onComplete?.(profile);
+      if (workspace.slug !== workspaceSlug) {
+        router.replace(`/app/${workspace.slug}/dashboard`);
+      }
+    } catch (error) {
+      setSubmitError(error instanceof ApiError ? error.message : "Impossible d'enregistrer les parametres.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   if (!isReady) {
@@ -199,14 +263,15 @@ export function WorkspaceProfileSetup({
           )}
 
           <div className="mt-auto grid gap-3 pt-8">
+            {submitError ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{submitError}</p> : null}
             {step === 1 ? (
               <Button className="min-h-12 bg-emerald-600 text-white hover:bg-emerald-700" disabled={!canContinue} type="button" onClick={() => setStep(2)}>
                 Continuer
                 <ArrowRight className="size-4" />
               </Button>
             ) : (
-              <Button className="min-h-12 bg-emerald-600 text-white hover:bg-emerald-700" type="button" onClick={submit}>
-                {mode === "settings" ? "Enregistrer" : "OK, ouvrir NOVEX"}
+              <Button className="min-h-12 bg-emerald-600 text-white hover:bg-emerald-700" disabled={isSaving} type="button" onClick={submit}>
+                {isSaving ? "Enregistrement..." : mode === "settings" ? "Enregistrer" : "OK, ouvrir NOVEX"}
                 <Check className="size-4" />
               </Button>
             )}

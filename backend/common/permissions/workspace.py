@@ -9,6 +9,13 @@ class IsWorkspaceMember(BasePermission):
         return obj.memberships.filter(user=request.user, status="active").exists()
 
 
+class IsWorkspaceOwner(BasePermission):
+    message = "Seul le proprietaire peut modifier ce workspace."
+
+    def has_object_permission(self, request, view, obj):
+        return obj.owner_id == request.user.id
+
+
 class RequireWorkspacePermission(BasePermission):
     required_permission = "workspace.view"
     message = "Vous n'avez pas les permissions necessaires."
