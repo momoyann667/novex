@@ -228,7 +228,10 @@ function ExpenseForm({
             Commentaire
             <textarea className="min-h-28 rounded-md border border-border px-3 py-3 font-medium outline-none focus:border-blue-600" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="Description, contexte, pieces attendues..." />
           </label>
-          <div className="fixed inset-x-0 bottom-0 border-t border-border bg-white p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] md:absolute">
+          <div className="fixed inset-x-0 bottom-0 grid grid-cols-2 gap-3 border-t border-border bg-white p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] md:absolute">
+            <Button className="w-full" type="button" variant="outline" onClick={onClose}>
+              Annuler
+            </Button>
             <Button className="w-full" disabled={isSubmitting || !form.description || !form.amount || !(form.category || selectedLine)} type="submit">
               {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
               Creer la depense
