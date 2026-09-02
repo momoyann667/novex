@@ -4,14 +4,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowLeft, Building2, Check, CheckCircle2, ChevronRight, CreditCard, LogOut, Pencil, Plus, Save, ShieldCheck, Star, Trash2, Users, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Building2, Check, CheckCircle2, ChevronLeft, ChevronRight, CreditCard, Download, Eye, LogOut, Pencil, Plus, Save, Search, ShieldCheck, Star, Trash2, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { activateContributionCampaign, createContributionCampaign, listContributionCampaigns } from "@/features/contributions/api";
 import { currentMemberProfile } from "@/features/members/current-member-profile";
-import { cancelSubscription, createSubscriptionCheckout, getSubscriptionOverview, reactivateSubscription, type PlanCode, type PlanResource, type SubscriptionOverview } from "@/features/subscriptions/api";
+import { cancelSubscription, createSubscriptionCheckout, getSaasPaymentsOverview, getSubscriptionOverview, reactivateSubscription, retrySaasPayment, type PlanCode, type PlanResource, type SaasPaymentFilters, type SaasPaymentsOverview, type SubscriptionOverview, type SubscriptionPayment } from "@/features/subscriptions/api";
 import { getWorkspaceSettings, updateWorkspaceSettings, type WorkspaceSettingsResource, type WorkspaceSettingsUpdatePayload } from "./api";
 
-export type SettingsSection = "association" | "members" | "finance" | "users" | "security" | "subscription";
+export type SettingsSection = "association" | "members" | "finance" | "users" | "security" | "subscription" | "saas-payments";
 
 const fieldClass = "min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
 const labelClass = "grid gap-2 text-sm font-black text-slate-700";
@@ -77,7 +77,8 @@ const settingsRows: Array<{ id: SettingsSection; title: string; subtitle: string
   { id: "finance", title: "Finance", subtitle: "Comptes, paiements", icon: CreditCard },
   { id: "users", title: "Utilisateurs", subtitle: "Roles, permissions", icon: Users },
   { id: "security", title: "Securite", subtitle: "Mot de passe, 2FA", icon: ShieldCheck },
-  { id: "subscription", title: "Abonnement", subtitle: "Plan, facturation", icon: Star }
+  { id: "subscription", title: "Abonnement", subtitle: "Plan, facturation", icon: Star },
+  { id: "saas-payments", title: "Paiements SaaS", subtitle: "Factures, renouvellements", icon: CreditCard }
 ];
 
 function defaultContributionDueDate(periodicity: string) {
@@ -121,6 +122,7 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
   const [notice, setNotice] = useState("");
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [contributionDraft, setContributionDraft] = useState({ name: "", periodicity: "MONTHLY", amount: "" });
+  const [saasFilters, setSaasFilters] = useState<SaasPaymentFilters>({ period: "this_year", status: "all", plan: "all", search: "", page: 1 });
   const settingsQuery = useQuery({
     queryKey: ["workspace-settings", workspaceSlug],
     queryFn: () => getWorkspaceSettings(workspaceSlug)
@@ -134,6 +136,11 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
     queryKey: ["subscription-overview", workspaceSlug],
     queryFn: () => getSubscriptionOverview(workspaceSlug),
     enabled: activeSection === "subscription"
+  });
+  const saasPaymentsQuery = useQuery({
+    queryKey: ["saas-payments-overview", workspaceSlug, saasFilters],
+    queryFn: () => getSaasPaymentsOverview(workspaceSlug, saasFilters),
+    enabled: activeSection === "saas-payments"
   });
 
   useEffect(() => {
@@ -210,6 +217,17 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
       setNotice("Renouvellement reactive.");
       await queryClient.invalidateQueries({ queryKey: ["subscription-overview", workspaceSlug] });
       await queryClient.invalidateQueries({ queryKey: ["workspace-settings", workspaceSlug] });
+    }
+  });
+  const retrySaasPaymentMutation = useMutation({
+    mutationFn: (paymentId: number) => retrySaasPayment(workspaceSlug, paymentId),
+    onSuccess: async (payload) => {
+      if (payload.checkout_url) {
+        window.location.href = payload.checkout_url;
+        return;
+      }
+      setNotice(payload.message || "Nouvelle tentative de paiement creee.");
+      await queryClient.invalidateQueries({ queryKey: ["saas-payments-overview", workspaceSlug] });
     }
   });
 
@@ -497,6 +515,20 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
             </SettingsCard>
           ) : null}
 
+          {activeSection === "saas-payments" ? (
+            <SettingsCard title="Paiements SaaS">
+              <SaasPaymentsSection
+                overview={saasPaymentsQuery.data}
+                isLoading={saasPaymentsQuery.isLoading}
+                filters={saasFilters}
+                onFiltersChange={(filters) => setSaasFilters((current) => ({ ...current, ...filters, page: filters.page ?? 1 }))}
+                workspaceSlug={workspaceSlug}
+                onRetry={(paymentId) => retrySaasPaymentMutation.mutate(paymentId)}
+                retryPending={retrySaasPaymentMutation.isPending}
+              />
+            </SettingsCard>
+          ) : null}
+
           <Button className="min-h-12 w-full bg-blue-700 text-white" type="button" onClick={save} disabled={updateMutation.isPending}>
             <Save className="size-4" />
             {updateMutation.isPending ? "Enregistrement..." : "Enregistrer les modifications"}
@@ -715,6 +747,200 @@ function SubscriptionSection({
         ) : (
           <button className="min-h-11 rounded-md border border-red-200 bg-white px-3 text-sm font-black text-red-700 disabled:opacity-50" type="button" disabled={cancelPending} onClick={onCancel}>{cancelPending ? "Annulation..." : "Annuler l'abonnement"}</button>
         )}
+      </div>
+    </div>
+  );
+}
+
+function paymentStatusLabel(status: string) {
+  return {
+    PENDING: "En attente",
+    PROCESSING: "En cours",
+    SUCCESS: "Paye",
+    FAILED: "Echec",
+    CANCELLED: "Annule",
+    REFUNDED: "Rembourse",
+    EXPIRED: "Expire"
+  }[status] || status;
+}
+
+function SaasPaymentsSection({
+  overview,
+  isLoading,
+  filters,
+  onFiltersChange,
+  workspaceSlug,
+  onRetry,
+  retryPending
+}: Readonly<{
+  overview?: SaasPaymentsOverview;
+  isLoading: boolean;
+  filters: SaasPaymentFilters;
+  onFiltersChange: (filters: Partial<SaasPaymentFilters>) => void;
+  workspaceSlug: string;
+  onRetry: (paymentId: number) => void;
+  retryPending: boolean;
+}>) {
+  const [selectedPayment, setSelectedPayment] = useState<SubscriptionPayment | null>(null);
+
+  if (isLoading || !overview) {
+    return <div className="rounded-md bg-slate-50 p-4 text-sm font-bold text-slate-500">Chargement des paiements SaaS...</div>;
+  }
+
+  const { summary, payments, invoices, renewals, plans } = overview;
+
+  async function downloadInvoice(invoiceId: number, invoiceNumber: string) {
+    const response = await fetch(`/api/backend/receipts/${invoiceId}/download/`, {
+      headers: { "X-Workspace": workspaceSlug }
+    });
+    if (!response.ok) return;
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${invoiceNumber}.pdf`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="grid gap-5">
+      <p className="text-sm font-semibold text-slate-500">Gerez les paiements lies a votre abonnement NOVEX, consultez vos factures et suivez vos renouvellements.</p>
+
+      <div className="grid grid-cols-2 gap-3">
+        <SaasKpi label="Total paye" value={money(summary.total_paid, summary.currency)} />
+        <SaasKpi label="Dernier paiement" value={summary.last_payment ? money(summary.last_payment.amount, summary.last_payment.currency) : "Aucun"} hint={summary.last_payment ? paymentStatusLabel(summary.last_payment.status) : ""} />
+        <SaasKpi label="En attente" value={summary.pending_count} />
+        <SaasKpi label="Echecs" value={summary.failed_count} danger={summary.failed_count > 0} />
+      </div>
+
+      <div className="rounded-xl bg-slate-950 p-4 text-white">
+        <p className="text-xs font-bold text-slate-300">Prochain renouvellement</p>
+        <div className="mt-3 flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-xl font-black">{summary.next_renewal.plan}</h3>
+            <p className="mt-1 text-sm text-slate-300">{money(summary.next_renewal.amount, summary.next_renewal.currency)} / {summary.next_renewal.frequency === "month" ? "mois" : "periode"}</p>
+            <p className="mt-2 text-sm font-bold">Date: {dateLabel(summary.next_renewal.date)}</p>
+          </div>
+          <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-950">{summary.next_renewal.days_remaining ?? 0} jours</span>
+        </div>
+        {summary.auto_renew_supported ? <p className="mt-3 text-sm font-bold text-slate-300">Renouvellement automatique supporte.</p> : null}
+      </div>
+
+      <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3">
+        <div className="flex min-h-11 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm text-slate-500">
+          <Search className="size-4" />
+          <input className="min-w-0 flex-1 bg-transparent font-semibold outline-none" placeholder="Reference, facture, provider..." value={filters.search || ""} onChange={(event) => onFiltersChange({ search: event.target.value })} />
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <select className={fieldClass} value={filters.period || "this_year"} onChange={(event) => onFiltersChange({ period: event.target.value })}>
+            <option value="this_year">Cette annee</option>
+            <option value="previous_year">Annee precedente</option>
+            <option value="all">Toutes</option>
+          </select>
+          <select className={fieldClass} value={filters.status || "all"} onChange={(event) => onFiltersChange({ status: event.target.value })}>
+            <option value="all">Tous</option>
+            <option value="SUCCESS">Paye</option>
+            <option value="PENDING">En attente</option>
+            <option value="PROCESSING">En cours</option>
+            <option value="FAILED">Echec</option>
+            <option value="CANCELLED">Annule</option>
+            <option value="REFUNDED">Rembourse</option>
+          </select>
+          <select className={fieldClass} value={filters.plan || "all"} onChange={(event) => onFiltersChange({ plan: event.target.value })}>
+            <option value="all">Toutes</option>
+            {plans.map((plan) => <option key={plan.code} value={plan.code}>{plan.name}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <DataPanel title="Historique des paiements">
+        {payments.results.length ? payments.results.map((payment) => (
+          <div className="grid grid-cols-[1fr_auto] gap-3 border-b border-slate-100 p-3 text-sm last:border-b-0" key={payment.id}>
+            <div>
+              <p className="font-black">{payment.reference}</p>
+              <p className="text-xs font-semibold text-slate-500">{dateLabel(payment.date)} - {payment.plan || "Abonnement NOVEX"}</p>
+              <p className="text-xs font-semibold text-slate-400">Provider: {payment.provider || "Non configure"} {payment.provider_reference ? `- ${payment.provider_reference}` : ""}</p>
+            </div>
+            <div className="text-right">
+              <p className="font-black">{money(payment.amount, payment.currency)}</p>
+              <p className="text-xs font-bold text-slate-500">{paymentStatusLabel(payment.status)}</p>
+              <button className="mt-2 inline-flex min-h-8 items-center gap-1 rounded-md border border-slate-200 px-2 text-xs font-black text-slate-700" type="button" onClick={() => setSelectedPayment(payment)}><Eye className="size-3" /> Voir</button>
+              {["FAILED", "CANCELLED", "EXPIRED"].includes(payment.status) ? (
+                <button className="ml-1 mt-2 inline-flex min-h-8 items-center gap-1 rounded-md bg-blue-700 px-2 text-xs font-black text-white disabled:opacity-50" type="button" disabled={retryPending} onClick={() => onRetry(payment.id)}>Reessayer</button>
+              ) : null}
+            </div>
+          </div>
+        )) : <EmptySettings message="Aucun paiement SaaS trouve pour ces filtres." />}
+        <Pagination count={payments.count} page={payments.page} pageSize={payments.page_size} previous={payments.previous} next={payments.next} onPage={(page) => onFiltersChange({ page })} />
+      </DataPanel>
+
+      {selectedPayment ? (
+        <DataPanel title="Details du paiement">
+          <div className="grid gap-3 p-3 text-sm">
+            <DetailRow label="Plan" value={selectedPayment.plan || "Abonnement NOVEX"} />
+            <DetailRow label="Montant" value={money(selectedPayment.amount, selectedPayment.currency)} />
+            <DetailRow label="Date" value={dateLabel(selectedPayment.date)} />
+            <DetailRow label="Statut" value={paymentStatusLabel(selectedPayment.status)} />
+            <DetailRow label="Reference" value={selectedPayment.reference} />
+            <DetailRow label="Methode" value={selectedPayment.method || "Non renseignee"} />
+            <DetailRow label="Provider" value={selectedPayment.provider || "Non configure"} />
+            <DetailRow label="Reference provider" value={selectedPayment.provider_reference || "Non renseignee"} />
+            <DetailRow label="Periode couverte" value={`${selectedPayment.period_start || "Non renseignee"} -> ${selectedPayment.period_end || "Non renseignee"}`} />
+          </div>
+        </DataPanel>
+      ) : null}
+
+      <DataPanel title="Mes factures">
+        {invoices.results.length ? invoices.results.map((invoice) => (
+          <div className="grid grid-cols-[1fr_auto] gap-3 border-b border-slate-100 p-3 text-sm last:border-b-0" key={invoice.id}>
+            <div><p className="font-black">{invoice.number}</p><p className="text-xs font-semibold text-slate-500">{dateLabel(invoice.date)} - {invoice.plan}</p></div>
+            <div className="text-right">
+              <p className="font-black">{money(invoice.amount, invoice.currency)}</p>
+              <button className="mt-2 inline-flex min-h-8 items-center gap-1 rounded-md bg-blue-700 px-2 text-xs font-black text-white" type="button" onClick={() => downloadInvoice(invoice.id, invoice.number)}><Download className="size-3" /> PDF</button>
+            </div>
+          </div>
+        )) : <EmptySettings message="Aucune facture d'abonnement disponible." />}
+      </DataPanel>
+
+      <DataPanel title="Renouvellements">
+        {renewals.length ? renewals.map((renewal) => (
+          <div className="grid grid-cols-[1fr_auto] gap-3 border-b border-slate-100 p-3 text-sm last:border-b-0" key={`${renewal.plan}-${renewal.scheduled_for}`}>
+            <div><p className="font-black">{renewal.plan}</p><p className="text-xs font-semibold text-slate-500">Frequence: {renewal.period === "month" ? "Mensuelle" : renewal.period}</p></div>
+            <div className="text-right"><p className="font-black">{dateLabel(renewal.scheduled_for)}</p><p className="text-xs font-bold text-slate-500">{statusLabel(renewal.status)}</p></div>
+          </div>
+        )) : <EmptySettings message="Aucun renouvellement planifie." />}
+      </DataPanel>
+    </div>
+  );
+}
+
+function SaasKpi({ label, value, hint, danger = false }: Readonly<{ label: string; value: string | number; hint?: string; danger?: boolean }>) {
+  return <div className="rounded-lg border border-slate-200 bg-white p-3"><p className="text-xs font-black text-slate-500">{label}</p><p className={`mt-2 text-xl font-black ${danger ? "text-red-700" : "text-slate-950"}`}>{value}</p>{hint ? <p className="mt-1 text-xs font-bold text-slate-500">{hint}</p> : null}</div>;
+}
+
+function DataPanel({ title, children }: Readonly<{ title: string; children: React.ReactNode }>) {
+  return <div className="overflow-hidden rounded-lg border border-slate-200 bg-white"><h3 className="border-b border-slate-100 p-3 text-lg font-black">{title}</h3>{children}</div>;
+}
+
+function DetailRow({ label, value }: Readonly<{ label: string; value: string }>) {
+  return <div className="flex items-start justify-between gap-3 rounded-md bg-slate-50 p-3"><span className="font-bold text-slate-500">{label}</span><strong className="max-w-[58%] text-right">{value}</strong></div>;
+}
+
+function EmptySettings({ message }: Readonly<{ message: string }>) {
+  return <p className="p-4 text-sm font-bold text-slate-500">{message}</p>;
+}
+
+function Pagination({ count, page, pageSize, previous, next, onPage }: Readonly<{ count: number; page: number; pageSize: number; previous: number | null; next: number | null; onPage: (page: number) => void }>) {
+  if (!count) return null;
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(count, page * pageSize);
+  return (
+    <div className="flex items-center justify-between border-t border-slate-100 p-3 text-xs font-bold text-slate-500">
+      <span>{start}-{end} sur {count}</span>
+      <div className="flex gap-2">
+        <button className="grid size-8 place-items-center rounded-md border border-slate-200 disabled:opacity-40" type="button" disabled={!previous} onClick={() => previous && onPage(previous)} aria-label="Page precedente"><ChevronLeft className="size-4" /></button>
+        <button className="grid size-8 place-items-center rounded-md border border-slate-200 disabled:opacity-40" type="button" disabled={!next} onClick={() => next && onPage(next)} aria-label="Page suivante"><ChevronRight className="size-4" /></button>
       </div>
     </div>
   );

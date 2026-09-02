@@ -32,13 +32,26 @@ def build_payment_reference() -> str:
 
 
 def build_receipt_reference(payment: Payment) -> str:
+    if payment.metadata.get("payment_type") == "SUBSCRIPTION":
+        return f"INV-{payment.created_at:%Y}-{payment.id:06d}"
     return f"NVX-{payment.created_at:%Y}-{payment.id:06d}"
+
+
+def build_subscription_payment_reference() -> str:
+    return f"SUB-PAY-{timezone.now():%Y}-{uuid4().hex[:10].upper()}"
 
 
 def ensure_payment_reference() -> str:
     reference = build_payment_reference()
     while Payment.objects.filter(reference=reference).exists():
         reference = build_payment_reference()
+    return reference
+
+
+def ensure_subscription_payment_reference() -> str:
+    reference = build_subscription_payment_reference()
+    while Payment.objects.filter(reference=reference).exists():
+        reference = build_subscription_payment_reference()
     return reference
 
 
@@ -82,18 +95,28 @@ def build_receipt_pdf_bytes(receipt: Receipt) -> bytes:
     payment = receipt.payment
     contribution = receipt.contribution
     workspace = receipt.workspace
+    is_subscription = payment.metadata.get("payment_type") == "SUBSCRIPTION"
+    member_name = f"{payment.member.first_name} {payment.member.last_name}" if payment.member_id else "Non applicable"
+    member_number = payment.member.membership_number if payment.member_id else "Non applicable"
     lines = [
-        "NOVEX - Recu de paiement",
+        "NOVEX - Facture abonnement" if is_subscription else "NOVEX - Recu de paiement",
         f"Recu: {receipt.receipt_number}",
         f"Association: {workspace.name}",
-        f"Membre: {payment.member.first_name} {payment.member.last_name}",
-        f"Identifiant membre: {payment.member.membership_number}",
+        f"Membre: {member_name}",
+        f"Identifiant membre: {member_number}",
         f"Montant: {receipt.amount} {receipt.currency}",
         f"Methode: {payment.payment_method}",
         f"Reference paiement: {payment.reference}",
         f"Provider: {payment.provider}",
         f"Date: {(payment.paid_at or receipt.issued_at).strftime('%Y-%m-%d %H:%M')}",
     ]
+    if is_subscription:
+        lines.extend(
+            [
+                f"Offre: {payment.metadata.get('plan_name', 'Abonnement NOVEX')}",
+                f"Periode couverte: {payment.metadata.get('period_start', '')} -> {payment.metadata.get('period_end', '')}",
+            ]
+        )
     if contribution:
         lines.extend(
             [
@@ -376,6 +399,11 @@ def apply_successful_payment(*, payment: Payment, actor=None, metadata: dict | N
     payment.reconciliation_status = ReconciliationStatus.MATCHED if payment.contribution_id else ReconciliationStatus.REVIEW_REQUIRED
     payment.save(update_fields=["reconciliation_status", "updated_at"])
     create_receipt_for_payment(payment, actor=actor)
+    if payment.metadata.get("payment_type") == "SUBSCRIPTION":
+        from apps.subscriptions.services import activate_subscription_from_payment
+
+        activate_subscription_from_payment(payment=payment, actor=actor)
+        return payment
     from apps.finance.services import sync_payment_to_finance
 
     sync_payment_to_finance(payment=payment, actor=actor)

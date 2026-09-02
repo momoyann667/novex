@@ -7,7 +7,8 @@ pytest.importorskip("pytest_django")
 from apps.contributions.models import Contribution
 from apps.contributions.services import create_campaign
 from apps.members.models import Member
-from apps.payments.services import initialize_contribution_payment
+from apps.payments.models import Payment, Receipt
+from apps.payments.services import apply_successful_payment, initialize_contribution_payment
 from apps.payments.statuses import PaymentMethod
 from apps.subscriptions.models import Plan, Subscription
 from apps.subscriptions.services import create_subscription_checkout, ensure_plan_catalog, ensure_workspace_subscription, subscription_overview, workspace_has_entitlement
@@ -76,6 +77,24 @@ def test_subscription_checkout_does_not_activate_before_provider_confirmation(dj
     payload = create_subscription_checkout(workspace=workspace, actor=owner, plan_code=Plan.Code.NOVEX_PRO)
     workspace.subscription.refresh_from_db()
 
-    assert payload["status"] == "PENDING"
+    assert payload["status"] in {"PENDING", "PROCESSING"}
+    assert payload["payment"]["reference"].startswith("SUB-PAY-")
     assert payload["online_available"] is False
     assert workspace.subscription.plan.code == Plan.Code.FREEMIUM
+
+
+@pytest.mark.django_db
+def test_confirmed_subscription_payment_activates_plan_and_invoice(django_user_model):
+    owner = django_user_model.objects.create_user(username="confirm-sub@example.com", email="confirm-sub@example.com", password="pass")
+    workspace = Workspace.objects.create(name="Association Confirm", slug="association-confirm", organization_type="association", owner=owner)
+    ensure_workspace_subscription(workspace)
+    payload = create_subscription_checkout(workspace=workspace, actor=owner, plan_code=Plan.Code.NOVEX_PRO)
+    payment_id = payload["payment"]["id"]
+
+    payment = apply_successful_payment(payment=Payment.objects.get(id=payment_id), actor=owner)
+    workspace.subscription.refresh_from_db()
+    receipt = Receipt.objects.get(payment=payment)
+
+    assert workspace.subscription.plan.code == Plan.Code.NOVEX_PRO
+    assert workspace.subscription.status == Subscription.Status.ACTIVE
+    assert receipt.receipt_number.startswith("INV-")

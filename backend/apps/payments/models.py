@@ -20,7 +20,7 @@ class Payment(models.Model):
     Status = PaymentStatus
 
     workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="payments")
-    member = models.ForeignKey(Member, on_delete=models.PROTECT, related_name="payments")
+    member = models.ForeignKey(Member, on_delete=models.PROTECT, related_name="payments", null=True, blank=True)
     contribution = models.ForeignKey(Contribution, on_delete=models.PROTECT, related_name="payments", null=True, blank=True)
     reference = models.CharField(max_length=80, unique=True)
     amount = models.DecimalField(max_digits=14, decimal_places=2)

@@ -58,7 +58,7 @@ class PaymentSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_member_name(self, obj):
-        return str(obj.member)
+        return str(obj.member) if obj.member_id else ""
 
 
 class PaymentInitializeSerializer(serializers.Serializer):
