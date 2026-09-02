@@ -155,7 +155,7 @@ export function ProjectsView({ workspaceSlug }: Readonly<{ workspaceSlug: string
   }
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-md overflow-x-hidden bg-[#f5f7f8] px-3 pb-24 pt-5 text-slate-950 md:max-w-2xl">
+    <main className="min-h-screen w-full overflow-x-hidden bg-[#f5f7f8] px-3 pb-24 pt-5 text-slate-950">
       <header className="mb-4">
         <h1 className="text-2xl font-black tracking-normal">Gestion des Projets</h1>
       </header>
