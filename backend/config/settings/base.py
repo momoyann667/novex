@@ -2,8 +2,11 @@ from pathlib import Path
 import os
 
 import dj_database_url
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parents[3]
+load_dotenv(BASE_DIR / ".env", override=False)
+load_dotenv(BASE_DIR / ".env.local", override=True)
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "unsafe-development-secret")
 DEBUG = os.environ.get("DJANGO_DEBUG", "False") == "True"
@@ -66,9 +69,7 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
-DATABASES = {
-    "default": dj_database_url.config(default=os.environ.get("DATABASE_URL", "postgres://novex:novex@localhost:5432/novex"), conn_max_age=60)
-}
+DATABASES = {"default": dj_database_url.config(default=os.environ.get("DATABASE_URL", "postgres://novex:novex@localhost:5432/novex"), conn_max_age=60)}
 
 AUTH_USER_MODEL = "users.User"
 
