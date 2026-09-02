@@ -30,8 +30,10 @@ from apps.contributions.statuses import ContributionStatus
 from apps.audit_logs.models import AuditLog
 from apps.members.models import Member
 from apps.payments.models import Payment, Receipt
-from apps.payments.services import attach_payment_document, financial_history, initialize_contribution_payment, member_financial_history, process_payment_webhook, record_manual_payment, register_webhook_event
+from apps.payments.services import attach_payment_document, donation_projects_for_workspace, financial_history, initialize_contribution_payment, initialize_donation_payment, initialize_self_contribution_payments, member_financial_history, payable_contributions_for_member, process_payment_webhook, record_manual_payment, register_webhook_event
 from apps.payments.statuses import PaymentDocumentType, PaymentMethod, PaymentStatus
+from apps.projects.models import Project
+from apps.projects.statuses import ProjectStatus
 from apps.workspaces.models import Workspace
 
 
@@ -164,6 +166,78 @@ def test_online_payment_initialization_is_idempotent_and_blocks_overpayment(djan
             amount=Decimal("6000.00"),
             payment_method=PaymentMethod.MOBILE_MONEY,
             idempotency_key="online-too-high",
+        )
+
+
+@pytest.mark.django_db
+def test_self_payable_contributions_are_limited_to_linked_member(django_user_model):
+    owner = django_user_model.objects.create_user(username="self@example.com", email="self@example.com", password="pass")
+    workspace = Workspace.objects.create(name="Association Self", slug="association-self", organization_type="association", owner=owner)
+    member = Member.objects.create(workspace=workspace, linked_user=owner, membership_number="A-000030", first_name="Nadia", last_name="Kone")
+    other_member = Member.objects.create(workspace=workspace, membership_number="A-000031", first_name="Ali", last_name="Soro")
+    campaign = create_campaign(workspace=workspace, actor=owner, name="Septembre 2026", amount=Decimal("5000.00"))
+    payable = Contribution.objects.create(workspace=workspace, campaign=campaign, member=member, amount_due=Decimal("5000.00"))
+    paid = Contribution.objects.create(workspace=workspace, campaign=campaign, member=other_member, amount_due=Decimal("5000.00"), amount_paid=Decimal("5000.00"), status=ContributionStatus.PAID)
+
+    payload = payable_contributions_for_member(workspace=workspace, user=owner)
+    payment = initialize_self_contribution_payments(
+        workspace=workspace,
+        actor=owner,
+        items=[{"contribution": payable, "amount": Decimal("2500.00")}],
+        payment_method=PaymentMethod.MOBILE_MONEY,
+        idempotency_key="self-online-1",
+    )[0]
+
+    assert payload["member"].id == member.id
+    assert [item.id for item in payload["contributions"]] == [payable.id]
+    assert paid.id not in [item.id for item in payload["contributions"]]
+    assert payment.member_id == member.id
+    assert payment.status == PaymentStatus.PROCESSING
+
+    with pytest.raises(ValueError):
+        initialize_self_contribution_payments(
+            workspace=workspace,
+            actor=owner,
+            items=[{"contribution": paid, "amount": Decimal("1000.00")}],
+            payment_method=PaymentMethod.MOBILE_MONEY,
+            idempotency_key="self-online-cross-member",
+        )
+
+
+@pytest.mark.django_db
+def test_donation_payment_keeps_project_relation_and_filters_cancelled_projects(django_user_model):
+    owner = django_user_model.objects.create_user(username="donor@example.com", email="donor@example.com", password="pass")
+    workspace = Workspace.objects.create(name="Association Donation", slug="association-donation", organization_type="association", owner=owner)
+    member = Member.objects.create(workspace=workspace, linked_user=owner, membership_number="A-000040", first_name="Fatou", last_name="Diop")
+    active_project = Project.objects.create(workspace=workspace, code="DON-1", name="Bibliotheque", status=ProjectStatus.ACTIVE, budget=Decimal("100000.00"), owner=member)
+    cancelled_project = Project.objects.create(workspace=workspace, code="DON-2", name="Archive", status=ProjectStatus.CANCELLED, budget=Decimal("100000.00"))
+
+    projects = list(donation_projects_for_workspace(workspace=workspace))
+    payment = initialize_donation_payment(
+        workspace=workspace,
+        actor=owner,
+        project=active_project,
+        amount=Decimal("10000.00"),
+        payment_method=PaymentMethod.MOBILE_MONEY,
+        idempotency_key="donation-1",
+    )
+
+    assert active_project in projects
+    assert cancelled_project not in projects
+    assert payment.contribution_id is None
+    assert payment.member_id == member.id
+    assert payment.metadata["payment_type"] == "DONATION"
+    assert payment.metadata["project_id"] == active_project.id
+    assert payment.status == PaymentStatus.PROCESSING
+
+    with pytest.raises(ValueError):
+        initialize_donation_payment(
+            workspace=workspace,
+            actor=owner,
+            project=cancelled_project,
+            amount=Decimal("5000.00"),
+            payment_method=PaymentMethod.MOBILE_MONEY,
+            idempotency_key="donation-cancelled",
         )
 
 

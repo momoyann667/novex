@@ -176,7 +176,9 @@ def sync_payment_to_finance(*, payment, actor=None) -> FinancialTransaction | No
     payment = payment.__class__.objects.select_for_update().select_related("workspace", "contribution", "member").get(id=payment.id)
     if payment.status != PaymentStatus.SUCCESS:
         return None
-    category = default_category(payment.workspace, kind=FinancialCategoryKind.INCOME_CATEGORY, name="Cotisations", actor=actor)
+    is_donation = payment.metadata.get("payment_type") == "DONATION"
+    project = Project.objects.filter(workspace=payment.workspace, id=payment.metadata.get("project_id")).first() if is_donation else None
+    category = default_category(payment.workspace, kind=FinancialCategoryKind.INCOME_CATEGORY, name="Dons" if is_donation else "Cotisations", actor=actor)
     transaction_obj, created = FinancialTransaction.objects.get_or_create(
         workspace=payment.workspace,
         source_payment=payment,
@@ -185,14 +187,15 @@ def sync_payment_to_finance(*, payment, actor=None) -> FinancialTransaction | No
             "amount": payment.amount,
             "currency": payment.currency,
             "category": category,
-            "description": f"Cotisation {payment.member}",
+            "description": f"Don {project.name if project else payment.member}" if is_donation else f"Cotisation {payment.member}",
             "reference": f"PAY-{payment.reference}",
             "transaction_date": (payment.paid_at or timezone.now()).date(),
             "status": FinancialTransactionStatus.VALIDATED,
-            "source": FinancialTransactionSource.PAYMENT,
+            "source": FinancialTransactionSource.DONATION if is_donation else FinancialTransactionSource.PAYMENT,
             "sender_type": FinancialTransactionSenderType.MEMBER,
             "member": payment.member,
             "sender_name": str(payment.member),
+            "project": project,
             "created_by": actor,
         },
     )

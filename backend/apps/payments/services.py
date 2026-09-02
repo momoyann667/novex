@@ -13,6 +13,8 @@ from apps.contributions.models import Contribution
 from apps.contributions.services import refresh_contribution_status
 from apps.contributions.statuses import ContributionStatus
 from apps.members.models import Member
+from apps.projects.models import Project
+from apps.projects.statuses import ProjectStatus
 from apps.workspaces.models import Workspace
 from .models import FinancialAdjustment, Payment, PaymentDocument, PaymentEvent, PaymentWebhookEvent, Receipt
 from .providers import get_payment_provider
@@ -172,6 +174,47 @@ def validate_contribution_payment(*, workspace: Workspace, contribution: Contrib
         raise ValueError("Le montant depasse le reste a payer.")
 
 
+def member_for_payment_user(*, workspace: Workspace, user) -> Member:
+    member = Member.objects.filter(workspace=workspace, linked_user=user, status=Member.Status.ACTIVE).first()
+    if member:
+        return member
+    email = getattr(user, "email", "")
+    if email:
+        member = Member.objects.filter(workspace=workspace, email__iexact=email, status=Member.Status.ACTIVE).first()
+        if member:
+            return member
+    raise ValueError("Votre compte n'est pas associe a un membre actif de cette association.")
+
+
+def payable_contributions_for_member(*, workspace: Workspace, user) -> dict:
+    member = member_for_payment_user(workspace=workspace, user=user)
+    queryset = (
+        Contribution.objects.select_related("campaign", "member")
+        .filter(workspace=workspace, member=member)
+        .exclude(status__in=[ContributionStatus.PAID, ContributionStatus.WAIVED, ContributionStatus.CANCELLED])
+        .order_by("due_date", "created_at")
+    )
+    rows = [item for item in queryset if item.remaining_amount > ZERO]
+    return {"member": member, "contributions": rows}
+
+
+def donation_projects_for_workspace(*, workspace: Workspace):
+    return (
+        Project.objects.filter(workspace=workspace)
+        .exclude(status__in=[ProjectStatus.CANCELLED, ProjectStatus.ARCHIVED])
+        .order_by("-updated_at", "name")
+    )
+
+
+def validate_donation_payment(*, workspace: Workspace, project: Project, amount: Decimal) -> None:
+    if project.workspace_id != workspace.id:
+        raise ValueError("Le projet appartient a un autre workspace.")
+    if project.status in {ProjectStatus.CANCELLED, ProjectStatus.ARCHIVED}:
+        raise ValueError("Ce projet n'est plus disponible pour les dons.")
+    if amount <= ZERO:
+        raise ValueError("Le montant du don doit etre positif.")
+
+
 def transition_payment_status(*, payment: Payment, to_status: str, actor=None, metadata: dict | None = None) -> Payment:
     from_status = payment.status
     if from_status == to_status:
@@ -234,6 +277,84 @@ def initialize_contribution_payment(
     payment.metadata = {**payment.metadata, "provider_init": result.raw_response}
     payment.save(update_fields=["provider_transaction_id", "checkout_url", "status", "metadata", "updated_at"])
     log_payment_event(payment=payment, actor=actor, event_type=PaymentEventType.INITIALIZED, to_status=payment.status, metadata={"provider": provider.code})
+    return payment
+
+
+@transaction.atomic
+def initialize_self_contribution_payments(
+    *,
+    workspace: Workspace,
+    actor,
+    items: list[dict],
+    payment_method: str,
+    idempotency_key: str,
+    provider_code: str | None = None,
+) -> list[Payment]:
+    member = member_for_payment_user(workspace=workspace, user=actor)
+    if not items:
+        raise ValueError("Selectionnez au moins une cotisation.")
+    payments = []
+    for index, item in enumerate(items, start=1):
+        contribution = Contribution.objects.select_for_update().select_related("member", "workspace").get(id=item["contribution"].id)
+        if contribution.member_id != member.id:
+            raise ValueError("Cette cotisation ne vous appartient pas.")
+        payment = initialize_contribution_payment(
+            workspace=workspace,
+            actor=actor,
+            contribution=contribution,
+            amount=item["amount"],
+            payment_method=payment_method,
+            idempotency_key=f"{idempotency_key}-contribution-{contribution.id}-{index}",
+            provider_code=provider_code,
+        )
+        payments.append(payment)
+    return payments
+
+
+@transaction.atomic
+def initialize_donation_payment(
+    *,
+    workspace: Workspace,
+    actor,
+    project: Project,
+    amount: Decimal,
+    payment_method: str,
+    idempotency_key: str,
+    provider_code: str | None = None,
+) -> Payment:
+    member = member_for_payment_user(workspace=workspace, user=actor)
+    project = Project.objects.select_for_update().get(id=project.id)
+    validate_donation_payment(workspace=workspace, project=project, amount=amount)
+    provider = get_payment_provider(provider_code)
+    payment, created = Payment.objects.get_or_create(
+        workspace=workspace,
+        idempotency_key=idempotency_key,
+        defaults={
+            "reference": ensure_payment_reference(),
+            "member": member,
+            "amount": amount,
+            "currency": workspace.currency,
+            "provider": provider.code,
+            "payment_method": payment_method,
+            "status": PaymentStatus.PENDING,
+            "net_amount": amount,
+            "metadata": {
+                "payment_type": "DONATION",
+                "project_id": project.id,
+                "project_name": project.name,
+                "initialized_by": getattr(actor, "id", None),
+            },
+        },
+    )
+    if not created:
+        return payment
+    result = provider.initialize_payment(payment=payment)
+    payment.provider_transaction_id = result.provider_transaction_id
+    payment.checkout_url = result.checkout_url
+    payment.status = result.status
+    payment.metadata = {**payment.metadata, "provider_init": result.raw_response}
+    payment.save(update_fields=["provider_transaction_id", "checkout_url", "status", "metadata", "updated_at"])
+    log_payment_event(payment=payment, actor=actor, event_type=PaymentEventType.INITIALIZED, to_status=payment.status, metadata={"provider": provider.code, "payment_type": "DONATION"})
     return payment
 
 

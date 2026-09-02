@@ -1,124 +1,343 @@
-import { ArrowDownUp, Banknote, CreditCard, Download, Filter, Landmark, RefreshCcw, Search, ShieldCheck, Smartphone } from "lucide-react";
+"use client";
+
+import { useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { ArrowLeft, ArrowRight, Check, CreditCard, FolderHeart, Loader2, Smartphone, WalletCards } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
+import {
+  initializeSelfPayment,
+  listDonationProjects,
+  listPayableContributions,
+  type DonationProject,
+  type PayableContribution
+} from "@/features/payments/api";
+import { workspacePath } from "@/lib/workspace/routing";
 
-const kpis = [
-  ["0", "Paiements aujourd'hui"],
-  ["0 XOF", "Montant aujourd'hui"],
-  ["0", "Paiements ce mois"],
-  ["0 XOF", "Montant ce mois"],
-  ["0", "Paiements reussis"],
-  ["0", "Paiements echoues"],
-  ["0", "Paiements en attente"],
-  ["0%", "Taux de reussite"],
-];
+type Intent = "CONTRIBUTION" | "DONATION";
+type PaymentMode = "FULL" | "PARTIAL";
 
-const methods = [
-  { label: "Mobile Money", icon: Smartphone },
-  { label: "Carte", icon: CreditCard },
-  { label: "Agregateur", icon: ArrowDownUp },
-  { label: "Virement", icon: Landmark },
-];
+const paymentMethods = [
+  { value: "MOBILE_MONEY", label: "Mobile Money", icon: Smartphone },
+  { value: "CARD", label: "Carte bancaire", icon: CreditCard },
+  { value: "AGGREGATOR", label: "Agregateur", icon: WalletCards },
+  { value: "BANK_TRANSFER", label: "Virement", icon: WalletCards }
+] as const;
 
-export function PaymentsView() {
+function amountValue(value: string | number) {
+  return Number(value || 0);
+}
+
+function money(value: string | number, currency = "XOF") {
+  return new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(amountValue(value)) + " " + (currency === "XOF" ? "FCFA" : currency);
+}
+
+function linePeriod(item: PayableContribution) {
+  if (item.period_label) return item.period_label;
+  if (item.period_start && item.period_end) return `${item.period_start} -> ${item.period_end}`;
+  return item.due_date ? `Echeance ${item.due_date}` : "Periode non definie";
+}
+
+function statusLabel(status: string) {
+  return {
+    PENDING: "Non payee",
+    PARTIALLY_PAID: "Partielle",
+    OVERDUE: "En retard",
+    PAID: "Payee"
+  }[status] || status;
+}
+
+function Stepper({ step }: Readonly<{ step: 1 | 2 }>) {
   return (
-    <div className="grid gap-6">
-      <PageHeader
-        title="Paiements"
-        description="Historique, providers, confirmations webhook et remboursements des cotisations."
-        actions={
-          <>
-            <Button type="button" variant="outline"><Download className="size-4" /> Export</Button>
-            <Button type="button"><Banknote className="size-4" /> Encaisser</Button>
-          </>
-        }
-      />
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {kpis.map(([value, label]) => (
-          <Card key={label}><CardContent className="p-5"><div className="text-3xl font-bold tabular-nums">{value}</div><p className="mt-1 text-sm text-slate-500">{label}</p></CardContent></Card>
-        ))}
-      </section>
-      <section className="grid gap-4 xl:grid-cols-12">
-        <Card className="xl:col-span-7">
-          <CardHeader><CardTitle className="text-base text-slate-900">Flux provider</CardTitle></CardHeader>
-          <CardContent className="grid gap-4">
-            <div className="grid gap-3 md:grid-cols-4">
-              {methods.map((method) => {
-                const Icon = method.icon;
-                return (
-                  <div key={method.label} className="rounded-md border border-border p-4">
-                    <Icon className="size-5 text-blue-700" />
-                    <p className="mt-3 text-sm font-semibold">{method.label}</p>
-                    <p className="text-xs text-slate-500">Provider env-HMAC ou connecteur futur.</p>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="rounded-md border border-border p-4">
-              <div className="flex items-start gap-3 text-sm text-slate-600">
-                <ShieldCheck className="size-5 text-blue-700" />
-                <p>Un paiement ne passe a reussi qu'apres verification backend: reference, montant, devise, signature HMAC et transition autorisee.</p>
-              </div>
-            </div>
-            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
-              <div className="rounded-md border border-border p-4">
-                <div className="mb-4 flex items-center justify-between">
-                  <strong>Montants encaisses</strong>
-                  <select className="min-h-9 rounded-md border border-border px-2 text-sm"><option>30 jours</option><option>7 jours</option><option>3 mois</option><option>6 mois</option><option>12 mois</option></select>
-                </div>
-                <div className="flex h-40 items-end gap-2">
-                  {[20, 55, 35, 70, 45, 88, 62].map((height) => <div key={height} className="flex-1 rounded-t bg-blue-700/80" style={{ height: `${height}%` }} />)}
-                </div>
-              </div>
-              <div className="rounded-md border border-border p-4">
-                <strong>Par moyen</strong>
-                <div className="mt-4 grid gap-3 text-sm">
-                  {methods.map((item) => <div key={item.label} className="flex justify-between gap-3"><span>{item.label}</span><span className="text-slate-500">0 - 0%</span></div>)}
-                  <div className="flex justify-between gap-3"><span>Paiement manuel</span><span className="text-slate-500">0 - 0%</span></div>
-                  <div className="flex justify-between gap-3"><span>Autre</span><span className="text-slate-500">0 - 0%</span></div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="xl:col-span-5">
-          <CardHeader><CardTitle className="text-base text-slate-900">Initialisation rapide</CardTitle></CardHeader>
-          <CardContent className="grid gap-3">
-            <label className="grid gap-1 text-sm"><span className="text-slate-500">Cotisation</span><input className="min-h-10 rounded-md border border-border px-3 outline-none" placeholder="ID cotisation" /></label>
-            <label className="grid gap-1 text-sm"><span className="text-slate-500">Montant</span><input className="min-h-10 rounded-md border border-border px-3 outline-none" placeholder="0" /></label>
-            <select className="min-h-10 rounded-md border border-border px-3 text-sm">
-              <option>Mobile Money</option>
-              <option>Carte bancaire</option>
-              <option>Agregateur</option>
-              <option>Virement</option>
-            </select>
-            <Button type="button"><CreditCard className="size-4" /> Initialiser</Button>
-          </CardContent>
-        </Card>
-      </section>
-      <section className="rounded-card border border-border bg-white p-4">
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_160px_180px_150px_120px]">
-          <label className="flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-slate-500">
-            <Search className="size-4" />
-            <input className="w-full bg-transparent outline-none" placeholder="Reference, membre ou transaction provider..." />
-          </label>
-          <select className="min-h-10 rounded-md border border-border px-3 text-sm"><option>Statut</option><option>SUCCESS</option><option>PROCESSING</option><option>FAILED</option><option>REFUNDED</option></select>
-          <select className="min-h-10 rounded-md border border-border px-3 text-sm"><option>Methode</option>{methods.map((item) => <option key={item.label}>{item.label}</option>)}</select>
-          <Button type="button" variant="outline"><Filter className="size-4" /> Periode</Button>
-          <Button type="button" variant="outline"><RefreshCcw className="size-4" /> Sync</Button>
+    <div className="sticky top-0 z-10 border-b border-border bg-slate-50/95 px-4 py-3 backdrop-blur md:static md:rounded-md md:border md:bg-white">
+      <div className="grid grid-cols-[auto_minmax(24px,1fr)_auto] items-center gap-3 text-sm font-black">
+        <div className={`flex items-center gap-2 ${step === 1 ? "text-blue-700" : "text-emerald-700"}`}>
+          <span className={`grid size-8 place-items-center rounded-full ${step === 1 ? "bg-blue-700 text-white" : "bg-emerald-600 text-white"}`}>
+            {step === 1 ? "1" : <Check className="size-4" />}
+          </span>
+          Cotisations
         </div>
-        <div className="mt-4 hidden grid-cols-[150px_1fr_120px_120px_130px_140px_120px] gap-3 border-b border-border px-3 py-3 text-xs font-semibold uppercase text-slate-500 lg:grid">
-          <span>Reference</span><span>Membre</span><span>Montant</span><span>Net</span><span>Statut</span><span>Provider</span><span>Date</span>
+        <span className="h-0.5 rounded-full bg-slate-200" />
+        <div className={`flex items-center gap-2 ${step === 2 ? "text-blue-700" : "text-slate-400"}`}>
+          <span className={`grid size-8 place-items-center rounded-full ${step === 2 ? "bg-blue-700 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>2</span>
+          Paiement
         </div>
-        <div className="grid place-items-center p-10 text-center">
-          <div>
-            <CreditCard className="mx-auto size-8 text-blue-700" />
-            <h2 className="mt-3 font-semibold">Aucun paiement charge.</h2>
-            <p className="mt-1 text-sm text-slate-500">La liste affichera les paiements pagines exposes par l'API du workspace.</p>
-          </div>
+      </div>
+    </div>
+  );
+}
+
+export function PaymentsView({ workspaceSlug }: Readonly<{ workspaceSlug: string }>) {
+  const [step, setStep] = useState<1 | 2>(1);
+  const [intent, setIntent] = useState<Intent>("CONTRIBUTION");
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>("FULL");
+  const [partialAmounts, setPartialAmounts] = useState<Record<number, string>>({});
+  const [donationAmount, setDonationAmount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("MOBILE_MONEY");
+  const [message, setMessage] = useState("");
+
+  const contributionsQuery = useQuery({ queryKey: ["payable-contributions", workspaceSlug], queryFn: () => listPayableContributions(workspaceSlug) });
+  const projectsQuery = useQuery({ queryKey: ["payment-donation-projects", workspaceSlug], queryFn: () => listDonationProjects(workspaceSlug) });
+  const contributions = contributionsQuery.data?.results || [];
+  const projects = projectsQuery.data || [];
+  const selectedContributions = useMemo(() => contributions.filter((item) => selectedIds.includes(item.id)), [contributions, selectedIds]);
+  const selectedProject = projects.find((project) => project.id === selectedProjectId);
+  const currency = selectedContributions[0]?.currency || selectedProject?.currency || "XOF";
+  const remainingTotal = selectedContributions.reduce((total, item) => total + amountValue(item.remaining_amount), 0);
+  const contributionAmount = selectedContributions.reduce((total, item) => {
+    const raw = paymentMode === "FULL" ? item.remaining_amount : partialAmounts[item.id] || item.remaining_amount;
+    return total + amountValue(raw);
+  }, 0);
+  const totalToPay = intent === "DONATION" ? amountValue(donationAmount) : contributionAmount;
+  const invalidPartial = selectedContributions.some((item) => {
+    const value = amountValue(paymentMode === "FULL" ? item.remaining_amount : partialAmounts[item.id] || item.remaining_amount);
+    return value <= 0 || value > amountValue(item.remaining_amount);
+  });
+  const canContinue = intent === "DONATION" ? Boolean(selectedProjectId) : selectedIds.length > 0;
+  const canPay = totalToPay > 0 && !invalidPartial && (intent === "DONATION" ? Boolean(selectedProjectId) : selectedIds.length > 0);
+  const mutation = useMutation({
+    mutationFn: () => {
+      const idempotencyKey = `self-${intent.toLowerCase()}-${Date.now()}`;
+      if (intent === "DONATION") {
+        return initializeSelfPayment(workspaceSlug, {
+          type: "DONATION",
+          project: selectedProjectId || 0,
+          amount: donationAmount,
+          payment_method: paymentMethod,
+          idempotency_key: idempotencyKey
+        });
+      }
+      return initializeSelfPayment(workspaceSlug, {
+        type: "CONTRIBUTION",
+        items: selectedContributions.map((item) => ({
+          contribution: item.id,
+          amount: String(paymentMode === "FULL" ? amountValue(item.remaining_amount) : amountValue(partialAmounts[item.id] || item.remaining_amount))
+        })),
+        payment_method: paymentMethod,
+        idempotency_key: idempotencyKey
+      });
+    },
+    onSuccess: (result) => {
+      if (result.checkout_url) {
+        window.location.href = result.checkout_url;
+        return;
+      }
+      setMessage("Le paiement en ligne n'est pas encore disponible. La tentative est creee en attente de configuration provider.");
+    },
+    onError: (error: Error) => setMessage(error.message)
+  });
+
+  function toggleContribution(id: number) {
+    setSelectedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+  }
+
+  function continueToPayment() {
+    if (!canContinue) {
+      setMessage(intent === "DONATION" ? "Selectionnez un projet a soutenir." : "Selectionnez au moins une cotisation.");
+      return;
+    }
+    setMessage("");
+    setStep(2);
+  }
+
+  return (
+    <div className="min-h-screen w-full bg-slate-50">
+      <div className="mx-0 grid w-full gap-4 px-4 py-4 md:mx-auto md:max-w-5xl md:px-6">
+        <PageHeader
+          title="Paiement"
+          description="Payez vos cotisations ou soutenez un projet de votre association."
+          actions={<Button asChild variant="outline"><a href={workspacePath(workspaceSlug, "dashboard")}><ArrowLeft className="size-4" /> Retour</a></Button>}
+        />
+
+        <Stepper step={step} />
+
+        {message ? <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">{message}</div> : null}
+
+        {step === 1 ? (
+          <section className="grid gap-4">
+            <div>
+              <h2 className="text-xl font-black text-slate-950">Que souhaitez-vous payer ?</h2>
+              <p className="mt-1 text-sm text-slate-500">Choisissez une intention, puis selectionnez les elements a regler.</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <button className={`rounded-lg border p-4 text-left ${intent === "CONTRIBUTION" ? "border-blue-600 bg-blue-50 text-blue-800" : "border-border bg-white"}`} type="button" onClick={() => setIntent("CONTRIBUTION")}>
+                <CreditCard className="mb-3 size-6" />
+                <strong>Cotisations</strong>
+                <span className="mt-1 block text-xs text-slate-500">Payer mes cotisations</span>
+              </button>
+              <button className={`rounded-lg border p-4 text-left ${intent === "DONATION" ? "border-blue-600 bg-blue-50 text-blue-800" : "border-border bg-white"}`} type="button" onClick={() => setIntent("DONATION")}>
+                <FolderHeart className="mb-3 size-6" />
+                <strong>Dons</strong>
+                <span className="mt-1 block text-xs text-slate-500">Soutenir un projet</span>
+              </button>
+            </div>
+
+            {intent === "CONTRIBUTION" ? (
+              <div className="grid gap-3">
+                {contributionsQuery.isLoading ? <Loading label="Chargement des cotisations..." /> : null}
+                {contributionsQuery.data?.message ? <Empty label={contributionsQuery.data.message} /> : null}
+                {!contributionsQuery.isLoading && !contributionsQuery.data?.message && contributions.length === 0 ? <Empty label="Vous etes a jour sur vos cotisations." /> : null}
+                {contributions.map((item) => (
+                  <ContributionCard key={item.id} item={item} selected={selectedIds.includes(item.id)} onToggle={() => toggleContribution(item.id)} />
+                ))}
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {projectsQuery.isLoading ? <Loading label="Chargement des projets..." /> : null}
+                {!projectsQuery.isLoading && projects.length === 0 ? <Empty label="Aucun projet n'est actuellement ouvert au soutien." /> : null}
+                {projects.map((project) => (
+                  <ProjectCard key={project.id} project={project} selected={project.id === selectedProjectId} onSelect={() => setSelectedProjectId(project.id)} />
+                ))}
+              </div>
+            )}
+
+            <Button className="min-h-12 w-full" type="button" disabled={!canContinue} onClick={continueToPayment}>
+              Continuer <ArrowRight className="size-4" />
+            </Button>
+          </section>
+        ) : (
+          <section className="grid gap-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-black text-slate-950">{intent === "DONATION" ? "Soutenir le projet" : "Paiement"}</h2>
+                <p className="mt-1 text-sm text-slate-500">Verification backend obligatoire avant toute confirmation.</p>
+              </div>
+              <Button type="button" variant="outline" onClick={() => setStep(1)}><ArrowLeft className="size-4" /> Retour</Button>
+            </div>
+
+            <Card>
+              <CardContent className="grid gap-4 p-4">
+                <h3 className="font-black text-slate-950">Recapitulatif</h3>
+                {intent === "CONTRIBUTION" ? (
+                  <>
+                    <div className="grid gap-3">
+                      {selectedContributions.map((item) => (
+                        <div className="grid gap-3 rounded-md bg-slate-50 p-3" key={item.id}>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <strong>{item.campaign_name}</strong>
+                              <p className="text-xs text-slate-500">Reste: {money(item.remaining_amount, item.currency)}</p>
+                            </div>
+                            <span className="font-black">{money(paymentMode === "FULL" ? item.remaining_amount : partialAmounts[item.id] || item.remaining_amount, item.currency)}</span>
+                          </div>
+                          {paymentMode === "PARTIAL" ? (
+                            <input
+                              className="min-h-11 rounded-md border border-border px-3 text-base font-semibold outline-none"
+                              inputMode="decimal"
+                              value={partialAmounts[item.id] ?? String(amountValue(item.remaining_amount))}
+                              onChange={(event) => setPartialAmounts((current) => ({ ...current, [item.id]: event.target.value }))}
+                            />
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button className={`rounded-md border p-3 text-sm font-black ${paymentMode === "FULL" ? "border-blue-600 bg-blue-50 text-blue-700" : "border-border bg-white"}`} type="button" onClick={() => setPaymentMode("FULL")}>Payer tout</button>
+                      <button className={`rounded-md border p-3 text-sm font-black ${paymentMode === "PARTIAL" ? "border-blue-600 bg-blue-50 text-blue-700" : "border-border bg-white"}`} type="button" onClick={() => setPaymentMode("PARTIAL")}>Payer une partie</button>
+                    </div>
+                    <div className="rounded-md bg-slate-950 p-4 text-white">
+                      <p className="text-xs text-slate-300">Montant restant</p>
+                      <strong className="text-2xl">{money(remainingTotal, currency)}</strong>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="rounded-md bg-slate-50 p-3">
+                      <p className="text-xs text-slate-500">Projet selectionne</p>
+                      <strong>{selectedProject?.name}</strong>
+                    </div>
+                    <label className="grid gap-2 text-sm font-semibold">
+                      Montant du don
+                      <input className="min-h-12 rounded-md border border-border px-3 text-base outline-none" inputMode="decimal" value={donationAmount} onChange={(event) => setDonationAmount(event.target.value)} placeholder="10000" />
+                    </label>
+                  </>
+                )}
+
+                <label className="grid gap-2 text-sm font-semibold">
+                  Moyen de paiement
+                  <select className="min-h-12 rounded-md border border-border px-3 outline-none" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>
+                    {paymentMethods.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}
+                  </select>
+                </label>
+              </CardContent>
+            </Card>
+
+            {invalidPartial ? <div className="rounded-md bg-red-50 p-3 text-sm font-semibold text-red-700">Le montant doit etre superieur a 0 et inferieur ou egal au reste a payer.</div> : null}
+            <Button className="min-h-12 w-full" type="button" disabled={!canPay || mutation.isPending} onClick={() => mutation.mutate()}>
+              {mutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <CreditCard className="size-4" />}
+              Payer {money(totalToPay, currency)}
+            </Button>
+          </section>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Loading({ label }: Readonly<{ label: string }>) {
+  return <div className="flex min-h-24 items-center justify-center rounded-lg border border-border bg-white text-sm font-semibold text-slate-500"><Loader2 className="mr-2 size-4 animate-spin" /> {label}</div>;
+}
+
+function Empty({ label }: Readonly<{ label: string }>) {
+  return <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center text-sm font-semibold text-slate-500">{label}</div>;
+}
+
+function ContributionCard({ item, selected, onToggle }: Readonly<{ item: PayableContribution; selected: boolean; onToggle: () => void }>) {
+  return (
+    <button className={`w-full rounded-lg border bg-white p-4 text-left shadow-sm ${selected ? "border-blue-600 ring-2 ring-blue-100" : "border-border"}`} type="button" onClick={onToggle}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-black text-slate-950">{item.campaign_name}</h3>
+          <p className="mt-1 text-xs text-slate-500">Periode: {linePeriod(item)}</p>
         </div>
-      </section>
+        <span className={`rounded-full px-2 py-1 text-[11px] font-black ${item.status === "OVERDUE" ? "bg-red-50 text-red-700" : "bg-blue-50 text-blue-700"}`}>{statusLabel(item.status)}</span>
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
+        <Metric label="Total" value={money(item.amount_due, item.currency)} />
+        <Metric label="Deja paye" value={money(item.amount_paid, item.currency)} />
+        <Metric label="Reste" value={money(item.remaining_amount, item.currency)} strong />
+      </div>
+      <div className="mt-4 flex items-center gap-2 text-sm font-black text-slate-800">
+        <span className={`grid size-5 place-items-center rounded border ${selected ? "border-blue-700 bg-blue-700 text-white" : "border-slate-300 bg-white"}`}>{selected ? <Check className="size-3" /> : null}</span>
+        Selectionner
+      </div>
+    </button>
+  );
+}
+
+function ProjectCard({ project, selected, onSelect }: Readonly<{ project: DonationProject; selected: boolean; onSelect: () => void }>) {
+  const rate = amountValue(project.budget) > 0 ? Math.min(100, Math.round((amountValue(project.funding_received) / amountValue(project.budget)) * 100)) : project.progress;
+  return (
+    <button className={`w-full rounded-lg border bg-white p-4 text-left shadow-sm ${selected ? "border-blue-600 ring-2 ring-blue-100" : "border-border"}`} type="button" onClick={onSelect}>
+      {project.image ? <img className="mb-3 h-32 w-full rounded-md object-cover" src={project.image} alt="" /> : null}
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-black text-slate-950">{project.name}</h3>
+          <p className="mt-1 line-clamp-2 text-sm text-slate-500">{project.description || "Projet de l'association."}</p>
+        </div>
+        <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-black text-emerald-700">{project.status_label}</span>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+        <Metric label="Objectif" value={money(project.budget, project.currency)} />
+        <Metric label="Deja collecte" value={money(project.funding_received, project.currency)} strong />
+      </div>
+      <div className="mt-4">
+        <div className="mb-1 flex justify-between text-xs font-black"><span>Progression</span><span>{rate}%</span></div>
+        <div className="h-2 rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-700" style={{ width: `${rate}%` }} /></div>
+      </div>
+    </button>
+  );
+}
+
+function Metric({ label, value, strong = false }: Readonly<{ label: string; value: string; strong?: boolean }>) {
+  return (
+    <div className="rounded-md bg-slate-50 p-2">
+      <p className="text-[11px] text-slate-500">{label}</p>
+      <strong className={strong ? "text-blue-700" : "text-slate-950"}>{value}</strong>
     </div>
   );
 }

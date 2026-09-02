@@ -7,22 +7,29 @@ from apps.members.models import Member
 from .models import FinancialAdjustment, Payment, Receipt
 from .serializers import (
     FinancialAdjustmentSerializer,
+    DonationProjectSerializer,
     ManualPaymentSerializer,
+    PayableContributionSerializer,
     PaymentDocumentSerializer,
     PaymentInitializeSerializer,
     PaymentRefundSerializer,
     PaymentSerializer,
     ReceiptSendSerializer,
     ReceiptSerializer,
+    SelfPaymentInitializeSerializer,
 )
 from .services import (
     attach_payment_document,
     create_financial_adjustment,
     delete_payment_document,
+    donation_projects_for_workspace,
     financial_history,
     initialize_contribution_payment,
+    initialize_donation_payment,
+    initialize_self_contribution_payments,
     member_financial_history,
     payment_dashboard,
+    payable_contributions_for_member,
     process_payment_webhook,
     receipt_downloaded,
     record_manual_payment,
@@ -48,6 +55,9 @@ class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
             "retrieve": "payments.view_details",
             "manual": "payments.manage",
             "initialize": "payments.manage",
+            "self_contributions": "payments.view",
+            "donation_projects": "payments.view",
+            "self_initialize": "payments.view",
             "dashboard": "payments.view",
             "refund": "payments.refund",
             "result": "payments.view_details",
@@ -96,6 +106,65 @@ class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
         except ValueError as exc:
             return response.Response({"message": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return response.Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
+
+    @decorators.action(detail=False, methods=["get"], url_path="contributions")
+    def self_contributions(self, request):
+        workspace = current_workspace(request)
+        try:
+            payload = payable_contributions_for_member(workspace=workspace, user=request.user)
+        except ValueError as exc:
+            return response.Response({"message": str(exc), "member": None, "results": []}, status=status.HTTP_200_OK)
+        return response.Response(
+            {
+                "member": {"id": payload["member"].id, "name": str(payload["member"]), "membership_number": payload["member"].membership_number},
+                "results": PayableContributionSerializer(payload["contributions"], many=True).data,
+            }
+        )
+
+    @decorators.action(detail=False, methods=["get"], url_path="donation-projects")
+    def donation_projects(self, request):
+        return response.Response(DonationProjectSerializer(donation_projects_for_workspace(workspace=current_workspace(request)), many=True).data)
+
+    @decorators.action(detail=False, methods=["post"], url_path="self-initialize")
+    def self_initialize(self, request):
+        serializer = SelfPaymentInitializeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        workspace = current_workspace(request)
+        try:
+            if serializer.validated_data["type"] == "CONTRIBUTION":
+                payments = initialize_self_contribution_payments(
+                    workspace=workspace,
+                    actor=request.user,
+                    items=serializer.validated_data["items"],
+                    payment_method=serializer.validated_data["payment_method"],
+                    idempotency_key=serializer.validated_data["idempotency_key"],
+                    provider_code=serializer.validated_data.get("provider") or None,
+                )
+            else:
+                payments = [
+                    initialize_donation_payment(
+                        workspace=workspace,
+                        actor=request.user,
+                        project=serializer.validated_data["project"],
+                        amount=serializer.validated_data["amount"],
+                        payment_method=serializer.validated_data["payment_method"],
+                        idempotency_key=serializer.validated_data["idempotency_key"],
+                        provider_code=serializer.validated_data.get("provider") or None,
+                    )
+                ]
+        except ValueError as exc:
+            return response.Response({"message": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        checkout_url = next((payment.checkout_url for payment in payments if payment.checkout_url), "")
+        return response.Response(
+            {
+                "payments": PaymentSerializer(payments, many=True).data,
+                "checkout_url": checkout_url,
+                "status": payments[0].status if payments else "PENDING",
+                "provider": payments[0].provider if payments else "",
+                "online_available": bool(checkout_url),
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
     @decorators.action(detail=False, methods=["post"], url_path="initialize")
     def initialize(self, request):
