@@ -30,7 +30,8 @@ class BudgetDashboardView(APIView):
     permission_classes = [RequireWorkspacePermission.for_permission("budgets.view")]
 
     def get(self, request):
-        return response.Response(budget_dashboard(workspace=current_workspace(request)))
+        year = request.query_params.get("year")
+        return response.Response(budget_dashboard(workspace=current_workspace(request), year=int(year) if year else None))
 
 
 class BudgetSettingsView(APIView):
@@ -79,6 +80,9 @@ class BudgetViewSet(viewsets.ModelViewSet):
         for key, field in {"status": "status", "scope": "scope_type", "project": "project_id", "event": "event_id"}.items():
             if self.request.query_params.get(key):
                 queryset = queryset.filter(**{field: self.request.query_params[key]})
+        if self.request.query_params.get("year"):
+            year = int(self.request.query_params["year"])
+            queryset = queryset.filter(start_date__year__lte=year, end_date__year__gte=year)
         return queryset.order_by("-start_date", "-created_at")
 
     def get_serializer_context(self):
@@ -182,4 +186,3 @@ class BudgetViewSet(viewsets.ModelViewSet):
     def alerts(self, request):
         filters_payload = {key: request.query_params.get(key) for key in ["status", "budget", "date", "severity"] if request.query_params.get(key)}
         return response.Response(budget_alerts(workspace=current_workspace(request), filters=filters_payload))
-

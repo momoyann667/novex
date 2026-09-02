@@ -57,6 +57,8 @@ def validate_budget_lines_total(budget: Budget) -> None:
 @transaction.atomic
 def create_budget(*, workspace: Workspace, actor, **data) -> Budget:
     validate_budget_dates(data["start_date"], data["end_date"])
+    if data.get("total_amount", ZERO) <= ZERO:
+        raise ValueError("Le montant alloue doit etre positif.")
     validate_budget_scope(workspace=workspace, scope_type=data.get("scope_type") or BudgetScopeType.WORKSPACE, project=data.get("project"), event=data.get("event"))
     data.setdefault("currency", workspace.currency)
     budget = Budget.objects.create(workspace=workspace, created_by=actor, **data)
@@ -127,6 +129,8 @@ def create_budget_line(*, budget: Budget, actor, **data) -> BudgetLine:
     budget = Budget.objects.select_for_update().get(id=budget.id)
     if budget.status in {BudgetStatus.CLOSED, BudgetStatus.ARCHIVED}:
         raise ValueError("Un budget cloture ou archive ne peut pas recevoir de ligne.")
+    if data.get("planned_amount", ZERO) <= ZERO:
+        raise ValueError("Le montant de la ligne budgetaire doit etre positif.")
     category = data["category"]
     validate_workspace_relation(budget.workspace, category, "La categorie")
     if category.kind != FinancialCategoryKind.EXPENSE_CATEGORY:
@@ -164,17 +168,20 @@ def archive_budget_line(*, line: BudgetLine, actor) -> BudgetLine:
     return line
 
 
-def expense_sum_for_line(line: BudgetLine, *, status: str) -> Decimal:
-    return BudgetAssignment.objects.filter(
+def expense_sum_for_line(line: BudgetLine, *, status: str, year: int | None = None) -> Decimal:
+    queryset = BudgetAssignment.objects.filter(
         budget_line=line,
         transaction__transaction_type=FinancialTransactionType.EXPENSE,
         transaction__status=status,
-    ).aggregate(total=Sum("transaction__amount"))["total"] or ZERO
+    )
+    if year:
+        queryset = queryset.filter(transaction__transaction_date__year=year)
+    return queryset.aggregate(total=Sum("transaction__amount"))["total"] or ZERO
 
 
-def line_summary(line: BudgetLine) -> dict:
-    actual = expense_sum_for_line(line, status=FinancialTransactionStatus.VALIDATED)
-    pending = expense_sum_for_line(line, status=FinancialTransactionStatus.PENDING)
+def line_summary(line: BudgetLine, *, year: int | None = None) -> dict:
+    actual = expense_sum_for_line(line, status=FinancialTransactionStatus.VALIDATED, year=year)
+    pending = expense_sum_for_line(line, status=FinancialTransactionStatus.PENDING, year=year)
     committed = line.committed_amount + pending
     remaining = line.planned_amount - actual - committed
     rate = round((actual / line.planned_amount) * 100, 2) if line.planned_amount else Decimal("0.00")
@@ -192,8 +199,8 @@ def line_summary(line: BudgetLine) -> dict:
     }
 
 
-def budget_summary(budget: Budget) -> dict:
-    lines = [line_summary(line) for line in budget.lines.filter(is_active=True).select_related("category", "budget", "budget__workspace")]
+def budget_summary(budget: Budget, *, year: int | None = None) -> dict:
+    lines = [line_summary(line, year=year) for line in budget.lines.filter(is_active=True).select_related("category", "budget", "budget__workspace")]
     planned = sum((item["planned"] for item in lines), ZERO) or budget.total_amount
     actual = sum((item["actual"] for item in lines), ZERO)
     committed = sum((item["committed"] for item in lines), ZERO)
@@ -344,9 +351,15 @@ def evaluate_budget_alerts(budget: Budget, actor=None) -> list[BudgetAlert]:
     return alerts
 
 
-def budget_dashboard(*, workspace: Workspace) -> dict:
-    budgets = Budget.objects.filter(workspace=workspace, status=BudgetStatus.ACTIVE).prefetch_related("lines__category").select_related("workspace", "project", "event")
-    cards = [budget_summary(item) for item in budgets]
+def budget_period_filter(queryset, *, year: int | None = None):
+    if not year:
+        return queryset
+    return queryset.filter(start_date__year__lte=year, end_date__year__gte=year)
+
+
+def budget_dashboard(*, workspace: Workspace, year: int | None = None) -> dict:
+    budgets = budget_period_filter(Budget.objects.filter(workspace=workspace, status=BudgetStatus.ACTIVE), year=year).prefetch_related("lines__category").select_related("workspace", "project", "event")
+    cards = [budget_summary(item, year=year) for item in budgets]
     total = sum((item["budget_total"] for item in cards), ZERO)
     actual = sum((item["actual"] for item in cards), ZERO)
     committed = sum((item["committed"] for item in cards), ZERO)
@@ -359,6 +372,8 @@ def budget_dashboard(*, workspace: Workspace) -> dict:
         budget_assignment__isnull=True,
     ).aggregate(total=Sum("amount"))["total"] or ZERO
     return {
+        "year": year or timezone.localdate().year,
+        "currency": workspace.currency,
         "budget_total": total,
         "committed": committed,
         "actual": actual,

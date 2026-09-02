@@ -5,7 +5,7 @@ import pytest
 
 pytest.importorskip("pytest_django")
 
-from apps.budgets.models import BudgetAssignment
+from apps.budgets.models import Budget, BudgetAssignment
 from apps.budgets.services import activate_budget, budget_dashboard, budget_settings, budget_summary, create_budget, create_budget_line
 from apps.finance.services import financial_settings
 from apps.budgets.statuses import BudgetScopeType
@@ -51,8 +51,51 @@ def test_budget_overrun_and_zero_division(django_user_model):
 
     assert summary["overrun"] == Decimal("200000.00")
 
-    zero = create_budget(workspace=workspace, actor=owner, name="Budget zero", start_date=date(2026, 1, 1), end_date=date(2026, 12, 31), total_amount=Decimal("0.00"))
+    zero = Budget.objects.create(workspace=workspace, created_by=owner, name="Budget zero", start_date=date(2026, 1, 1), end_date=date(2026, 12, 31), total_amount=Decimal("0.00"))
     assert budget_summary(zero)["consumption_rate"] == Decimal("0.00")
+
+
+@pytest.mark.django_db
+def test_budget_creation_rejects_invalid_amount_and_year_filter(django_user_model):
+    owner = django_user_model.objects.create_user(username="budget-filter@example.com", email="budget-filter@example.com", password="pass")
+    workspace = Workspace.objects.create(name="Association Filter", slug="association-filter", organization_type="association", owner=owner)
+    category = default_category(workspace, kind=FinancialCategoryKind.EXPENSE_CATEGORY, name="Administration", actor=owner)
+
+    with pytest.raises(ValueError):
+        create_budget(workspace=workspace, actor=owner, name="Budget invalide", start_date=date(2026, 1, 1), end_date=date(2026, 12, 31), total_amount=Decimal("0.00"))
+
+    current = create_budget(workspace=workspace, actor=owner, name="Budget 2026", start_date=date(2026, 1, 1), end_date=date(2026, 12, 31), total_amount=Decimal("100000.00"))
+    create_budget_line(budget=current, actor=owner, category=category, planned_amount=Decimal("100000.00"))
+    activate_budget(budget=current, actor=owner)
+    previous = create_budget(workspace=workspace, actor=owner, name="Budget 2025", start_date=date(2025, 1, 1), end_date=date(2025, 12, 31), total_amount=Decimal("50000.00"))
+    create_budget_line(budget=previous, actor=owner, category=category, planned_amount=Decimal("50000.00"))
+    activate_budget(budget=previous, actor=owner)
+
+    dashboard = budget_dashboard(workspace=workspace, year=2026)
+
+    assert dashboard["budget_total"] == Decimal("100000.00")
+    assert [item["name"] for item in dashboard["budgets"]] == ["Budget 2026"]
+
+
+@pytest.mark.django_db
+def test_budget_dashboard_year_filter_limits_expenses_for_multi_year_budget(django_user_model):
+    owner = django_user_model.objects.create_user(username="budget-multiyear@example.com", email="budget-multiyear@example.com", password="pass")
+    workspace = Workspace.objects.create(name="Association Multi Year", slug="association-multi-year", organization_type="association", owner=owner)
+    settings = financial_settings(workspace)
+    settings.expense_validation_threshold = Decimal("9999999.00")
+    settings.save()
+    category = default_category(workspace, kind=FinancialCategoryKind.EXPENSE_CATEGORY, name="Projets", actor=owner)
+    budget = create_budget(workspace=workspace, actor=owner, name="Budget pluriannuel", start_date=date(2025, 1, 1), end_date=date(2026, 12, 31), total_amount=Decimal("1000000.00"))
+    line = create_budget_line(budget=budget, actor=owner, category=category, planned_amount=Decimal("1000000.00"))
+    activate_budget(budget=budget, actor=owner)
+
+    create_expense(workspace=workspace, actor=owner, amount=Decimal("300000.00"), category=category, budget_line=line, description="Travaux 2025", transaction_date=date(2025, 6, 1))
+    create_expense(workspace=workspace, actor=owner, amount=Decimal("200000.00"), category=category, budget_line=line, description="Travaux 2026", transaction_date=date(2026, 6, 1))
+
+    dashboard = budget_dashboard(workspace=workspace, year=2026)
+
+    assert dashboard["actual"] == Decimal("200000.00")
+    assert dashboard["consumption_rate"] == Decimal("20.00")
 
 
 @pytest.mark.django_db
