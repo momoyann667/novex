@@ -4,9 +4,10 @@ from rest_framework import serializers
 
 from apps.events.models import Event
 from apps.budgets.models import BudgetLine
+from apps.members.models import Member
 from apps.projects.models import Project
 from .models import CostCenter, FinancialCategory, FinancialSettings, FinancialTransaction, FinancialTransactionDocument, FiscalPeriod
-from .statuses import FinancialCategoryKind, FinancialTransactionSource, FinancialTransactionStatus, FinancialTransactionType
+from .statuses import FinancialCategoryKind, FinancialTransactionSenderType, FinancialTransactionSource, FinancialTransactionStatus, FinancialTransactionType
 
 
 class FinancialSettingsSerializer(serializers.ModelSerializer):
@@ -59,6 +60,7 @@ class FinancialTransactionSerializer(serializers.ModelSerializer):
     budget_line_name = serializers.SerializerMethodField()
     created_by_name = serializers.CharField(source="created_by.get_full_name", read_only=True)
     documents_count = serializers.IntegerField(source="documents.count", read_only=True)
+    member_name = serializers.SerializerMethodField()
 
     class Meta:
         model = FinancialTransaction
@@ -74,6 +76,10 @@ class FinancialTransactionSerializer(serializers.ModelSerializer):
             "transaction_date",
             "status",
             "source",
+            "sender_type",
+            "member",
+            "member_name",
+            "sender_name",
             "project",
             "event",
             "cost_center",
@@ -102,6 +108,7 @@ class FinancialTransactionSerializer(serializers.ModelSerializer):
         workspace = self.context.get("workspace")
         if workspace:
             self.fields["category"].queryset = FinancialCategory.objects.filter(workspace=workspace, is_active=True)
+            self.fields["member"].queryset = Member.objects.filter(workspace=workspace)
             self.fields["project"].queryset = Project.objects.filter(workspace=workspace)
             self.fields["event"].queryset = Event.objects.filter(workspace=workspace)
             self.fields["cost_center"].queryset = CostCenter.objects.filter(workspace=workspace, is_active=True)
@@ -124,7 +131,7 @@ class FinancialTransactionSerializer(serializers.ModelSerializer):
         if transaction_type not in FinancialTransactionType.values:
             raise serializers.ValidationError({"transaction_type": "Type de transaction invalide."})
         if workspace:
-            for field in ["category", "project", "event", "cost_center", "budget_line"]:
+            for field in ["category", "member", "project", "event", "cost_center", "budget_line"]:
                 item = attrs.get(field)
                 if item and item.workspace_id != workspace.id:
                     raise serializers.ValidationError({field: "Cette ressource appartient a un autre workspace."})
@@ -132,6 +139,16 @@ class FinancialTransactionSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"category": "La categorie doit etre une categorie de recette."})
         if category and transaction_type == FinancialTransactionType.EXPENSE and category.kind != FinancialCategoryKind.EXPENSE_CATEGORY:
             raise serializers.ValidationError({"category": "La categorie doit etre une categorie de depense."})
+        sender_type = attrs.get("sender_type") or getattr(self.instance, "sender_type", FinancialTransactionSenderType.OTHER)
+        member = attrs.get("member") or getattr(self.instance, "member", None)
+        sender_name = attrs.get("sender_name") or getattr(self.instance, "sender_name", "")
+        if transaction_type == FinancialTransactionType.INCOME:
+            if sender_type not in FinancialTransactionSenderType.values:
+                raise serializers.ValidationError({"sender_type": "Type d'envoyeur invalide."})
+            if sender_type == FinancialTransactionSenderType.MEMBER and not member:
+                raise serializers.ValidationError({"member": "Selectionnez le membre envoyeur."})
+            if sender_type == FinancialTransactionSenderType.OTHER and not str(sender_name).strip():
+                raise serializers.ValidationError({"sender_name": "Le nom de l'envoyeur est requis."})
         return attrs
 
     def _assignment(self, obj):
@@ -155,6 +172,9 @@ class FinancialTransactionSerializer(serializers.ModelSerializer):
     def get_budget_line_name(self, obj):
         assignment = self._assignment(obj)
         return assignment.budget_line.category.name if assignment else ""
+
+    def get_member_name(self, obj):
+        return str(obj.member) if obj.member_id else ""
 
 
 class FinancialDocumentSerializer(serializers.ModelSerializer):

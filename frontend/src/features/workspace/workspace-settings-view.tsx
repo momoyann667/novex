@@ -45,6 +45,7 @@ const defaultSettings: WorkspaceSettingsResource = {
   finance_preferences: {
     expense_validation_enabled: true,
     income_validation_enabled: false,
+    annual_revenue_target: 0,
     expense_validation_threshold: 50000,
     expense_categories: ["Transport", "Communication", "Materiel", "Evenements", "Logistique"],
     revenue_categories: ["Cotisations", "Dons", "Subventions", "Partenariats", "Autres recettes"],
@@ -380,6 +381,7 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
             <SettingsCard title="Finance">
               <label className="flex min-h-12 items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 text-sm font-black">Validation depenses<input className="size-5 accent-blue-700" type="checkbox" checked={boolSetting(form.finance_preferences, "expense_validation_enabled")} onChange={(event) => updateRecord("finance_preferences", "expense_validation_enabled", event.target.checked)} /></label>
               <label className="flex min-h-12 items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 text-sm font-black">Validation recettes<input className="size-5 accent-blue-700" type="checkbox" checked={boolSetting(form.finance_preferences, "income_validation_enabled")} onChange={(event) => updateRecord("finance_preferences", "income_validation_enabled", event.target.checked)} /></label>
+              <label className={labelClass}>Objectif annuel recettes<input className={fieldClass} min="0" type="number" value={numericSetting(form.finance_preferences, "annual_revenue_target", 0)} onChange={(event) => updateRecord("finance_preferences", "annual_revenue_target", Number(event.target.value))} /></label>
               <label className={labelClass}>Seuil validation depense<input className={fieldClass} type="number" value={numericSetting(form.finance_preferences, "expense_validation_threshold", 50000)} onChange={(event) => updateRecord("finance_preferences", "expense_validation_threshold", Number(event.target.value))} /></label>
               <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
                 <div className="mb-3 flex items-center justify-between gap-3">

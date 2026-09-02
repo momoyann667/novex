@@ -30,6 +30,7 @@ from .services import (
     financial_settings,
     period_is_closed,
     reject_expense,
+    revenue_summary,
     validate_expense,
 )
 from .statuses import FinancialCategoryKind, FinancialTransactionStatus, FinancialTransactionType
@@ -220,12 +221,22 @@ class FinancialTransactionViewSet(viewsets.ModelViewSet):
 
 class IncomeViewSet(FinancialTransactionViewSet):
     def get_permissions(self):
-        if self.action == "create":
-            return [RequireWorkspacePermission.for_permission("finance.create_income")()]
+        permission_map = {
+            "create": "finance.create_income",
+            "summary": "finance.view",
+            "categories": "finance.view",
+        }
+        if self.action in permission_map:
+            return [RequireWorkspacePermission.for_permission(permission_map[self.action])()]
         return super().get_permissions()
 
     def get_queryset(self):
-        return super().get_queryset().filter(transaction_type=FinancialTransactionType.INCOME)
+        queryset = super().get_queryset().filter(transaction_type=FinancialTransactionType.INCOME).select_related("member", "created_by")
+        if self.request.query_params.get("month"):
+            queryset = queryset.filter(transaction_date__month=self.request.query_params["month"])
+        if self.request.query_params.get("year"):
+            queryset = queryset.filter(transaction_date__year=self.request.query_params["year"])
+        return queryset
 
     def create(self, request, *args, **kwargs):
         data = request.data.copy()
@@ -237,6 +248,18 @@ class IncomeViewSet(FinancialTransactionViewSet):
         except ValueError as exc:
             return response.Response({"message": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return response.Response(self.get_serializer(transaction_obj).data, status=status.HTTP_201_CREATED)
+
+    @decorators.action(detail=False, methods=["get"])
+    def summary(self, request):
+        month = request.query_params.get("month")
+        return response.Response(revenue_summary(workspace=current_workspace(request), month=int(month) if month else None))
+
+    @decorators.action(detail=False, methods=["get"], url_path="categories")
+    def categories(self, request):
+        workspace = current_workspace(request)
+        ensure_default_categories(workspace, actor=request.user)
+        queryset = FinancialCategory.objects.filter(workspace=workspace, kind=FinancialCategoryKind.INCOME_CATEGORY, is_active=True).order_by("name")
+        return response.Response(FinancialCategorySerializer(queryset, many=True).data)
 
 
 class ExpenseViewSet(FinancialTransactionViewSet):

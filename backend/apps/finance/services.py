@@ -12,7 +12,7 @@ from apps.audit_logs.models import AuditLog
 from apps.payments.statuses import PaymentStatus
 from apps.workspaces.models import Workspace
 from .models import FinancialCategory, FinancialSettings, FinancialTransaction, FinancialTransactionDocument, FiscalPeriod
-from .statuses import FinancialCategoryKind, FinancialTransactionSource, FinancialTransactionStatus, FinancialTransactionType, FiscalPeriodStatus
+from .statuses import FinancialCategoryKind, FinancialTransactionSenderType, FinancialTransactionSource, FinancialTransactionStatus, FinancialTransactionType, FiscalPeriodStatus
 
 
 ZERO = Decimal("0.00")
@@ -78,7 +78,9 @@ def create_financial_transaction(*, workspace: Workspace, actor, transaction_typ
     event = data.get("event")
     cost_center = data.get("cost_center")
     source_payment = data.get("source_payment")
+    member = data.get("member")
     validate_workspace_relation(workspace, category, "La categorie")
+    validate_workspace_relation(workspace, member, "Le membre")
     validate_workspace_relation(workspace, project, "Le projet")
     validate_workspace_relation(workspace, event, "L'evenement")
     validate_workspace_relation(workspace, cost_center, "Le centre de cout")
@@ -90,6 +92,15 @@ def create_financial_transaction(*, workspace: Workspace, actor, transaction_typ
     amount = data.get("amount") or ZERO
     if amount <= ZERO:
         raise ValueError("Le montant doit etre positif.")
+    sender_type = data.get("sender_type") or FinancialTransactionSenderType.OTHER
+    if transaction_type == FinancialTransactionType.INCOME:
+        data["sender_type"] = sender_type
+        if not data.get("sender_name") and not member:
+            data["sender_name"] = "Recette enregistree"
+        if sender_type == FinancialTransactionSenderType.MEMBER and not member:
+            raise ValueError("Selectionnez le membre envoyeur.")
+        if sender_type == FinancialTransactionSenderType.OTHER and not str(data.get("sender_name") or "").strip():
+            raise ValueError("Le nom de l'envoyeur est requis.")
     transaction_date = data.get("transaction_date") or timezone.localdate()
     if period_is_closed(workspace, transaction_date):
         raise ValueError("La periode comptable est cloturee.")
@@ -179,6 +190,9 @@ def sync_payment_to_finance(*, payment, actor=None) -> FinancialTransaction | No
             "transaction_date": (payment.paid_at or timezone.now()).date(),
             "status": FinancialTransactionStatus.VALIDATED,
             "source": FinancialTransactionSource.PAYMENT,
+            "sender_type": FinancialTransactionSenderType.MEMBER,
+            "member": payment.member,
+            "sender_name": str(payment.member),
             "created_by": actor,
         },
     )
@@ -255,6 +269,78 @@ def expense_period_bounds(*, year: int | None = None, month: int | None = None) 
         end = date(selected_year, 12, 31)
         label = str(selected_year)
     return start, end, {"year": selected_year, "month": month, "label": label, "start": start.isoformat(), "end": end.isoformat()}
+
+
+def current_revenue_period(workspace: Workspace) -> tuple[date, date, dict]:
+    today = timezone.localdate()
+    fiscal_period = FiscalPeriod.objects.filter(workspace=workspace, status=FiscalPeriodStatus.OPEN, start_date__lte=today, end_date__gte=today).order_by("-start_date").first()
+    if fiscal_period:
+        return fiscal_period.start_date, fiscal_period.end_date, {"id": fiscal_period.id, "label": fiscal_period.name, "start": fiscal_period.start_date.isoformat(), "end": fiscal_period.end_date.isoformat()}
+    start = date(today.year, 1, 1)
+    end = date(today.year, 12, 31)
+    return start, end, {"id": None, "label": f"Mandat {today.year}", "start": start.isoformat(), "end": end.isoformat()}
+
+
+def revenue_source_key(transaction_obj: FinancialTransaction) -> str:
+    if transaction_obj.source in {FinancialTransactionSource.PAYMENT, FinancialTransactionSource.CONTRIBUTION}:
+        return "CONTRIBUTION"
+    if transaction_obj.source in {FinancialTransactionSource.DONATION, FinancialTransactionSource.GRANT, FinancialTransactionSource.SPONSORSHIP}:
+        return transaction_obj.source
+    category_name = (transaction_obj.category.name or "").lower()
+    if "cotisation" in category_name:
+        return "CONTRIBUTION"
+    if "subvention" in category_name:
+        return "GRANT"
+    if "sponsor" in category_name or "partenariat" in category_name:
+        return "SPONSORSHIP"
+    if "don" in category_name:
+        return "DONATION"
+    return "DONATION"
+
+
+def revenue_label(source: str) -> str:
+    return {
+        "CONTRIBUTION": "Cotisations",
+        "DONATION": "Dons",
+        "GRANT": "Subventions",
+        "SPONSORSHIP": "Sponsoring",
+    }[source]
+
+
+def revenue_summary(*, workspace: Workspace, month: int | None = None) -> dict:
+    period_start, period_end, period = current_revenue_period(workspace)
+    today = timezone.localdate()
+    selected_month = month or today.month
+    month_start = date(today.year, selected_month, 1)
+    _, last_day = monthrange(today.year, selected_month)
+    month_end = date(today.year, selected_month, last_day)
+    if month_start < period_start:
+        month_start = period_start
+    if month_end > period_end:
+        month_end = period_end
+    queryset = FinancialTransaction.objects.filter(workspace=workspace, transaction_type=FinancialTransactionType.INCOME, status=FinancialTransactionStatus.VALIDATED, transaction_date__gte=period_start, transaction_date__lte=period_end).select_related("category")
+    total = queryset.aggregate(total=Sum("amount"))["total"] or ZERO
+    monthly = queryset.filter(transaction_date__gte=month_start, transaction_date__lte=month_end).aggregate(total=Sum("amount"))["total"] or ZERO
+    buckets = {source: ZERO for source in ["CONTRIBUTION", "DONATION", "GRANT", "SPONSORSHIP"]}
+    for transaction_obj in queryset:
+        buckets[revenue_source_key(transaction_obj)] += transaction_obj.amount
+    settings = getattr(workspace, "settings", None)
+    preferences = getattr(settings, "finance_preferences", {}) or {}
+    annual_target = Decimal(str(preferences.get("annual_revenue_target") or 0))
+    target_progress = round((total / annual_target) * 100, 2) if annual_target else Decimal("0.00")
+    return {
+        "mandate": period,
+        "currency": workspace.currency,
+        "total_revenue": total,
+        "monthly_revenue": monthly,
+        "month": {"value": selected_month, "label": month_start.strftime("%B %Y"), "start": month_start.isoformat(), "end": month_end.isoformat()},
+        "annual_target": annual_target,
+        "target_progress": target_progress,
+        "revenue_by_source": [
+            {"source": source, "label": revenue_label(source), "amount": amount, "percentage": round((amount / total) * 100, 2) if total else Decimal("0.00")}
+            for source, amount in buckets.items()
+        ],
+    }
 
 
 def expense_base_queryset(*, workspace: Workspace, year: int | None = None, month: int | None = None):

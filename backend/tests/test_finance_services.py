@@ -9,8 +9,8 @@ from apps.contributions.models import Contribution
 from apps.contributions.services import create_campaign
 from apps.finance.models import FinancialTransaction, FiscalPeriod
 from apps.budgets.services import activate_budget, create_budget, create_budget_line
-from apps.finance.services import cancel_transaction, close_fiscal_period, create_expense, create_income, default_category, expense_budget_cards, expense_dashboard, finance_dashboard, financial_settings, reject_expense, validate_expense
-from apps.finance.statuses import FinancialCategoryKind, FinancialTransactionStatus, FinancialTransactionType
+from apps.finance.services import cancel_transaction, close_fiscal_period, create_expense, create_income, default_category, expense_budget_cards, expense_dashboard, finance_dashboard, financial_settings, reject_expense, revenue_summary, validate_expense
+from apps.finance.statuses import FinancialCategoryKind, FinancialTransactionSenderType, FinancialTransactionSource, FinancialTransactionStatus, FinancialTransactionType
 from apps.members.models import Member
 from apps.payments.services import record_manual_payment
 from apps.workspaces.models import Workspace
@@ -23,7 +23,7 @@ def test_income_expense_balance_and_cancellation(django_user_model):
     income_category = default_category(workspace, kind=FinancialCategoryKind.INCOME_CATEGORY, name="Dons", actor=owner)
     expense_category = default_category(workspace, kind=FinancialCategoryKind.EXPENSE_CATEGORY, name="Transport", actor=owner)
 
-    create_income(workspace=workspace, actor=owner, amount=Decimal("100000.00"), category=income_category, description="Don partenaire")
+    create_income(workspace=workspace, actor=owner, amount=Decimal("100000.00"), category=income_category, description="Don partenaire", source=FinancialTransactionSource.DONATION, sender_type=FinancialTransactionSenderType.OTHER, sender_name="Partenaire")
     expense = create_expense(workspace=workspace, actor=owner, amount=Decimal("40000.00"), category=expense_category, description="Transport equipe")
     dashboard = finance_dashboard(workspace=workspace)
 
@@ -122,3 +122,37 @@ def test_expense_budget_cards_show_consumption_and_overrun(django_user_model):
     assert cards[0]["remaining"] == Decimal("-25000.00")
     assert cards[0]["consumption_rate"] == Decimal("125.00")
     assert cards[0]["state"] == "Budget depasse"
+
+
+@pytest.mark.django_db
+def test_revenue_summary_uses_income_transactions_sources_target_and_period(django_user_model):
+    owner = django_user_model.objects.create_user(username="revenue-summary@example.com", email="revenue-summary@example.com", password="pass")
+    workspace = Workspace.objects.create(name="Association Recettes", slug="association-recettes", organization_type="association", owner=owner)
+    other = Workspace.objects.create(name="Autre Recettes", slug="autre-recettes", organization_type="association", owner=owner)
+    settings = workspace.settings if hasattr(workspace, "settings") else None
+    if not settings:
+        from apps.workspaces.services import ensure_workspace_settings
+
+        settings = ensure_workspace_settings(workspace)
+    settings.finance_preferences = {"annual_revenue_target": 1000000}
+    settings.save()
+    FiscalPeriod.objects.create(workspace=workspace, name="Mandat 2026", start_date=date(2026, 1, 1), end_date=date(2026, 12, 31))
+    member = Member.objects.create(workspace=workspace, membership_number="REV-001", first_name="Awa", last_name="Kone")
+    donation_category = default_category(workspace, kind=FinancialCategoryKind.INCOME_CATEGORY, name="Dons", actor=owner)
+    grant_category = default_category(workspace, kind=FinancialCategoryKind.INCOME_CATEGORY, name="Subventions", actor=owner)
+    other_category = default_category(other, kind=FinancialCategoryKind.INCOME_CATEGORY, name="Dons", actor=owner)
+
+    create_income(workspace=workspace, actor=owner, amount=Decimal("250000.00"), category=donation_category, description="Don", source=FinancialTransactionSource.DONATION, transaction_date=date(2026, 9, 2), sender_type=FinancialTransactionSenderType.OTHER, sender_name="Fondation")
+    create_income(workspace=workspace, actor=owner, amount=Decimal("150000.00"), category=grant_category, description="Subvention", source=FinancialTransactionSource.GRANT, transaction_date=date(2026, 9, 3), sender_type=FinancialTransactionSenderType.MEMBER, member=member, sender_name=str(member))
+    create_income(workspace=workspace, actor=owner, amount=Decimal("50000.00"), category=donation_category, description="Aout", source=FinancialTransactionSource.SPONSORSHIP, transaction_date=date(2026, 8, 2), sender_type=FinancialTransactionSenderType.OTHER, sender_name="Sponsor")
+    create_income(workspace=other, actor=owner, amount=Decimal("999999.00"), category=other_category, description="Hors tenant", source=FinancialTransactionSource.DONATION, transaction_date=date(2026, 9, 2), sender_type=FinancialTransactionSenderType.OTHER, sender_name="Autre")
+
+    data = revenue_summary(workspace=workspace, month=9)
+
+    assert data["total_revenue"] == Decimal("450000.00")
+    assert data["monthly_revenue"] == Decimal("400000.00")
+    assert data["annual_target"] == Decimal("1000000")
+    assert data["target_progress"] == Decimal("45.00")
+    assert {item["source"]: item["amount"] for item in data["revenue_by_source"]}["DONATION"] == Decimal("250000.00")
+    assert {item["source"]: item["amount"] for item in data["revenue_by_source"]}["GRANT"] == Decimal("150000.00")
+    assert {item["source"]: item["amount"] for item in data["revenue_by_source"]}["SPONSORSHIP"] == Decimal("50000.00")

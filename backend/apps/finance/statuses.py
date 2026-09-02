@@ -19,8 +19,15 @@ class FinancialTransactionSource(models.TextChoices):
     CONTRIBUTION = "CONTRIBUTION", "Cotisation"
     PAYMENT = "PAYMENT", "Paiement"
     DONATION = "DONATION", "Don"
+    GRANT = "GRANT", "Subvention"
+    SPONSORSHIP = "SPONSORSHIP", "Sponsoring"
     EVENT = "EVENT", "Evenement"
     PROJECT = "PROJECT", "Projet"
+    OTHER = "OTHER", "Autre"
+
+
+class FinancialTransactionSenderType(models.TextChoices):
+    MEMBER = "MEMBER", "Membre"
     OTHER = "OTHER", "Autre"
 
 

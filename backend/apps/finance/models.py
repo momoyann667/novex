@@ -5,6 +5,7 @@ from django.db import models
 from django.utils import timezone
 
 from apps.events.models import Event
+from apps.members.models import Member
 from apps.payments.models import Payment
 from apps.projects.models import Project
 from apps.workspaces.models import Workspace
@@ -13,6 +14,7 @@ from .statuses import (
     FinancialCategoryKind,
     FinancialDocumentType,
     FinancialTransactionSource,
+    FinancialTransactionSenderType,
     FinancialTransactionStatus,
     FinancialTransactionType,
     FiscalPeriodStatus,
@@ -90,6 +92,9 @@ class FinancialTransaction(models.Model):
     status = models.CharField(max_length=16, choices=FinancialTransactionStatus.choices, default=FinancialTransactionStatus.VALIDATED)
     source = models.CharField(max_length=24, choices=FinancialTransactionSource.choices, default=FinancialTransactionSource.MANUAL)
     source_payment = models.OneToOneField(Payment, on_delete=models.PROTECT, null=True, blank=True, related_name="financial_transaction")
+    sender_type = models.CharField(max_length=16, choices=FinancialTransactionSenderType.choices, default=FinancialTransactionSenderType.OTHER)
+    member = models.ForeignKey(Member, on_delete=models.SET_NULL, null=True, blank=True, related_name="financial_transactions")
+    sender_name = models.CharField(max_length=180, blank=True)
     project = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name="financial_transactions")
     event = models.ForeignKey(Event, on_delete=models.SET_NULL, null=True, blank=True, related_name="financial_transactions")
     cost_center = models.ForeignKey(CostCenter, on_delete=models.SET_NULL, null=True, blank=True, related_name="transactions")
@@ -114,6 +119,7 @@ class FinancialTransaction(models.Model):
             models.Index(fields=["workspace", "category"]),
             models.Index(fields=["workspace", "status"]),
             models.Index(fields=["workspace", "source"]),
+            models.Index(fields=["workspace", "member"]),
             models.Index(fields=["workspace", "project"]),
             models.Index(fields=["workspace", "event"]),
             models.Index(fields=["workspace", "created_at"]),
