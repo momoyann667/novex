@@ -70,7 +70,8 @@ export function LoginForm() {
 
       const workspaceSlug = payload?.default_workspace?.slug;
       if (!workspaceSlug) {
-        throw new ApiError("Aucun workspace actif trouve pour ce compte.", 403);
+        router.push("/workspace/new");
+        return;
       }
 
       router.push(`/app/${workspaceSlug}/dashboard`);

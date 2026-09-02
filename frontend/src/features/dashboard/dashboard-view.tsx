@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Bell,
   Bot,
@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { isWorkspaceSlugValid, loadWorkspaceProfile, WorkspaceProfile, WorkspaceProfileSetup } from "@/features/workspace/workspace-profile";
+import { isWorkspaceSlugValid, loadWorkspaceProfile, WorkspaceProfile } from "@/features/workspace/workspace-profile";
 import type { DashboardOverview } from "./types";
 import { emptyDashboardOverview } from "./data";
 
@@ -157,6 +157,17 @@ const treasuryItems: ReadonlyArray<readonly [string, string, string, LucideIcon]
   ["Creances", "1.5M", "Cotisations a recouvrer", Clock3]
 ];
 
+function displayProfile(profile: WorkspaceProfile | null, workspaceName: string): WorkspaceProfile {
+  return profile || {
+    country: "Non renseigne",
+    associationName: workspaceName,
+    associationType: "Association",
+    logoDataUrl: "",
+    currency: "FCFA",
+    color: "#0F7FF2"
+  };
+}
+
 function Logo({ profile }: Readonly<{ profile: WorkspaceProfile | null }>) {
   if (profile?.logoDataUrl) {
     return <img alt="" className="size-full rounded-full object-cover" src={profile.logoDataUrl} />;
@@ -197,11 +208,6 @@ export function DashboardView({
     setIsReady(true);
   }, [workspaceSlug]);
 
-  const handleComplete = useCallback((nextProfile: WorkspaceProfile) => {
-    setProfile(nextProfile);
-    setIsReady(true);
-  }, []);
-
   if (!isReady) {
     return <div className="min-h-screen bg-white" />;
   }
@@ -217,11 +223,8 @@ export function DashboardView({
     );
   }
 
-  if (!profile) {
-    return <WorkspaceProfileSetup workspaceSlug={workspaceSlug} onComplete={handleComplete} />;
-  }
-
   const current = periodData[selectedPeriod];
+  const currentProfile = displayProfile(profile, initialData.workspace.name);
 
   return (
     <main className="min-h-screen bg-[#f5f7f8] px-5 pb-28 pt-5 text-slate-950 md:rounded-[28px]">
@@ -241,8 +244,8 @@ export function DashboardView({
             <Bell className="size-5" />
             <span className="absolute right-2 top-2 size-2 rounded-full bg-red-600" />
           </button>
-          <div className="grid size-12 place-items-center rounded-full" style={{ backgroundColor: profile.color }}>
-            <Logo profile={profile} />
+          <div className="grid size-12 place-items-center rounded-full" style={{ backgroundColor: currentProfile.color }}>
+            <Logo profile={currentProfile} />
           </div>
         </div>
       </header>
@@ -269,7 +272,7 @@ export function DashboardView({
 
       <section className="mb-6">
         <h1 className="text-3xl font-black leading-tight tracking-normal">Bonjour, President</h1>
-        <p className="mt-2 text-base font-semibold text-slate-600">{profile.associationName || initialData.workspace.name}</p>
+        <p className="mt-2 text-base font-semibold text-slate-600">{currentProfile.associationName || initialData.workspace.name}</p>
         <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">
           <span className="size-2 rounded-full bg-emerald-500" />
           Tout est a jour
@@ -297,7 +300,7 @@ export function DashboardView({
           </span>
           <ChevronRight className="size-5 text-blue-700" />
         </div>
-        <div className="mt-6 text-4xl font-black tracking-normal">{current.balance} {profile.currency}</div>
+        <div className="mt-6 text-4xl font-black tracking-normal">{current.balance} {currentProfile.currency}</div>
         <p className="mt-2 text-sm font-bold text-emerald-600">{current.balanceTrend}</p>
         <div className="mt-5 grid grid-cols-2 gap-3">
           <div className="rounded-lg bg-emerald-50 p-3">
@@ -326,7 +329,7 @@ export function DashboardView({
       <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <SectionTitle title="Etat des Cotisations" action="Voir tout" />
         <div className="mb-4 flex justify-end">
-          <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">{current.totalContributions} {profile.currency} Total</span>
+          <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">{current.totalContributions} {currentProfile.currency} Total</span>
         </div>
         <div className="grid grid-cols-[120px_minmax(0,1fr)] items-center gap-5">
           <div
@@ -464,9 +467,9 @@ export function DashboardView({
       <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <SectionTitle title="Synthese rapide" />
         <div className="grid gap-3 text-sm font-semibold text-slate-600">
-          <p><span className="font-black text-slate-950">Pays:</span> {profile.country}</p>
-          <p><span className="font-black text-slate-950">Type:</span> {profile.associationType}</p>
-          <p><span className="font-black text-slate-950">Devise:</span> {profile.currency}</p>
+          <p><span className="font-black text-slate-950">Pays:</span> {currentProfile.country}</p>
+          <p><span className="font-black text-slate-950">Type:</span> {currentProfile.associationType}</p>
+          <p><span className="font-black text-slate-950">Devise:</span> {currentProfile.currency}</p>
           <p><span className="font-black text-slate-950">Workspace:</span> {workspaceSlug}</p>
         </div>
       </section>

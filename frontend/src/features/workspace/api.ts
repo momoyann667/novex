@@ -89,6 +89,13 @@ export function updateWorkspace(workspaceSlug: string, payload: WorkspaceUpdateP
   });
 }
 
+export function createWorkspace(payload: WorkspaceUpdatePayload) {
+  return apiFetch<WorkspaceResource>("/workspaces/", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
 export function getWorkspaceSettings(workspaceSlug: string) {
   return apiFetch<WorkspaceSettingsResource>(`/workspaces/${workspaceSlug}/settings/`, {
     headers: {

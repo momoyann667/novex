@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
 import { isInvalidWorkspaceSlug } from "@/lib/workspace/routing";
-import { updateWorkspace } from "./api";
+import { createWorkspace, updateWorkspace } from "./api";
 
 export type WorkspaceProfile = {
   country: string;
@@ -27,7 +27,7 @@ const defaultProfile: WorkspaceProfile = {
 };
 
 function isValidWorkspaceSlug(workspaceSlug: string) {
-  return !isInvalidWorkspaceSlug(workspaceSlug);
+  return workspaceSlug === "__new__" || !isInvalidWorkspaceSlug(workspaceSlug);
 }
 
 function storageKey(workspaceSlug: string) {
@@ -105,7 +105,7 @@ export function WorkspaceProfileSetup({
   mode = "gate",
   workspaceSlug,
   onComplete
-}: Readonly<{ mode?: "gate" | "settings"; workspaceSlug: string; onComplete?: (profile: WorkspaceProfile) => void }>) {
+}: Readonly<{ mode?: "gate" | "settings" | "create"; workspaceSlug: string; onComplete?: (profile: WorkspaceProfile) => void }>) {
   const [step, setStep] = useState(1);
   const [profile, setProfile] = useState<WorkspaceProfile>(defaultProfile);
   const [isReady, setIsReady] = useState(mode === "settings");
@@ -114,6 +114,10 @@ export function WorkspaceProfileSetup({
   const router = useRouter();
 
   useEffect(() => {
+    if (mode === "create") {
+      setIsReady(true);
+      return;
+    }
     const saved = loadWorkspaceProfile(workspaceSlug);
     if (saved) {
       setProfile(saved);
@@ -148,18 +152,19 @@ export function WorkspaceProfileSetup({
     setSubmitError(null);
     setIsSaving(true);
     try {
-      const workspace = await updateWorkspace(workspaceSlug, {
+      const payload = {
         name: profile.associationName.trim(),
         organization_type: organizationTypeCode(profile.associationType),
         currency: currencyCode(profile.currency),
         country: countryCode(profile.country)
-      });
+      };
+      const workspace = mode === "create" ? await createWorkspace(payload) : await updateWorkspace(workspaceSlug, payload);
       saveWorkspaceProfile(workspace.slug, profile);
-      if (workspace.slug !== workspaceSlug) {
+      if (mode !== "create" && workspace.slug !== workspaceSlug) {
         removeWorkspaceProfile(workspaceSlug);
       }
       onComplete?.(profile);
-      if (workspace.slug !== workspaceSlug) {
+      if (mode === "create" || workspace.slug !== workspaceSlug) {
         router.replace(`/app/${workspace.slug}/dashboard`);
       }
     } catch (error) {
