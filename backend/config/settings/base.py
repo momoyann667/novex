@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     "apps.reports",
     "apps.subscriptions",
     "apps.audit_logs",
+    "apps.novex_admin",
 ]
 
 MIDDLEWARE = [

@@ -31,7 +31,7 @@ def test_register_creates_user_and_profile():
 @pytest.mark.django_db
 def test_register_rejects_existing_email():
     api_client = APIClient()
-    get_user_model().objects.create_user(email="jean@example.com", password="NovexPass123")
+    get_user_model().objects.create_user(username="jean@example.com", email="jean@example.com", password="NovexPass123")
 
     response = api_client.post(
         "/api/v1/auth/register/",
@@ -53,7 +53,7 @@ def test_register_rejects_existing_email():
 @pytest.mark.django_db
 def test_login_authenticates_registered_user():
     api_client = APIClient()
-    get_user_model().objects.create_user(email="jean@example.com", password="NovexPass123")
+    get_user_model().objects.create_user(username="jean@example.com", email="jean@example.com", password="NovexPass123")
 
     response = api_client.post(
         "/api/v1/auth/login/",
@@ -67,3 +67,21 @@ def test_login_authenticates_registered_user():
     assert response.status_code == 200
     assert response.data["email"] == "jean@example.com"
     assert "sessionid" in response.cookies
+
+
+@pytest.mark.django_db
+def test_login_accepts_username_identifier_for_admin():
+    api_client = APIClient()
+    get_user_model().objects.create_superuser(username="admin", email="admin@novex.local", password="1234567890")
+
+    response = api_client.post(
+        "/api/v1/auth/login/",
+        {
+            "email": "admin",
+            "password": "1234567890",
+        },
+        format="json",
+    )
+
+    assert response.status_code == 200
+    assert response.data["email"] == "admin@novex.local"

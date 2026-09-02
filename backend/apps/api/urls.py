@@ -27,5 +27,6 @@ urlpatterns = [
     path("analytics/", include("apps.analytics.urls")),
     path("reports/", include("apps.reports.urls")),
     path("subscriptions/", include("apps.subscriptions.urls")),
+    path("admin/", include("apps.novex_admin.urls")),
     path("public/", include(public_router.urls)),
 ]

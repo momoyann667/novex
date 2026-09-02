@@ -1,5 +1,5 @@
-import { PageHeader } from "@/components/layout/page-header";
+import { AdminConsole } from "@/features/novex-admin/admin-console";
 
 export default function AdminPage() {
-  return <PageHeader title="NOVEX ADMIN" description="Back-office interne desktop-first." />;
+  return <AdminConsole section="dashboard" />;
 }

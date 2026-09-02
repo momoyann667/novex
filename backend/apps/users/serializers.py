@@ -63,11 +63,14 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class LoginSerializer(serializers.Serializer):
-    email = serializers.EmailField()
+    email = serializers.CharField()
     password = serializers.CharField(write_only=True)
 
     def validate(self, attrs):
-        email = attrs["email"].lower()
+        email = attrs["email"].strip().lower()
+        if "@" not in email:
+            user = User.objects.filter(username__iexact=email).first()
+            email = user.email if user else email
         user = authenticate(request=self.context.get("request"), username=email, password=attrs["password"])
         if user is None:
             raise serializers.ValidationError({"credentials": "Email ou mot de passe incorrect."})

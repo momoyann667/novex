@@ -1,0 +1,81 @@
+from django.shortcuts import get_object_or_404
+from rest_framework import response, views
+
+from .permissions import IsNovexAdmin
+from .services import (
+    admin_activity,
+    admin_association_detail,
+    admin_associations,
+    admin_dashboard,
+    admin_payments,
+    admin_plans,
+    admin_reports,
+    admin_subscriptions,
+    admin_users,
+)
+from apps.workspaces.models import Workspace
+
+
+class AdminBaseView(views.APIView):
+    permission_classes = [IsNovexAdmin]
+
+
+class AdminDashboardView(AdminBaseView):
+    def get(self, request):
+        return response.Response(admin_dashboard(request.query_params.get("period", "30d")))
+
+
+class AdminAssociationsView(AdminBaseView):
+    def get(self, request):
+        return response.Response(admin_associations(request.query_params))
+
+
+class AdminAssociationDetailView(AdminBaseView):
+    def get(self, request, workspace_id):
+        get_object_or_404(Workspace, id=workspace_id)
+        return response.Response(admin_association_detail(workspace_id))
+
+
+class AdminUsersView(AdminBaseView):
+    def get(self, request):
+        return response.Response(admin_users(request.query_params))
+
+
+class AdminSubscriptionsView(AdminBaseView):
+    def get(self, request):
+        return response.Response(admin_subscriptions(request.query_params))
+
+
+class AdminPaymentsView(AdminBaseView):
+    def get(self, request):
+        return response.Response(admin_payments(request.query_params))
+
+
+class AdminPlansView(AdminBaseView):
+    def get(self, request):
+        return response.Response(admin_plans())
+
+
+class AdminActivityView(AdminBaseView):
+    def get(self, request):
+        return response.Response(admin_activity(request.query_params))
+
+
+class AdminAuditView(AdminActivityView):
+    pass
+
+
+class AdminReportsView(AdminBaseView):
+    def get(self, request):
+        return response.Response(admin_reports(request.query_params.get("period", "30d")))
+
+
+class AdminSettingsView(AdminBaseView):
+    def get(self, request):
+        return response.Response(
+            {
+                "admin": request.user.email,
+                "security": {"staff_required": True, "superuser_required": True, "impersonation_enabled": False},
+                "permissions": ["ADMIN_DASHBOARD_VIEW", "ASSOCIATIONS_VIEW", "USERS_VIEW", "SUBSCRIPTIONS_VIEW", "SAAS_PAYMENTS_VIEW", "PLANS_VIEW"],
+            }
+        )
