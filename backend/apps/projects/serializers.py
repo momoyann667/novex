@@ -183,6 +183,10 @@ class ProjectCommentSerializer(serializers.ModelSerializer):
 class ProjectSerializer(serializers.ModelSerializer):
     status_label = serializers.CharField(source="get_status_display", read_only=True)
     priority_label = serializers.CharField(source="get_priority_display", read_only=True)
+    owner_name = serializers.SerializerMethodField()
+    responsible_user_name = serializers.SerializerMethodField()
+    responsible_member_name = serializers.SerializerMethodField()
+    team_preview = serializers.SerializerMethodField()
     budget_summary = serializers.SerializerMethodField()
     analytics = serializers.SerializerMethodField()
     risk = serializers.SerializerMethodField()
@@ -206,8 +210,12 @@ class ProjectSerializer(serializers.ModelSerializer):
             "start_date",
             "end_date",
             "owner",
+            "owner_name",
             "responsible_user",
+            "responsible_user_name",
             "responsible_member",
+            "responsible_member_name",
+            "team_preview",
             "planned_budget",
             "budget",
             "currency",
@@ -239,6 +247,22 @@ class ProjectSerializer(serializers.ModelSerializer):
 
     def get_budget_summary(self, obj):
         return project_budget_summary(obj)
+
+    def get_owner_name(self, obj):
+        return str(obj.owner) if obj.owner_id else ""
+
+    def get_responsible_user_name(self, obj):
+        if not obj.responsible_user_id:
+            return ""
+        full_name = obj.responsible_user.get_full_name()
+        return full_name or obj.responsible_user.email or obj.responsible_user.username
+
+    def get_responsible_member_name(self, obj):
+        return str(obj.responsible_member) if obj.responsible_member_id else ""
+
+    def get_team_preview(self, obj):
+        members = obj.team_members.select_related("member").filter(is_active=True).order_by("id")[:5]
+        return [{"id": item.member_id, "name": str(item.member), "role": item.role} for item in members]
 
     def get_analytics(self, obj):
         return project_analytics(obj)

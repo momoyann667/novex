@@ -58,6 +58,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
             "activate": "projects.update",
             "pause": "projects.update",
             "complete": "projects.update",
+            "cancel": "projects.update",
             "archive": "projects.archive",
             "members": "projects.manage_members" if self.request.method == "POST" else "projects.view",
             "member_detail": "projects.manage_members",
@@ -77,12 +78,13 @@ class ProjectViewSet(viewsets.ModelViewSet):
             "reports": "projects.manage_reports",
             "export_report": "projects.export",
             "stats": "projects.view",
+            "board": "projects.view",
         }
         permission_code = permission_map.get(self.action, "projects.view")
         return [RequireWorkspacePermission.for_permission(permission_code)()]
 
     def get_queryset(self):
-        queryset = Project.objects.select_related("workspace", "responsible_user", "responsible_member").filter(
+        queryset = Project.objects.select_related("workspace", "owner", "responsible_user", "responsible_member").prefetch_related("team_members__member").filter(
             workspace__slug=self.request.headers.get("X-Workspace"),
             workspace__memberships__user=self.request.user,
             workspace__memberships__status="active",
@@ -132,6 +134,10 @@ class ProjectViewSet(viewsets.ModelViewSet):
         return response.Response(ProjectSerializer(change_project_status(project=self.get_object(), actor=request.user, status=ProjectStatus.COMPLETED), context=self.get_serializer_context()).data)
 
     @decorators.action(detail=True, methods=["post"])
+    def cancel(self, request, pk=None):
+        return response.Response(ProjectSerializer(change_project_status(project=self.get_object(), actor=request.user, status=ProjectStatus.CANCELLED), context=self.get_serializer_context()).data)
+
+    @decorators.action(detail=True, methods=["post"])
     def archive(self, request, pk=None):
         try:
             project = change_project_status(project=self.get_object(), actor=request.user, status=ProjectStatus.ARCHIVED)
@@ -142,6 +148,20 @@ class ProjectViewSet(viewsets.ModelViewSet):
     @decorators.action(detail=False, methods=["get"])
     def stats(self, request):
         return response.Response(workspace_project_stats(current_workspace(request)))
+
+    @decorators.action(detail=False, methods=["get"])
+    def board(self, request):
+        queryset = self.filter_queryset(self.get_queryset()).exclude(status=ProjectStatus.ARCHIVED).order_by("-updated_at")
+        all_projects = list(queryset)
+        in_progress = {ProjectStatus.DRAFT, ProjectStatus.PLANNED, ProjectStatus.ACTIVE, ProjectStatus.ON_HOLD}
+        counts = {
+            "all": len(all_projects),
+            "in_progress": sum(1 for project in all_projects if project.status in in_progress),
+            "completed": sum(1 for project in all_projects if project.status == ProjectStatus.COMPLETED),
+            "cancelled": sum(1 for project in all_projects if project.status == ProjectStatus.CANCELLED),
+        }
+        serializer = ProjectSerializer(all_projects, many=True, context=self.get_serializer_context())
+        return response.Response({"counts": counts, "projects": serializer.data})
 
     @decorators.action(detail=True, methods=["get"])
     def analytics(self, request, pk=None):

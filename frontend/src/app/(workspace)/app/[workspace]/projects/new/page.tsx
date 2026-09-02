@@ -1,6 +1,6 @@
 import { ProjectNewView } from "@/features/projects/project-new-view";
 
-export default function NewProjectPage() {
-  return <ProjectNewView />;
+export default async function NewProjectPage({ params }: Readonly<{ params: Promise<{ workspace: string }> }>) {
+  const { workspace } = await params;
+  return <ProjectNewView workspaceSlug={workspace} />;
 }
-

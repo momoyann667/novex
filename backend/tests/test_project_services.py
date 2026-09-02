@@ -161,6 +161,31 @@ def test_project_finance_budget_analytics_are_coherent(django_user_model):
 
 
 @pytest.mark.django_db
+def test_project_without_budget_keeps_zero_consumption(django_user_model):
+    workspace, owner = make_workspace(django_user_model, "no-budget")
+    project = create_project(workspace=workspace, actor=owner, name="Projet sans budget", status=ProjectStatus.ACTIVE)
+    analytics = project_analytics(project)
+
+    assert analytics["budget"] == Decimal("0.00")
+    assert analytics["actual_expense"] == Decimal("0.00")
+    assert analytics["remaining_budget"] == Decimal("0.00")
+
+
+@pytest.mark.django_db
+def test_project_serializer_exposes_responsible_and_team_preview(django_user_model):
+    workspace, owner = make_workspace(django_user_model, "team-preview")
+    member = Member.objects.create(workspace=workspace, membership_number="TP-001", first_name="Fatou", last_name="Diop")
+    project = create_project(workspace=workspace, actor=owner, name="Projet equipe", owner=member, responsible_member=member, status=ProjectStatus.ACTIVE)
+    add_project_member(project=project, actor=owner, member=member, role=ProjectRole.PROJECT_MANAGER)
+
+    payload = ProjectSerializer(project, context={"workspace": workspace}).data
+
+    assert payload["owner_name"] == "Fatou Diop"
+    assert payload["responsible_member_name"] == "Fatou Diop"
+    assert payload["team_preview"][0]["name"] == "Fatou Diop"
+
+
+@pytest.mark.django_db
 def test_project_risk_score_uses_delay_budget_and_blocked_tasks(django_user_model):
     workspace, owner = make_workspace(django_user_model, "risk")
     project = create_project(workspace=workspace, actor=owner, name="Projet risque", budget=Decimal("1000.00"), status=ProjectStatus.ACTIVE, end_date=date.today() - timedelta(days=3))
