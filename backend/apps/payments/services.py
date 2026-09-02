@@ -251,6 +251,10 @@ def initialize_contribution_payment(
 ) -> Payment:
     contribution = Contribution.objects.select_for_update().select_related("member", "workspace").get(id=contribution.id)
     validate_contribution_payment(workspace=workspace, contribution=contribution, amount=amount)
+    from apps.subscriptions.services import workspace_has_entitlement
+
+    if not workspace_has_entitlement(workspace, "ONLINE_CONTRIBUTION_PAYMENT"):
+        raise ValueError("Le paiement en ligne des cotisations est disponible avec NOVEX Pro.")
     provider = get_payment_provider(provider_code)
     payment, created = Payment.objects.get_or_create(
         workspace=workspace,

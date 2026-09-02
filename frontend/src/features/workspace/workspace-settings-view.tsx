@@ -4,10 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Building2, CheckCircle2, ChevronRight, CreditCard, LogOut, Pencil, Plus, Save, ShieldCheck, Star, Trash2, Users } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Building2, Check, CheckCircle2, ChevronRight, CreditCard, LogOut, Pencil, Plus, Save, ShieldCheck, Star, Trash2, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { activateContributionCampaign, createContributionCampaign, listContributionCampaigns } from "@/features/contributions/api";
 import { currentMemberProfile } from "@/features/members/current-member-profile";
+import { cancelSubscription, createSubscriptionCheckout, getSubscriptionOverview, reactivateSubscription, type PlanCode, type PlanResource, type SubscriptionOverview } from "@/features/subscriptions/api";
 import { getWorkspaceSettings, updateWorkspaceSettings, type WorkspaceSettingsResource, type WorkspaceSettingsUpdatePayload } from "./api";
 
 export type SettingsSection = "association" | "members" | "finance" | "users" | "security" | "subscription";
@@ -129,6 +130,11 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
     queryFn: () => listContributionCampaigns(workspaceSlug),
     enabled: activeSection === "finance"
   });
+  const subscriptionQuery = useQuery({
+    queryKey: ["subscription-overview", workspaceSlug],
+    queryFn: () => getSubscriptionOverview(workspaceSlug),
+    enabled: activeSection === "subscription"
+  });
 
   useEffect(() => {
     setActiveSection(section || null);
@@ -178,6 +184,32 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
       setNotice("Cotisation creee dans le module Cotisations.");
       await queryClient.invalidateQueries({ queryKey: ["contribution-campaigns", workspaceSlug] });
       await queryClient.invalidateQueries({ queryKey: ["contributions-dashboard", workspaceSlug] });
+    }
+  });
+  const checkoutMutation = useMutation({
+    mutationFn: (plan: Exclude<PlanCode, "FREEMIUM">) => createSubscriptionCheckout(workspaceSlug, plan),
+    onSuccess: (payload) => {
+      if (payload.checkout_url) {
+        window.location.href = payload.checkout_url;
+        return;
+      }
+      setNotice(payload.message || "Session d'abonnement creee en attente de paiement.");
+    }
+  });
+  const cancelSubscriptionMutation = useMutation({
+    mutationFn: () => cancelSubscription(workspaceSlug),
+    onSuccess: async () => {
+      setNotice("Abonnement annule. Les donnees de l'association restent conservees.");
+      await queryClient.invalidateQueries({ queryKey: ["subscription-overview", workspaceSlug] });
+      await queryClient.invalidateQueries({ queryKey: ["workspace-settings", workspaceSlug] });
+    }
+  });
+  const reactivateSubscriptionMutation = useMutation({
+    mutationFn: () => reactivateSubscription(workspaceSlug),
+    onSuccess: async () => {
+      setNotice("Renouvellement reactive.");
+      await queryClient.invalidateQueries({ queryKey: ["subscription-overview", workspaceSlug] });
+      await queryClient.invalidateQueries({ queryKey: ["workspace-settings", workspaceSlug] });
     }
   });
 
@@ -448,11 +480,20 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
 
           {activeSection === "subscription" ? (
             <SettingsCard title="Abonnement">
-              <div className="rounded-md bg-slate-50 p-3 text-sm font-bold">Plan: {form.subscription?.plan_name || "Freemium"}</div>
-              <div className="rounded-md bg-slate-50 p-3 text-sm font-bold">Statut: {form.subscription?.status || "active"}</div>
-              <div className="rounded-md bg-slate-50 p-3 text-sm font-bold">Fin d'essai: {form.subscription?.trial_ends_at || "Non renseignee"}</div>
-              <div className="rounded-md bg-slate-50 p-3 text-sm font-bold">Entitlements: {Object.keys(form.subscription?.entitlements || {}).length}</div>
-              <button className="min-h-11 rounded-md bg-blue-700 px-3 text-sm font-black text-white" type="button">Comparer les plans</button>
+              <SubscriptionSection
+                overview={subscriptionQuery.data}
+                isLoading={subscriptionQuery.isLoading}
+                onCheckout={(plan) => checkoutMutation.mutate(plan)}
+                checkoutPending={checkoutMutation.isPending}
+                onCancel={() => {
+                  if (window.confirm("Annuler votre abonnement ? Il restera actif jusqu'a la fin de la periode deja payee.")) {
+                    cancelSubscriptionMutation.mutate();
+                  }
+                }}
+                cancelPending={cancelSubscriptionMutation.isPending}
+                onReactivate={() => reactivateSubscriptionMutation.mutate()}
+                reactivatePending={reactivateSubscriptionMutation.isPending}
+              />
             </SettingsCard>
           ) : null}
 
@@ -496,6 +537,184 @@ function EditableList({ title, values, onAdd, onRemove }: Readonly<{ title: stri
       <div className="mt-3 flex gap-2">
         <input className="min-h-11 min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold outline-none" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Ajouter" />
         <button className="grid size-11 shrink-0 place-items-center rounded-md bg-blue-700 text-white" type="button" onClick={() => { onAdd(draft); setDraft(""); }} aria-label={`Ajouter ${title}`}><Plus className="size-4" /></button>
+      </div>
+    </div>
+  );
+}
+
+function money(value: string | number, currency = "XOF") {
+  return `${Number(value || 0).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} ${currency === "XOF" ? "FCFA" : currency}`;
+}
+
+function dateLabel(value: string | null | undefined) {
+  if (!value) return "Non renseignee";
+  return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "long", year: "numeric" }).format(new Date(value));
+}
+
+function statusLabel(status: string) {
+  return {
+    trial: "Periode d'essai",
+    active: "Actif",
+    past_due: "Paiement en retard",
+    cancelled: "Annule",
+    expired: "Expire",
+    pending: "En attente de paiement",
+    suspended: "Suspendu"
+  }[status] || status;
+}
+
+function entitlementValue(plan: PlanResource, code: string) {
+  const value = plan.entitlements[code];
+  if (value === true) return <Check className="mx-auto size-4 text-emerald-700" />;
+  if (value === "LIMITED") return <span className="text-xs font-black text-amber-700">Limite</span>;
+  return <X className="mx-auto size-4 text-slate-300" />;
+}
+
+function SubscriptionSection({
+  overview,
+  isLoading,
+  onCheckout,
+  checkoutPending,
+  onCancel,
+  cancelPending,
+  onReactivate,
+  reactivatePending
+}: Readonly<{
+  overview?: SubscriptionOverview;
+  isLoading: boolean;
+  onCheckout: (plan: Exclude<PlanCode, "FREEMIUM">) => void;
+  checkoutPending: boolean;
+  onCancel: () => void;
+  cancelPending: boolean;
+  onReactivate: () => void;
+  reactivatePending: boolean;
+}>) {
+  if (isLoading || !overview) {
+    return <div className="rounded-md bg-slate-50 p-4 text-sm font-bold text-slate-500">Chargement de l'abonnement...</div>;
+  }
+
+  const { subscription, plans, features, usage, payments } = overview;
+  const isTrial = subscription.status === "trial";
+  const isCancelled = subscription.status === "cancelled";
+
+  return (
+    <div className="grid gap-5">
+      <div className="rounded-xl bg-slate-950 p-4 text-white">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold text-slate-300">Offre actuelle</p>
+            <h3 className="mt-1 text-2xl font-black">{subscription.plan_name}</h3>
+            <p className="mt-1 text-sm text-slate-300">{subscription.description}</p>
+          </div>
+          <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-950">{statusLabel(subscription.status)}</span>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+          <div className="rounded-md bg-white/10 p-3"><p className="text-slate-300">Prix</p><strong>{money(subscription.price, subscription.currency)} / {subscription.billing_period === "month" ? "mois" : "periode"}</strong></div>
+          <div className="rounded-md bg-white/10 p-3"><p className="text-slate-300">Expiration</p><strong>{dateLabel(subscription.period_ends_at)}</strong></div>
+        </div>
+        {isTrial ? (
+          <div className="mt-4">
+            <div className="flex justify-between text-xs font-bold text-slate-300"><span>Freemium</span><span>{subscription.days_remaining ?? 0} jours restants</span></div>
+            <div className="mt-2 h-2 rounded-full bg-white/15"><div className="h-full rounded-full bg-blue-500" style={{ width: `${Math.min(100, subscription.trial_progress || 0)}%` }} /></div>
+          </div>
+        ) : null}
+      </div>
+
+      {!subscription.entitlements.ONLINE_CONTRIBUTION_PAYMENT ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">
+          <div className="flex gap-2"><AlertTriangle className="size-5 shrink-0" /> Le paiement en ligne des cotisations est disponible avec NOVEX Pro.</div>
+          <button className="mt-3 min-h-10 rounded-md bg-blue-700 px-3 text-white disabled:opacity-50" type="button" disabled={checkoutPending} onClick={() => onCheckout("NOVEX_PRO")}>Passer a NOVEX Pro</button>
+        </div>
+      ) : null}
+
+      <div>
+        <h3 className="text-lg font-black">Nos offres</h3>
+        <div className="mt-3 grid gap-3">
+          {plans.map((plan) => (
+            <div className={`rounded-lg border p-4 ${plan.code === subscription.plan ? "border-blue-600 bg-blue-50" : "border-slate-200 bg-white"}`} key={plan.code}>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h4 className="text-lg font-black">{plan.name}</h4>
+                  <p className="mt-1 text-sm font-semibold text-slate-500">{plan.description}</p>
+                </div>
+                {plan.code === "NOVEX_PRO" ? <span className="rounded-full bg-blue-700 px-2 py-1 text-[10px] font-black text-white">Recommande</span> : null}
+              </div>
+              <p className="mt-3 text-2xl font-black">{money(plan.price, plan.currency)} <span className="text-xs text-slate-500">/{plan.billing_period === "month" ? "mois" : "14 jours"}</span></p>
+              <div className="mt-3 grid gap-2 text-sm font-bold">
+                {features.filter((feature) => plan.entitlements[feature.code]).slice(0, 7).map((feature) => (
+                  <div className="flex items-center gap-2" key={`${plan.code}-${feature.code}`}><Check className="size-4 text-emerald-700" /> {feature.label}</div>
+                ))}
+                {plan.entitlements.ONLINE_CONTRIBUTION_PAYMENT ? (
+                  <div className="flex items-center gap-2 text-emerald-700"><Check className="size-4" /> Paiement en ligne des cotisations</div>
+                ) : (
+                  <div className="flex items-center gap-2 text-slate-500"><X className="size-4" /> Paiement en ligne non disponible</div>
+                )}
+              </div>
+              {plan.code === subscription.plan ? (
+                <div className="mt-4 rounded-md bg-white p-3 text-center text-sm font-black text-blue-700">Plan actuel</div>
+              ) : plan.code !== "FREEMIUM" ? (
+                <button className="mt-4 min-h-11 w-full rounded-md bg-blue-700 px-3 text-sm font-black text-white disabled:opacity-50" type="button" disabled={checkoutPending} onClick={() => onCheckout(plan.code as Exclude<PlanCode, "FREEMIUM">)}>
+                  {checkoutPending ? "Preparation..." : plan.code === "NOVEX_START" ? "Choisir NOVEX Start" : "Passer a NOVEX Pro"}
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-lg font-black">Comparer les offres</h3>
+        <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          <table className="w-full min-w-[560px] text-sm">
+            <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+              <tr><th className="p-3">Fonctionnalite</th>{plans.map((plan) => <th className="p-3 text-center" key={plan.code}>{plan.name}</th>)}</tr>
+            </thead>
+            <tbody>
+              {features.map((feature) => (
+                <tr className="border-t border-slate-100" key={feature.code}>
+                  <td className="p-3 font-bold">{feature.label}</td>
+                  {plans.map((plan) => <td className="p-3 text-center" key={`${feature.code}-${plan.code}`}>{entitlementValue(plan, feature.code)}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-lg font-black">Fonctionnalites utilisees</h3>
+        <div className="mt-3 grid gap-2">
+          {usage.map((item) => {
+            const percent = item.limit ? Math.min(100, Math.round((item.used / item.limit) * 100)) : 0;
+            return (
+              <div className="rounded-md bg-slate-50 p-3" key={item.key}>
+                <div className="flex justify-between text-sm font-black"><span>{item.label}</span><span>{item.used} / {item.limit}</span></div>
+                <div className="mt-2 h-2 rounded-full bg-slate-200"><div className={`h-full rounded-full ${percent >= 100 ? "bg-red-600" : "bg-blue-700"}`} style={{ width: `${percent}%` }} /></div>
+                {percent >= 100 ? <p className="mt-2 text-xs font-bold text-red-700">Limite atteinte. Voir les offres pour continuer.</p> : null}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-lg font-black">Historique des paiements</h3>
+        <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-white">
+          {payments.length ? payments.map((payment) => (
+            <div className="grid grid-cols-[1fr_auto] gap-3 border-b border-slate-100 p-3 text-sm last:border-b-0" key={payment.id}>
+              <div><p className="font-black">{payment.reference}</p><p className="text-xs font-semibold text-slate-500">{dateLabel(payment.date)} - {payment.plan}</p></div>
+              <div className="text-right"><p className="font-black">{money(payment.amount, payment.currency)}</p><p className="text-xs font-semibold text-slate-500">{payment.status}</p></div>
+            </div>
+          )) : <p className="p-4 text-sm font-bold text-slate-500">Aucun paiement d'abonnement enregistre.</p>}
+        </div>
+      </div>
+
+      <div className="grid gap-2">
+        {isCancelled ? (
+          <button className="min-h-11 rounded-md bg-blue-700 px-3 text-sm font-black text-white disabled:opacity-50" type="button" disabled={reactivatePending} onClick={onReactivate}>{reactivatePending ? "Reactivation..." : "Reactiver le renouvellement"}</button>
+        ) : (
+          <button className="min-h-11 rounded-md border border-red-200 bg-white px-3 text-sm font-black text-red-700 disabled:opacity-50" type="button" disabled={cancelPending} onClick={onCancel}>{cancelPending ? "Annulation..." : "Annuler l'abonnement"}</button>
+        )}
       </div>
     </div>
   );

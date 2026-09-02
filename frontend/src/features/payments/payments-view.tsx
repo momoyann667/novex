@@ -13,6 +13,7 @@ import {
   type DonationProject,
   type PayableContribution
 } from "@/features/payments/api";
+import { getSubscriptionOverview } from "@/features/subscriptions/api";
 import { workspacePath } from "@/lib/workspace/routing";
 
 type Intent = "CONTRIBUTION" | "DONATION";
@@ -81,6 +82,7 @@ export function PaymentsView({ workspaceSlug }: Readonly<{ workspaceSlug: string
 
   const contributionsQuery = useQuery({ queryKey: ["payable-contributions", workspaceSlug], queryFn: () => listPayableContributions(workspaceSlug) });
   const projectsQuery = useQuery({ queryKey: ["payment-donation-projects", workspaceSlug], queryFn: () => listDonationProjects(workspaceSlug) });
+  const subscriptionQuery = useQuery({ queryKey: ["subscription-overview", workspaceSlug], queryFn: () => getSubscriptionOverview(workspaceSlug) });
   const contributions = contributionsQuery.data?.results || [];
   const projects = projectsQuery.data || [];
   const selectedContributions = useMemo(() => contributions.filter((item) => selectedIds.includes(item.id)), [contributions, selectedIds]);
@@ -97,7 +99,8 @@ export function PaymentsView({ workspaceSlug }: Readonly<{ workspaceSlug: string
     return value <= 0 || value > amountValue(item.remaining_amount);
   });
   const canContinue = intent === "DONATION" ? Boolean(selectedProjectId) : selectedIds.length > 0;
-  const canPay = totalToPay > 0 && !invalidPartial && (intent === "DONATION" ? Boolean(selectedProjectId) : selectedIds.length > 0);
+  const canPayOnlineContributions = subscriptionQuery.data?.subscription.entitlements.ONLINE_CONTRIBUTION_PAYMENT === true;
+  const canPay = totalToPay > 0 && !invalidPartial && (intent === "DONATION" ? Boolean(selectedProjectId) : selectedIds.length > 0 && canPayOnlineContributions);
   const mutation = useMutation({
     mutationFn: () => {
       const idempotencyKey = `self-${intent.toLowerCase()}-${Date.now()}`;
@@ -267,6 +270,12 @@ export function PaymentsView({ workspaceSlug }: Readonly<{ workspaceSlug: string
             </Card>
 
             {invalidPartial ? <div className="rounded-md bg-red-50 p-3 text-sm font-semibold text-red-700">Le montant doit etre superieur a 0 et inferieur ou egal au reste a payer.</div> : null}
+            {intent === "CONTRIBUTION" && !canPayOnlineContributions ? (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">
+                Le paiement en ligne des cotisations est disponible avec NOVEX Pro.
+                <a className="mt-2 block font-black text-blue-700" href={workspacePath(workspaceSlug, "settings/subscription")}>Passer a NOVEX Pro</a>
+              </div>
+            ) : null}
             <Button className="min-h-12 w-full" type="button" disabled={!canPay || mutation.isPending} onClick={() => mutation.mutate()}>
               {mutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <CreditCard className="size-4" />}
               Payer {money(totalToPay, currency)}

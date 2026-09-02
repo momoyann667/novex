@@ -34,7 +34,15 @@ from apps.payments.services import attach_payment_document, donation_projects_fo
 from apps.payments.statuses import PaymentDocumentType, PaymentMethod, PaymentStatus
 from apps.projects.models import Project
 from apps.projects.statuses import ProjectStatus
+from apps.subscriptions.models import Plan, Subscription
+from apps.subscriptions.services import ensure_plan_catalog
 from apps.workspaces.models import Workspace
+
+
+def enable_online_payments(workspace):
+    ensure_plan_catalog()
+    plan = Plan.objects.get(code=Plan.Code.NOVEX_PRO)
+    Subscription.objects.update_or_create(workspace=workspace, defaults={"plan": plan, "status": Subscription.Status.ACTIVE})
 
 
 @pytest.mark.django_db
@@ -136,6 +144,7 @@ def test_online_payment_initialization_is_idempotent_and_blocks_overpayment(djan
     member = Member.objects.create(workspace=workspace, membership_number="A-000010", first_name="Nadia", last_name="Kone")
     campaign = create_campaign(workspace=workspace, actor=owner, name="Avril 2026", amount=Decimal("5000.00"))
     contribution = Contribution.objects.create(workspace=workspace, campaign=campaign, member=member, amount_due=Decimal("5000.00"))
+    enable_online_payments(workspace)
 
     first = initialize_contribution_payment(
         workspace=workspace,
@@ -178,6 +187,7 @@ def test_self_payable_contributions_are_limited_to_linked_member(django_user_mod
     campaign = create_campaign(workspace=workspace, actor=owner, name="Septembre 2026", amount=Decimal("5000.00"))
     payable = Contribution.objects.create(workspace=workspace, campaign=campaign, member=member, amount_due=Decimal("5000.00"))
     paid = Contribution.objects.create(workspace=workspace, campaign=campaign, member=other_member, amount_due=Decimal("5000.00"), amount_paid=Decimal("5000.00"), status=ContributionStatus.PAID)
+    enable_online_payments(workspace)
 
     payload = payable_contributions_for_member(workspace=workspace, user=owner)
     payment = initialize_self_contribution_payments(
@@ -249,6 +259,7 @@ def test_signed_webhook_confirms_payment_once(monkeypatch, django_user_model):
     member = Member.objects.create(workspace=workspace, membership_number="A-000011", first_name="Ami", last_name="Yao")
     campaign = create_campaign(workspace=workspace, actor=owner, name="Mai 2026", amount=Decimal("5000.00"))
     contribution = Contribution.objects.create(workspace=workspace, campaign=campaign, member=member, amount_due=Decimal("5000.00"))
+    enable_online_payments(workspace)
     payment = initialize_contribution_payment(
         workspace=workspace,
         actor=owner,
@@ -289,6 +300,7 @@ def test_webhook_with_invalid_signature_does_not_update_payment(monkeypatch, dja
     member = Member.objects.create(workspace=workspace, membership_number="A-000012", first_name="Koffi", last_name="Kouame")
     campaign = create_campaign(workspace=workspace, actor=owner, name="Juin 2026", amount=Decimal("5000.00"))
     contribution = Contribution.objects.create(workspace=workspace, campaign=campaign, member=member, amount_due=Decimal("5000.00"))
+    enable_online_payments(workspace)
     payment = initialize_contribution_payment(
         workspace=workspace,
         actor=owner,

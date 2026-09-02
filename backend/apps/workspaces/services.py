@@ -5,6 +5,7 @@ from django.utils import timezone
 from django.utils.text import slugify
 
 from apps.subscriptions.models import Plan, Subscription
+from apps.subscriptions.services import ensure_plan_catalog
 from .models import OrganizationProfile, Permission, Role, RolePermission, Workspace, WorkspaceMembership, WorkspaceSettings
 
 
@@ -69,7 +70,8 @@ def create_workspace_for_owner(*, owner, name: str, organization_type: str, **at
         for permission_code in permission_codes:
             RolePermission.objects.get_or_create(role=roles[role_code], permission=permissions[permission_code])
     WorkspaceMembership.objects.create(user=owner, workspace=workspace, role=roles["OWNER"], status=WorkspaceMembership.Status.ACTIVE, joined_at=timezone.now())
-    plan, _ = Plan.objects.get_or_create(code=Plan.Code.FREEMIUM, defaults={"name": "Freemium"})
+    ensure_plan_catalog()
+    plan = Plan.objects.get(code=Plan.Code.FREEMIUM)
     now = timezone.now()
     Subscription.objects.create(workspace=workspace, plan=plan, status=Subscription.Status.TRIAL, trial_started_at=now, trial_ends_at=now + timedelta(days=14))
     from apps.documents.services import ensure_default_folders
