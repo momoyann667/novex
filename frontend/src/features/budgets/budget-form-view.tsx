@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Bell, CalendarDays, CheckCircle2, Loader2, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Bell, CheckCircle2, Loader2, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
@@ -27,6 +27,8 @@ export function BudgetFormView({ workspaceSlug }: Readonly<{ workspaceSlug: stri
     description: ""
   });
   const [thresholds, setThresholds] = useState<number[]>([50, 80, 90, 100]);
+  const [alertsEnabled, setAlertsEnabled] = useState(true);
+  const [notifyTarget, setNotifyTarget] = useState("admins");
   const categoriesQuery = useQuery({ queryKey: ["budget-categories", workspaceSlug], queryFn: () => listBudgetCategories(workspaceSlug) });
   const settingsQuery = useQuery({ queryKey: ["budget-settings", workspaceSlug], queryFn: () => getBudgetSettings(workspaceSlug) });
 
@@ -35,6 +37,8 @@ export function BudgetFormView({ workspaceSlug }: Readonly<{ workspaceSlug: stri
       const cleanedThresholds = [...new Set(thresholds.map(Number).filter((value) => value > 0 && value <= 100))].sort((a, b) => a - b);
       if (cleanedThresholds.length) {
         await updateBudgetSettings(workspaceSlug, {
+          notify_in_app: alertsEnabled,
+          notify_email: alertsEnabled && notifyTarget !== "none",
           thresholds: {
             ...(settingsQuery.data?.thresholds ?? {}),
             watch: cleanedThresholds[0] ?? 50,
@@ -63,6 +67,8 @@ export function BudgetFormView({ workspaceSlug }: Readonly<{ workspaceSlug: stri
   });
 
   const invalidThresholds = thresholds.some((value) => !Number.isFinite(value) || value <= 0 || value > 100) || new Set(thresholds).size !== thresholds.length;
+  const nextThreshold = Math.min(100, Math.max(50, (thresholds.at(-1) ?? 70) + 10));
+  const canAddThreshold = alertsEnabled && thresholds.length < 6 && !thresholds.includes(nextThreshold);
   const canSubmit = form.name.trim().length > 0 && Number(form.total_amount) > 0 && Boolean(form.category) && form.start_date <= form.end_date && !invalidThresholds && !createMutation.isPending;
 
   return (
@@ -132,28 +138,67 @@ export function BudgetFormView({ workspaceSlug }: Readonly<{ workspaceSlug: stri
         </Card>
 
         <Card className="rounded-md">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base text-slate-950"><Bell className="size-4 text-blue-700" /> Alerte de consommation</CardTitle>
+          <CardHeader className="flex-row items-start justify-between gap-3 border-b border-border pb-4">
+            <CardTitle className="flex items-center gap-2 text-base leading-tight text-slate-950">
+              <Bell className="size-4 text-blue-700" />
+              Alertes de consommation
+            </CardTitle>
+            <button
+              aria-label="Activer les alertes de consommation"
+              aria-pressed={alertsEnabled}
+              className={`relative h-7 w-12 rounded-full transition ${alertsEnabled ? "bg-blue-700" : "bg-slate-200"}`}
+              type="button"
+              onClick={() => setAlertsEnabled((value) => !value)}
+            >
+              <span className={`absolute top-1 size-5 rounded-full bg-white shadow transition ${alertsEnabled ? "left-6" : "left-1"}`} />
+            </button>
           </CardHeader>
-          <CardContent className="grid gap-4">
-            <p className="text-sm text-slate-500">Recevez une alerte lorsque le budget atteint un certain niveau de consommation.</p>
-            <div className="grid gap-3">
+          <CardContent className="grid gap-4 p-5">
+            <p className="text-sm leading-relaxed text-slate-600">Definissez des seuils pour recevoir des notifications lorsque le budget est presque epuise.</p>
+            <div className="grid gap-4">
               {thresholds.map((threshold, index) => (
-                <div className="flex items-center gap-3 rounded-md border border-border p-3" key={`${threshold}-${index}`}>
-                  <CalendarDays className="size-4 text-blue-700" />
-                  <label className="flex flex-1 items-center gap-2 text-sm font-bold text-slate-800">
-                    Alerte {index + 1}
-                    <input className="ml-auto min-h-10 w-24 rounded-md border border-border px-3 text-right outline-none focus:border-blue-600" min="1" max="100" type="number" value={threshold} onChange={(event) => setThresholds(thresholds.map((item, itemIndex) => itemIndex === index ? Number(event.target.value) : item))} />
-                    %
-                  </label>
-                  <button className="grid size-10 place-items-center rounded-md bg-red-50 text-red-700 disabled:opacity-40" disabled={thresholds.length <= 1} type="button" aria-label="Supprimer le seuil" onClick={() => setThresholds(thresholds.filter((_, itemIndex) => itemIndex !== index))}>
-                    <Trash2 className="size-4" />
-                  </button>
+                <div className="grid gap-3 rounded-md border border-slate-200 bg-white p-3" key={`${threshold}-${index}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <label className="text-xs font-black text-slate-800" htmlFor={`budget-threshold-${index}`}>Seuil d'alerte {index + 1} (%)</label>
+                    <div className="flex items-center gap-2">
+                      <strong className="text-xs text-blue-700">{threshold}%</strong>
+                      <button className="grid size-8 place-items-center rounded-md bg-red-50 text-red-700 disabled:hidden" disabled={thresholds.length <= 1} type="button" aria-label="Supprimer le seuil" onClick={() => setThresholds(thresholds.filter((_, itemIndex) => itemIndex !== index))}>
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <input
+                    className="h-2 w-full cursor-pointer accent-blue-700"
+                    disabled={!alertsEnabled}
+                    id={`budget-threshold-${index}`}
+                    min="50"
+                    max="100"
+                    step="1"
+                    type="range"
+                    value={threshold}
+                    onChange={(event) => setThresholds(thresholds.map((item, itemIndex) => itemIndex === index ? Number(event.target.value) : item))}
+                  />
+                  <div className="flex justify-between text-[11px] font-semibold text-slate-500">
+                    <span>50%</span>
+                    <span>80%</span>
+                    <span>100%</span>
+                  </div>
                 </div>
               ))}
             </div>
             {invalidThresholds ? <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">Chaque seuil doit etre unique et compris entre 1 et 100%.</div> : null}
-            <Button type="button" variant="outline" onClick={() => setThresholds([...thresholds, Math.min(100, (thresholds.at(-1) ?? 70) + 10)])}><Plus className="size-4" /> Ajouter un seuil</Button>
+            <label className="grid gap-2 text-sm font-bold text-slate-800">
+              Notifier a
+              <select className="min-h-11 rounded-md border border-border bg-white px-3 font-medium outline-none focus:border-blue-600" disabled={!alertsEnabled} value={notifyTarget} onChange={(event) => setNotifyTarget(event.target.value)}>
+                <option value="admins">Administrateurs uniquement</option>
+                <option value="finance">Equipe finance</option>
+                <option value="all">Tous les responsables</option>
+                <option value="none">Personne</option>
+              </select>
+            </label>
+            <button className="inline-flex w-fit items-center gap-2 text-sm font-bold text-blue-700 disabled:text-slate-400" disabled={!canAddThreshold} type="button" onClick={() => setThresholds([...thresholds, nextThreshold])}>
+              <Plus className="size-4" /> Ajouter un autre seuil
+            </button>
           </CardContent>
         </Card>
 
