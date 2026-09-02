@@ -27,6 +27,12 @@ type RegisteredUser = {
   email: string;
 };
 
+type LoginPayload = {
+  default_workspace?: {
+    slug?: string;
+  } | null;
+};
+
 function splitFullName(fullName: string) {
   const parts = fullName.trim().split(/\s+/);
   const firstName = parts.shift() || fullName.trim();
@@ -87,7 +93,24 @@ export function RegisterForm() {
         throw new ApiError(errorMessageFromPayload(payload), response.status);
       }
 
-      router.push("/auth/login");
+      const loginResponse = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          email: values.email,
+          password: values.password
+        })
+      });
+      const loginPayload = (await loginResponse.json().catch(() => null)) as LoginPayload | null;
+
+      if (!loginResponse.ok) {
+        throw new ApiError("Compte cree, mais connexion automatique impossible. Connecte-toi avec ton email.", loginResponse.status);
+      }
+
+      const workspaceSlug = loginPayload?.default_workspace?.slug;
+      router.push(workspaceSlug ? `/app/${workspaceSlug}/dashboard` : "/workspace/new");
     } catch (error) {
       setSubmitError(error instanceof ApiError ? error.message : "Impossible de creer le compte pour le moment.");
     }
