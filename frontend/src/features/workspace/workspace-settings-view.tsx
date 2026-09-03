@@ -114,6 +114,12 @@ function textSetting(source: Record<string, unknown>, key: string, fallback: str
   return typeof value === "string" ? value : fallback;
 }
 
+function initialsFromName(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "U";
+  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
+}
+
 export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ workspaceSlug: string; section?: SettingsSection }>) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -151,10 +157,10 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
   const currentUser = currentUserQuery.data;
   const workspaceOwnerName = form.owner?.full_name || "";
   const workspaceOwnerEmail = form.owner?.email || "";
-  const currentUserName = workspaceOwnerName || displayUserName(currentUser);
-  const currentUserEmail = workspaceOwnerEmail || currentUser?.email || "";
+  const currentUserName = workspaceOwnerName || (settingsQuery.isLoading ? "Chargement..." : displayUserName(currentUser));
+  const currentUserEmail = workspaceOwnerEmail || (settingsQuery.isLoading ? "" : currentUser?.email || "");
   const currentUserAvatar = currentUser?.profile?.avatar || "";
-  const currentUserInitials = userInitials(currentUser);
+  const currentUserInitials = workspaceOwnerName ? initialsFromName(workspaceOwnerName) : userInitials(currentUser);
 
   useEffect(() => {
     setActiveSection(section || null);

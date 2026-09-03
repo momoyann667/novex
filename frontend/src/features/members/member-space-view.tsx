@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, CalendarDays, CheckCircle2, CreditCard, Download, Edit3, FileText, IdCard, QrCode } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { displayUserName, getCurrentUser, userInitials } from "@/features/auth/current-user";
+import { getWorkspaceSettings } from "@/features/workspace/api";
 import { currentMemberProfile } from "./current-member-profile";
 
 type Tab = "profile" | "contributions" | "payments" | "attendance" | "events" | "documents" | "history";
@@ -44,23 +45,40 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat("fr-FR", { dateStyle: "long" }).format(new Date(value));
 }
 
+function initialsFromName(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "U";
+  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
+}
+
 export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: string }>) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("profile");
   const [isEditing, setIsEditing] = useState(false);
   const userQuery = useQuery({ queryKey: ["current-user"], queryFn: getCurrentUser, retry: false });
+  const settingsQuery = useQuery({
+    queryKey: ["workspace-settings", workspaceSlug],
+    queryFn: () => getWorkspaceSettings(workspaceSlug),
+    retry: false
+  });
   const user = userQuery.data;
+  const owner = settingsQuery.data?.owner;
+  const ownerName = owner?.full_name?.trim() || "";
+  const fullName = ownerName || displayUserName(user);
+  const ownerFirstName = ownerName.split(/\s+/)[0] || "";
+  const ownerLastName = ownerName.split(/\s+/).slice(1).join(" ");
+  const workspaceName = settingsQuery.data?.workspace_name || association.name;
   const profile = {
     ...currentMemberProfile,
-    firstName: (user?.profile?.first_name || displayUserName(user).split(" ")[0] || "Utilisateur"),
-    lastName: user?.profile?.last_name || "",
-    fullName: displayUserName(user),
-    initials: userInitials(user),
-    email: user?.email || "",
-    phone: user?.phone || "",
+    firstName: ownerFirstName || user?.profile?.first_name || fullName.split(" ")[0] || "Utilisateur",
+    lastName: ownerLastName || user?.profile?.last_name || "",
+    fullName,
+    initials: ownerName ? initialsFromName(ownerName) : userInitials(user),
+    email: owner?.email || user?.email || "",
+    phone: owner?.phone || user?.phone || "",
     joinedAt: new Date().toISOString().slice(0, 10),
     membershipNumber: "A creer",
-    completion: user?.email ? 40 : 0,
+    completion: owner?.email || user?.email ? 40 : 0,
     photoUrl: user?.profile?.avatar || ""
   };
   const totalDue = useMemo(() => contributions.reduce((sum, item) => sum + item.due, 0), []);
@@ -89,8 +107,8 @@ export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: str
       <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between px-5 pt-5">
           <div className="flex items-center gap-3">
-            <div className="grid size-10 place-items-center rounded-full bg-[#0f2347] text-sm font-black text-white">{association.logoInitial}</div>
-            <strong className="text-sm tracking-normal text-slate-700">{association.name}</strong>
+            <div className="grid size-10 place-items-center rounded-full bg-[#0f2347] text-sm font-black text-white">{workspaceName[0]?.toUpperCase() || association.logoInitial}</div>
+            <strong className="text-sm tracking-normal text-slate-700">{workspaceName}</strong>
           </div>
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
             <span className="size-2 rounded-full bg-emerald-600" />

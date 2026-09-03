@@ -26,6 +26,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { displayUserName, getCurrentUser } from "@/features/auth/current-user";
+import { getWorkspaceSettings } from "@/features/workspace/api";
 import { isWorkspaceSlugValid, loadWorkspaceProfile, WorkspaceProfile } from "@/features/workspace/workspace-profile";
 import { getDashboardOverview } from "./api";
 import type { DashboardOverview, PeriodCode } from "./types";
@@ -223,6 +224,12 @@ export function DashboardView({
     queryFn: getCurrentUser,
     retry: false
   });
+  const settingsQuery = useQuery({
+    queryKey: ["workspace-settings", workspaceSlug],
+    queryFn: () => getWorkspaceSettings(workspaceSlug),
+    enabled: isWorkspaceSlugValid(workspaceSlug),
+    retry: false
+  });
 
   useEffect(() => {
     setProfile(loadWorkspaceProfile(workspaceSlug));
@@ -246,6 +253,9 @@ export function DashboardView({
 
   const overview = dashboardQuery.data || initialData;
   const currentProfile = displayProfile(profile, overview.workspace.name);
+  const workspaceOwnerName = settingsQuery.data?.owner?.full_name?.trim() || "";
+  const dashboardUserName = workspaceOwnerName || displayUserName(userQuery.data);
+  const dashboardAssociationName = settingsQuery.data?.workspace_name || currentProfile.associationName || initialData.workspace.name;
   const moneyFallback = `0 ${overview.workspace.currency === "XOF" ? "FCFA" : overview.workspace.currency}`;
   const current = {
     balance: overview.kpis.finance.current_balance || moneyFallback,
@@ -325,8 +335,8 @@ export function DashboardView({
       ) : null}
 
       <section className="mb-6">
-        <h1 className="text-3xl font-black leading-tight tracking-normal">Bonjour, {displayUserName(userQuery.data)}</h1>
-        <p className="mt-2 text-base font-semibold text-slate-600">{currentProfile.associationName || initialData.workspace.name}</p>
+        <h1 className="text-3xl font-black leading-tight tracking-normal">Bonjour, {dashboardUserName}</h1>
+        <p className="mt-2 text-base font-semibold text-slate-600">{dashboardAssociationName}</p>
         <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">
           <span className="size-2 rounded-full bg-emerald-500" />
           {overview.empty_state ? "Workspace pret" : "Donnees synchronisees"}
