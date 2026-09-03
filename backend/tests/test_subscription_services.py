@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import timedelta
 import hashlib
 import hmac
 import json
@@ -7,6 +8,8 @@ import pytest
 
 pytest.importorskip("pytest_django")
 
+from django.utils import timezone
+
 from apps.contributions.models import Contribution
 from apps.contributions.services import create_campaign
 from apps.members.models import Member
@@ -14,7 +17,9 @@ from apps.payments.models import Payment, Receipt
 from apps.payments.services import apply_successful_payment, initialize_contribution_payment, process_payment_webhook
 from apps.payments.statuses import PaymentMethod
 from apps.subscriptions.models import Plan, Subscription
-from apps.subscriptions.services import check_subscription_quota, create_subscription_checkout, ensure_plan_catalog, ensure_workspace_subscription, subscription_overview, workspace_has_entitlement
+from apps.audit_logs.models import AuditLog
+from apps.communications.models import CommunicationRecipient
+from apps.subscriptions.services import check_subscription_quota, create_subscription_checkout, ensure_plan_catalog, ensure_workspace_subscription, expire_due_trials, send_due_trial_warnings, subscription_overview, workspace_has_entitlement
 from apps.workspaces.models import Role, Workspace, WorkspaceMembership
 from apps.workspaces.services import create_workspace_for_owner
 
@@ -31,6 +36,9 @@ def test_freemium_subscription_has_14_day_trial(django_user_model):
     assert subscription.status == Subscription.Status.TRIAL
     assert (subscription.trial_ends_at - subscription.trial_started_at).days == 14
     assert overview["subscription"]["days_remaining"] in {13, 14}
+    assert overview["subscription"]["trial"]["total_days"] == 14
+    assert overview["subscription"]["is_trial"] is True
+    assert overview["subscription"]["is_expired"] is False
 
 
 @pytest.mark.django_db
@@ -207,3 +215,72 @@ def test_non_authorized_workspace_member_cannot_checkout(django_user_model):
     response = client.post("/api/v1/subscriptions/checkout/", {"plan": Plan.Code.NOVEX_START}, format="json", HTTP_X_WORKSPACE=workspace.slug)
 
     assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_workspace_creation_automatically_starts_single_freemium_trial(django_user_model):
+    owner = django_user_model.objects.create_user(username="auto-trial@example.com", email="auto-trial@example.com", password="pass")
+
+    workspace = create_workspace_for_owner(owner=owner, name="Auto Trial", organization_type="association")
+
+    subscription = Subscription.objects.get(workspace=workspace)
+    assert subscription.plan.code == Plan.Code.FREEMIUM
+    assert subscription.status == Subscription.Status.TRIAL
+    assert (subscription.trial_ends_at - subscription.trial_started_at).days == 14
+    assert Subscription.objects.filter(workspace=workspace).count() == 1
+    assert AuditLog.objects.filter(workspace=workspace, action="subscription.trial_started").count() == 1
+    assert CommunicationRecipient.objects.filter(workspace=workspace, idempotency_key__contains="trial_started").count() == 1
+
+
+@pytest.mark.django_db
+def test_trial_expires_on_demand_and_keeps_workspace_data(django_user_model):
+    owner = django_user_model.objects.create_user(username="expire@example.com", email="expire@example.com", password="pass")
+    workspace = create_workspace_for_owner(owner=owner, name="Expire Trial", organization_type="association")
+    Member.objects.create(workspace=workspace, membership_number="EXP-001", first_name="Ibrahim", last_name="Tangora")
+    subscription = workspace.subscription
+    subscription.trial_ends_at = timezone.now() - timedelta(minutes=1)
+    subscription.save(update_fields=["trial_ends_at"])
+
+    overview = subscription_overview(workspace=workspace)
+    subscription.refresh_from_db()
+
+    assert subscription.status == Subscription.Status.EXPIRED
+    assert overview["subscription"]["is_expired"] is True
+    assert overview["subscription"]["upgrade_required"] is True
+    assert overview["subscription"]["entitlements"] == {}
+    assert Member.objects.filter(workspace=workspace).count() == 1
+
+
+@pytest.mark.django_db
+def test_expire_due_trials_is_idempotent(django_user_model):
+    owner = django_user_model.objects.create_user(username="expire-job@example.com", email="expire-job@example.com", password="pass")
+    workspace = create_workspace_for_owner(owner=owner, name="Expire Job", organization_type="association")
+    subscription = workspace.subscription
+    subscription.trial_ends_at = timezone.now() - timedelta(hours=1)
+    subscription.save(update_fields=["trial_ends_at"])
+
+    first = expire_due_trials()
+    second = expire_due_trials()
+
+    assert first == 1
+    assert second == 0
+    assert AuditLog.objects.filter(workspace=workspace, action="subscription.trial_expired").count() == 1
+    assert CommunicationRecipient.objects.filter(workspace=workspace, idempotency_key__contains="trial_expired").count() == 1
+
+
+@pytest.mark.django_db
+def test_trial_warnings_are_sent_once_per_threshold(django_user_model):
+    owner = django_user_model.objects.create_user(username="warn@example.com", email="warn@example.com", password="pass")
+    workspace = create_workspace_for_owner(owner=owner, name="Warn Trial", organization_type="association")
+    subscription = workspace.subscription
+    subscription.trial_ends_at = timezone.now() + timedelta(days=3)
+    subscription.save(update_fields=["trial_ends_at"])
+
+    first = send_due_trial_warnings()
+    second = send_due_trial_warnings()
+    overview = subscription_overview(workspace=workspace)
+
+    assert first == 1
+    assert second == 0
+    assert overview["subscription"]["trial_alert"]["marker"] == "trial_warning_3"
+    assert AuditLog.objects.filter(workspace=workspace, action="subscription.trial_warning").count() == 1

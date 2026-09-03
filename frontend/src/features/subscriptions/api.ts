@@ -30,7 +30,26 @@ export type SubscriptionResource = {
   cancelled_at: string | null;
   period_ends_at: string | null;
   days_remaining: number | null;
+  hours_remaining: number | null;
   trial_progress: number | null;
+  trial: {
+    started_at: string | null;
+    ends_at: string | null;
+    days_remaining: number | null;
+    hours_remaining: number | null;
+    total_days: number | null;
+    progress: number | null;
+  };
+  trial_alert: {
+    level: string;
+    marker: string;
+    title: string;
+    message: string;
+  } | null;
+  is_trial: boolean;
+  is_expired: boolean;
+  can_upgrade: boolean;
+  upgrade_required: boolean;
   limits: Record<string, number | null>;
   entitlements: Record<string, boolean | string>;
 };

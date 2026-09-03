@@ -647,9 +647,21 @@ function SubscriptionSection({
   const { subscription, plans, features, usage, payments } = overview;
   const isTrial = subscription.status === "trial";
   const isCancelled = subscription.status === "cancelled";
+  const trialAlert = subscription.trial_alert;
+  const trialProgress = subscription.trial?.progress ?? subscription.trial_progress ?? 0;
 
   return (
     <div className="grid w-full max-w-full gap-5 overflow-hidden">
+      {trialAlert ? (
+        <div className={`rounded-lg border p-4 text-sm font-bold ${trialAlert.level === "expired" || trialAlert.level === "danger" ? "border-red-200 bg-red-50 text-red-800" : trialAlert.level === "warning" ? "border-amber-200 bg-amber-50 text-amber-800" : "border-blue-200 bg-blue-50 text-blue-800"}`}>
+          <p className="text-base font-black">{trialAlert.title}</p>
+          <p className="mt-2 leading-5">{trialAlert.message}</p>
+          <button className="mt-3 min-h-10 rounded-md bg-blue-700 px-3 text-white" type="button" onClick={() => document.getElementById("subscription-plans")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+            Voir les forfaits
+          </button>
+        </div>
+      ) : null}
+
       <div className="max-w-full overflow-hidden rounded-xl bg-slate-950 p-4 text-white">
         <div className="grid gap-3 min-[360px]:grid-cols-[1fr_auto] min-[360px]:items-start">
           <div className="min-w-0">
@@ -665,8 +677,17 @@ function SubscriptionSection({
         </div>
         {isTrial ? (
           <div className="mt-4">
-            <div className="flex justify-between text-xs font-bold text-slate-300"><span>Freemium</span><span>{subscription.days_remaining ?? 0} jours restants</span></div>
-            <div className="mt-2 h-2 rounded-full bg-white/15"><div className="h-full rounded-full bg-blue-500" style={{ width: `${Math.min(100, subscription.trial_progress || 0)}%` }} /></div>
+            <div className="flex flex-wrap justify-between gap-2 text-xs font-bold text-slate-300">
+              <span>Votre periode d'essai</span>
+              <span>{subscription.days_remaining ?? 0} jour(s) restant(s){subscription.hours_remaining ? ` - ${subscription.hours_remaining} h` : ""}</span>
+            </div>
+            <div className="mt-2 h-2 rounded-full bg-white/15"><div className="h-full rounded-full bg-blue-500" style={{ width: `${Math.min(100, trialProgress)}%` }} /></div>
+            <p className="mt-2 text-xs font-bold text-slate-300">Expire le {dateLabel(subscription.trial_ends_at)}</p>
+          </div>
+        ) : null}
+        {subscription.is_expired ? (
+          <div className="mt-4 rounded-lg bg-red-500/15 p-3 text-sm font-bold text-red-100">
+            Votre periode Freemium est terminee. Vos donnees sont conservees, choisissez NOVEX Start ou NOVEX Pro pour continuer.
           </div>
         ) : null}
       </div>
@@ -678,7 +699,7 @@ function SubscriptionSection({
         </div>
       ) : null}
 
-      <div>
+      <div id="subscription-plans">
         <h3 className="text-lg font-black">Nos offres</h3>
         <div className="mt-3 grid gap-3">
           {plans.map((plan) => (

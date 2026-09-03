@@ -113,6 +113,80 @@ def log_subscription_action(*, workspace: Workspace, actor, action: str, metadat
     AuditLog.objects.create(workspace=workspace, actor=actor, action=action, resource="subscription", resource_id=str(workspace.id), metadata=metadata or {})
 
 
+def subscription_audit_exists(*, subscription: Subscription, action: str, marker: str) -> bool:
+    logs = AuditLog.objects.filter(workspace=subscription.workspace, action=action, resource="subscription")
+    return any((log.metadata or {}).get("marker") == marker for log in logs)
+
+
+def json_safe_metadata(metadata: dict | None) -> dict:
+    safe = {}
+    for key, value in (metadata or {}).items():
+        safe[key] = value.isoformat() if hasattr(value, "isoformat") else value
+    return safe
+
+
+def log_subscription_event_once(*, subscription: Subscription, actor=None, action: str, marker: str, metadata: dict | None = None) -> bool:
+    if subscription_audit_exists(subscription=subscription, action=action, marker=marker):
+        return False
+    AuditLog.objects.create(
+        workspace=subscription.workspace,
+        actor=actor,
+        action=action,
+        resource="subscription",
+        resource_id=str(subscription.id),
+        metadata={**json_safe_metadata(metadata), "marker": marker},
+    )
+    return True
+
+
+def create_subscription_notification_once(*, subscription: Subscription, marker: str, title: str, content: str) -> None:
+    from apps.communications.models import Communication, CommunicationCategory, CommunicationChannel, CommunicationPriority, CommunicationRecipient, CommunicationRecipientStatus, CommunicationStatus, CommunicationType
+
+    owner = subscription.workspace.owner
+    idempotency_key = f"subscription:{subscription.id}:{marker}:user:{owner.id}"
+    if CommunicationRecipient.objects.filter(workspace=subscription.workspace, idempotency_key=idempotency_key).exists():
+        return
+    communication = Communication.objects.create(
+        workspace=subscription.workspace,
+        created_by=owner,
+        communication_type=CommunicationType.SYSTEM_NOTIFICATION,
+        title=title,
+        content=content,
+        category=CommunicationCategory.SYSTEM,
+        priority=CommunicationPriority.HIGH,
+        status=CommunicationStatus.SENT,
+        audience_type="SELECTED_MEMBERS",
+        audience_snapshot={"users": [owner.id], "subscription": subscription.id, "marker": marker},
+        channels=[CommunicationChannel.IN_APP],
+        sent_at=timezone.now(),
+    )
+    CommunicationRecipient.objects.get_or_create(
+        workspace=subscription.workspace,
+        communication=communication,
+        user=owner,
+        channel=CommunicationChannel.IN_APP,
+        idempotency_key=idempotency_key,
+        defaults={"status": CommunicationRecipientStatus.SENT, "sent_at": timezone.now()},
+    )
+
+
+def mark_trial_started(*, subscription: Subscription, actor=None) -> None:
+    created = log_subscription_event_once(
+        subscription=subscription,
+        actor=actor,
+        action="subscription.trial_started",
+        marker="trial_started",
+        metadata={"plan": subscription.plan.code, "trial_started_at": subscription.trial_started_at, "trial_ends_at": subscription.trial_ends_at},
+    )
+    if created:
+        create_subscription_notification_once(
+            subscription=subscription,
+            marker="trial_started",
+            title="Votre Freemium NOVEX commence",
+            content="Votre periode Freemium de 14 jours vient de commencer.",
+        )
+
+
 def catalog_payload(plan_code: str) -> dict:
     plan = PLAN_CATALOG[plan_code]
     db_plan = Plan.objects.filter(code=plan_code).first()
@@ -167,24 +241,45 @@ def ensure_workspace_subscription(workspace: Workspace) -> Subscription:
         return subscription
     plan = Plan.objects.get(code=Plan.Code.FREEMIUM)
     now = timezone.now()
-    return Subscription.objects.create(workspace=workspace, plan=plan, status=Subscription.Status.TRIAL, trial_started_at=now, trial_ends_at=now + timedelta(days=TRIAL_DAYS))
+    subscription = Subscription.objects.create(workspace=workspace, plan=plan, status=Subscription.Status.TRIAL, trial_started_at=now, trial_ends_at=now + timedelta(days=TRIAL_DAYS))
+    mark_trial_started(subscription=subscription, actor=workspace.owner)
+    return subscription
 
 
-def refresh_subscription_status(subscription: Subscription) -> Subscription:
+def expire_subscription_once(subscription: Subscription, *, actor=None) -> Subscription:
+    if subscription.status != Subscription.Status.EXPIRED:
+        subscription.status = Subscription.Status.EXPIRED
+        subscription.save(update_fields=["status"])
+    created = log_subscription_event_once(
+        subscription=subscription,
+        actor=actor,
+        action="subscription.trial_expired" if subscription.plan.code == Plan.Code.FREEMIUM else "subscription.expired",
+        marker="trial_expired" if subscription.plan.code == Plan.Code.FREEMIUM else "subscription_expired",
+        metadata={"plan": subscription.plan.code, "expired_at": timezone.now()},
+    )
+    if created and subscription.plan.code == Plan.Code.FREEMIUM:
+        create_subscription_notification_once(
+            subscription=subscription,
+            marker="trial_expired",
+            title="Votre Freemium NOVEX est termine",
+            content="Votre periode Freemium est arrivee a expiration. Choisissez un forfait NOVEX pour continuer.",
+        )
+    return subscription
+
+
+def refresh_subscription_status(subscription: Subscription, *, actor=None) -> Subscription:
     now = timezone.now()
-    if subscription.status == Subscription.Status.TRIAL and subscription.trial_ends_at and subscription.trial_ends_at < now:
-        subscription.status = Subscription.Status.EXPIRED
-        subscription.save(update_fields=["status"])
-    elif subscription.status == Subscription.Status.ACTIVE and subscription.current_period_ends_at and subscription.current_period_ends_at < now:
-        subscription.status = Subscription.Status.EXPIRED
-        subscription.save(update_fields=["status"])
+    if subscription.status == Subscription.Status.TRIAL and subscription.trial_ends_at and subscription.trial_ends_at <= now:
+        expire_subscription_once(subscription, actor=actor)
+    elif subscription.status == Subscription.Status.ACTIVE and subscription.current_period_ends_at and subscription.current_period_ends_at <= now:
+        expire_subscription_once(subscription, actor=actor)
     return subscription
 
 
 def active_entitlements(subscription: Subscription) -> dict:
     subscription = refresh_subscription_status(subscription)
     if subscription.status == Subscription.Status.EXPIRED:
-        return PLAN_CATALOG[Plan.Code.FREEMIUM]["entitlements"]
+        return {}
     catalog = PLAN_CATALOG.get(subscription.plan.code, PLAN_CATALOG[Plan.Code.FREEMIUM])
     return {**catalog["entitlements"], **(subscription.plan.entitlements or {})}
 
@@ -208,6 +303,69 @@ def check_subscription_quota(workspace: Workspace, quota_code: str, *, current_u
         raise ValueError("Vous avez atteint la limite de votre forfait. Passez a une offre superieure pour continuer.")
 
 
+def trial_time_remaining(subscription: Subscription, *, now=None) -> dict:
+    now = now or timezone.now()
+    if not subscription.trial_started_at or not subscription.trial_ends_at:
+        return {"started_at": None, "ends_at": None, "days_remaining": None, "hours_remaining": None, "total_days": None, "progress": None}
+    total_seconds = max((subscription.trial_ends_at - subscription.trial_started_at).total_seconds(), 1)
+    remaining_seconds = max((subscription.trial_ends_at - now).total_seconds(), 0)
+    used_seconds = min(max((now - subscription.trial_started_at).total_seconds(), 0), total_seconds)
+    days_remaining = int(remaining_seconds // 86400)
+    if remaining_seconds and remaining_seconds % 86400:
+        days_remaining += 1
+    return {
+        "started_at": subscription.trial_started_at,
+        "ends_at": subscription.trial_ends_at,
+        "days_remaining": days_remaining,
+        "hours_remaining": int((remaining_seconds + 3599) // 3600),
+        "total_days": TRIAL_DAYS,
+        "progress": round((used_seconds / total_seconds) * 100, 2),
+    }
+
+
+def trial_alert_payload(subscription: Subscription) -> dict | None:
+    if subscription.plan.code != Plan.Code.FREEMIUM:
+        return None
+    if subscription.status == Subscription.Status.EXPIRED:
+        return {
+            "level": "expired",
+            "marker": "trial_expired",
+            "title": "Votre periode Freemium est terminee",
+            "message": "Choisissez NOVEX Start ou NOVEX Pro pour continuer.",
+        }
+    remaining = trial_time_remaining(subscription)["days_remaining"]
+    if remaining is None or remaining > 7:
+        return None
+    if remaining <= 1:
+        message = "Votre periode Freemium expire demain. Choisissez votre forfait des maintenant."
+        level = "danger"
+        marker = "trial_warning_1"
+    elif remaining <= 3:
+        message = f"Votre periode Freemium expire dans {remaining} jours. Passez a NOVEX Start ou NOVEX Pro pour continuer."
+        level = "warning"
+        marker = "trial_warning_3"
+    else:
+        message = "Votre periode Freemium expire bientot. Choisissez un forfait pour continuer a profiter pleinement de NOVEX."
+        level = "info"
+        marker = "trial_warning_7"
+    return {"level": level, "marker": marker, "title": "Expiration Freemium", "message": message}
+
+
+def notify_trial_warning_if_needed(subscription: Subscription, *, actor=None) -> None:
+    alert = trial_alert_payload(subscription)
+    if not alert or alert["level"] == "expired":
+        return
+    created = log_subscription_event_once(
+        subscription=subscription,
+        actor=actor,
+        action="subscription.trial_warning",
+        marker=alert["marker"],
+        metadata={"plan": subscription.plan.code, "trial_ends_at": subscription.trial_ends_at, "level": alert["level"]},
+    )
+    if created:
+        create_subscription_notification_once(subscription=subscription, marker=alert["marker"], title=alert["title"], content=alert["message"])
+
+
 def subscription_usage(workspace: Workspace, limits: dict) -> list[dict]:
     rows = []
     if "MAX_MEMBERS" in limits:
@@ -223,15 +381,10 @@ def subscription_usage(workspace: Workspace, limits: dict) -> list[dict]:
 def subscription_overview(*, workspace: Workspace) -> dict:
     subscription = ensure_workspace_subscription(workspace)
     catalog = catalog_payload(subscription.plan.code)
+    notify_trial_warning_if_needed(subscription, actor=workspace.owner)
     entitlements = active_entitlements(subscription)
-    now = timezone.now()
-    trial_total = None
-    trial_used = None
-    days_remaining = None
-    if subscription.trial_started_at and subscription.trial_ends_at:
-        trial_total = max((subscription.trial_ends_at - subscription.trial_started_at).days, 1)
-        trial_used = min(max((now - subscription.trial_started_at).days, 0), trial_total)
-        days_remaining = max((subscription.trial_ends_at.date() - now.date()).days, 0)
+    trial = trial_time_remaining(subscription)
+    alert = trial_alert_payload(subscription)
     period_end = subscription.current_period_ends_at or subscription.trial_ends_at
     return {
         "subscription": {
@@ -248,8 +401,15 @@ def subscription_overview(*, workspace: Workspace) -> dict:
             "current_period_ends_at": subscription.current_period_ends_at,
             "cancelled_at": subscription.cancelled_at,
             "period_ends_at": period_end,
-            "days_remaining": days_remaining,
-            "trial_progress": round((trial_used / trial_total) * 100, 2) if trial_total else None,
+            "days_remaining": trial["days_remaining"],
+            "hours_remaining": trial["hours_remaining"],
+            "trial_progress": trial["progress"],
+            "trial": trial,
+            "trial_alert": alert,
+            "is_trial": subscription.status == Subscription.Status.TRIAL,
+            "is_expired": subscription.status == Subscription.Status.EXPIRED,
+            "can_upgrade": subscription.plan.code == Plan.Code.FREEMIUM or subscription.status in {Subscription.Status.EXPIRED, Subscription.Status.PAST_DUE, Subscription.Status.CANCELLED},
+            "upgrade_required": subscription.status == Subscription.Status.EXPIRED,
             "limits": catalog["limits"],
             "entitlements": entitlements,
         },
@@ -412,6 +572,41 @@ def subscription_payments_overview(*, workspace: Workspace, filters: dict | None
         "renewals": subscription_renewals(workspace=workspace),
         "plans": [catalog_payload(code) for code in PLAN_CATALOG if code != Plan.Code.FREEMIUM],
     }
+
+
+@transaction.atomic
+def expire_due_trials(*, actor=None) -> int:
+    ensure_plan_catalog()
+    now = timezone.now()
+    queryset = (
+        Subscription.objects.select_for_update()
+        .select_related("workspace", "workspace__owner", "plan")
+        .filter(plan__code=Plan.Code.FREEMIUM, status=Subscription.Status.TRIAL, trial_ends_at__lte=now)
+    )
+    expired = 0
+    for subscription in queryset:
+        before = subscription.status
+        expire_subscription_once(subscription, actor=actor)
+        if before != Subscription.Status.EXPIRED:
+            expired += 1
+    return expired
+
+
+def send_due_trial_warnings(*, actor=None) -> int:
+    now = timezone.now()
+    soon = now + timedelta(days=7)
+    queryset = (
+        Subscription.objects.select_related("workspace", "workspace__owner", "plan")
+        .filter(plan__code=Plan.Code.FREEMIUM, status=Subscription.Status.TRIAL, trial_ends_at__gt=now, trial_ends_at__lte=soon)
+    )
+    sent = 0
+    for subscription in queryset:
+        before = AuditLog.objects.filter(workspace=subscription.workspace, action="subscription.trial_warning").count()
+        notify_trial_warning_if_needed(subscription, actor=actor)
+        after = AuditLog.objects.filter(workspace=subscription.workspace, action="subscription.trial_warning").count()
+        if after > before:
+            sent += 1
+    return sent
 
 
 @transaction.atomic
