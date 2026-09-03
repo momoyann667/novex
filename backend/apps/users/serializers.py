@@ -46,10 +46,30 @@ class RegisterSerializer(serializers.Serializer):
 
 class UserSerializer(serializers.ModelSerializer):
     default_workspace = serializers.SerializerMethodField()
+    profile = serializers.SerializerMethodField()
+    full_name = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ["id", "email", "phone", "email_verified_at", "default_workspace"]
+        fields = ["id", "username", "email", "phone", "first_name", "last_name", "full_name", "email_verified_at", "profile", "default_workspace"]
+
+    def get_profile(self, obj):
+        profile = getattr(obj, "profile", None)
+        if not profile:
+            return None
+        return {
+            "first_name": profile.first_name,
+            "last_name": profile.last_name,
+            "full_name": str(profile),
+            "avatar": profile.avatar.url if profile.avatar else "",
+            "locale": profile.locale,
+        }
+
+    def get_full_name(self, obj):
+        profile = getattr(obj, "profile", None)
+        if profile and str(profile):
+            return str(profile)
+        return obj.get_full_name() or obj.username or obj.email
 
     def get_default_workspace(self, obj):
         membership = obj.workspace_memberships.filter(status="active").select_related("workspace").order_by("id").first()

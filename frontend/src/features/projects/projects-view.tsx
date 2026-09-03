@@ -180,13 +180,13 @@ export function ProjectsView({ workspaceSlug }: Readonly<{ workspaceSlug: string
       </label>
 
       {query.isLoading ? <SkeletonList /> : null}
-      {query.isError ? (
+      {(query.error as { status?: number } | null)?.status === 503 ? (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
-          Impossible de charger les projets.
+          Backend indisponible. Verifiez que Django tourne sur le port 8002.
           <button className="ml-2 underline" type="button" onClick={() => query.refetch()}>Reessayer</button>
         </div>
       ) : null}
-      {!query.isLoading && !query.isError && !visibleProjects.length ? (
+      {!query.isLoading && !visibleProjects.length ? (
         <div className="grid min-h-60 place-items-center rounded-xl bg-white p-8 text-center shadow-sm ring-1 ring-slate-200">
           <div>
             <FolderKanban className="mx-auto size-10 text-blue-700" />

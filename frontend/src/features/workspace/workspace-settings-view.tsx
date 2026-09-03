@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowLeft, Building2, Check, CheckCircle2, ChevronLeft, ChevronRight, CreditCard, Download, Eye, LogOut, Pencil, Plus, Save, Search, ShieldCheck, Star, Trash2, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { displayUserName, getCurrentUser, userInitials } from "@/features/auth/current-user";
 import { activateContributionCampaign, createContributionCampaign, listContributionCampaigns } from "@/features/contributions/api";
-import { currentMemberProfile } from "@/features/members/current-member-profile";
 import { cancelSubscription, createSubscriptionCheckout, getSaasPaymentsOverview, getSubscriptionOverview, reactivateSubscription, retrySaasPayment, type PlanCode, type PlanResource, type SaasPaymentFilters, type SaasPaymentsOverview, type SubscriptionOverview, type SubscriptionPayment } from "@/features/subscriptions/api";
 import { getWorkspaceSettings, updateWorkspaceSettings, type WorkspaceSettingsResource, type WorkspaceSettingsUpdatePayload } from "./api";
 
@@ -123,6 +123,11 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [contributionDraft, setContributionDraft] = useState({ name: "", periodicity: "MONTHLY", amount: "" });
   const [saasFilters, setSaasFilters] = useState<SaasPaymentFilters>({ period: "this_year", status: "all", plan: "all", search: "", page: 1 });
+  const currentUserQuery = useQuery({
+    queryKey: ["current-user"],
+    queryFn: getCurrentUser,
+    retry: false
+  });
   const settingsQuery = useQuery({
     queryKey: ["workspace-settings", workspaceSlug],
     queryFn: () => getWorkspaceSettings(workspaceSlug)
@@ -142,6 +147,11 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
     queryFn: () => getSaasPaymentsOverview(workspaceSlug, saasFilters),
     enabled: activeSection === "saas-payments"
   });
+  const currentUser = currentUserQuery.data;
+  const currentUserName = displayUserName(currentUser);
+  const currentUserEmail = currentUser?.email || "";
+  const currentUserAvatar = currentUser?.profile?.avatar || "";
+  const currentUserInitials = userInitials(currentUser);
 
   useEffect(() => {
     setActiveSection(section || null);
@@ -340,11 +350,11 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
           <section className="mt-5 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-center gap-3">
               <div className="size-14 overflow-hidden rounded-full bg-slate-200">
-                {currentMemberProfile.photoUrl ? <img className="size-full object-cover" src={currentMemberProfile.photoUrl} alt={currentMemberProfile.fullName} /> : <div className="grid size-full place-items-center bg-[#0f2347] text-sm font-black text-white">{currentMemberProfile.initials}</div>}
+                {currentUserAvatar ? <img className="size-full object-cover" src={currentUserAvatar} alt={currentUserName} /> : <div className="grid size-full place-items-center bg-[#0f2347] text-sm font-black text-white">{currentUserInitials}</div>}
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="truncate text-base font-black">{currentMemberProfile.fullName}</h2>
-                <p className="truncate text-xs font-semibold text-slate-500">{currentMemberProfile.email}</p>
+                <h2 className="truncate text-base font-black">{currentUserName}</h2>
+                <p className="truncate text-xs font-semibold text-slate-500">{currentUserEmail || "Email non renseigne"}</p>
                 <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700"><span className="size-2 rounded-full bg-emerald-500" />En ligne</span>
               </div>
               <Link className="flex size-9 items-center justify-center rounded-full text-slate-700" href={`/app/${workspaceSlug}/settings/association`} aria-label="Modifier le profil">
@@ -475,7 +485,7 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
 
           {activeSection === "users" ? (
             <SettingsCard title="Utilisateurs">
-              <div className="rounded-md bg-slate-50 p-3 text-sm font-bold text-slate-600">Utilisateur courant : {currentMemberProfile.fullName} - Role NOVEX : Administrateur - Fonction associative : {currentMemberProfile.function}</div>
+              <div className="rounded-md bg-slate-50 p-3 text-sm font-bold text-slate-600">Utilisateur courant : {currentUserName} - Role NOVEX : Administrateur</div>
               <label className={labelClass}>Inviter un utilisateur<input className={fieldClass} type="email" placeholder="email@association.org" /></label>
               <label className={labelClass}>Role<select className={fieldClass} defaultValue="Administrateur"><option>Administrateur</option><option>Tresorier</option><option>Secretaire</option><option>Responsable projet</option><option>Responsable communication</option><option>Membre</option></select></label>
               {[["in_app", "Notification in-app"], ["email", "Email"], ["sms", "SMS"], ["whatsapp", "WhatsApp"]].map(([key, label]) => (

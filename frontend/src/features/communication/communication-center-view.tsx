@@ -25,12 +25,7 @@ type Communication = {
   date: string;
 };
 
-const seedCommunications: Communication[] = [
-  { id: "COM-001", title: "Assemblee generale annuelle", content: "La prochaine assemblee generale aura lieu samedi a 18h.", type: "Annonce", audience: "Membres actifs", channels: ["In-app"], status: "Envoyee", recipients: 1258, delivered: 1241, read: 817, failed: 0, date: "31/08/2026" },
-  { id: "COM-002", title: "Relance cotisations bureau", content: "Merci de regulariser vos cotisations avant vendredi.", type: "Message collectif", audience: "Cotisations en retard", channels: ["In-app", "Email"], status: "Partielle", recipients: 45, delivered: 45, read: 21, failed: 45, date: "30/08/2026" },
-  { id: "COM-003", title: "Convocation reunion projet", content: "Reunion du comite projet demain a 10h.", type: "Annonce", audience: "Bureau", channels: ["In-app"], status: "Programmee", recipients: 12, delivered: 0, read: 0, failed: 0, date: "01/09/2026" },
-  { id: "COM-004", title: "Message de bienvenue", content: "Bienvenue {{first_name}} dans {{association_name}}.", type: "Notification directe", audience: "Membres selectionnes", channels: ["In-app"], status: "Brouillon", recipients: 1, delivered: 0, read: 0, failed: 0, date: "31/08/2026" }
-];
+const seedCommunications: Communication[] = [];
 
 const tabs = ["Vue d'ensemble", "Annonces", "Messages", "Brouillons", "Programmes", "Historique", "Modeles", "Mes notifications"];
 const channels: Channel[] = ["In-app", "Push", "Email", "SMS", "WhatsApp"];
@@ -95,11 +90,11 @@ export function CommunicationCenterView({ workspaceSlug }: Readonly<{ workspaceS
       readRate: delivered ? Math.round((read / delivered) * 1000) / 10 : 0,
       failureRate: sent ? Math.round((failed / sent) * 1000) / 10 : 0,
       scheduled: items.filter((item) => item.status === "Programmee").length,
-      touched: new Set(items.flatMap((item) => [item.audience])).size * 412
+      touched: delivered
     };
   }, [items]);
 
-  const audienceCount = audience === "Tous les membres" ? 1258 : audience === "Membres actifs" ? 984 : audience === "Bureau" ? 12 : audience === "Cotisations en retard" ? 45 : 1;
+  const audienceCount = 0;
   const externalChannels = selectedChannels.filter((channel) => channel !== "In-app");
 
   function toggleChannel(channel: Channel) {

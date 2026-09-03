@@ -360,7 +360,7 @@ export function FinanceExpensesView({ workspaceSlug }: Readonly<{ workspaceSlug:
             {budgetsQuery.data?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
         </div>
-        {expensesQuery.error ? <div className="border-b border-red-100 bg-red-50 p-4 text-sm font-bold text-red-700">{expensesQuery.error.message}</div> : null}
+        {(expensesQuery.error as { status?: number; message?: string } | null)?.status === 503 ? <div className="border-b border-red-100 bg-red-50 p-4 text-sm font-bold text-red-700">{(expensesQuery.error as { message?: string } | null)?.message || "Backend indisponible."}</div> : null}
         <table className="w-full table-fixed text-left">
           <thead className="text-[10px] font-black uppercase tracking-normal text-slate-500">
             <tr>
@@ -377,7 +377,7 @@ export function FinanceExpensesView({ workspaceSlug }: Readonly<{ workspaceSlug:
                 <td className="px-3 py-5"><div className="ml-auto h-3 w-16 animate-pulse rounded bg-slate-100" /></td>
               </tr>
             )) : null}
-            {!expensesQuery.isLoading && !expensesQuery.data?.results.length ? (
+            {!expensesQuery.isLoading && (!expensesQuery.data?.results.length || expensesQuery.isError) ? (
               <tr>
                 <td className="px-3 py-10 text-center text-sm font-semibold text-slate-500" colSpan={3}>Aucune transaction trouvee.</td>
               </tr>

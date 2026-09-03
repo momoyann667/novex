@@ -3,46 +3,28 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, CalendarDays, CheckCircle2, CreditCard, Download, Edit3, FileText, IdCard, QrCode } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { displayUserName, getCurrentUser, userInitials } from "@/features/auth/current-user";
 import { currentMemberProfile } from "./current-member-profile";
 
 type Tab = "profile" | "contributions" | "payments" | "attendance" | "events" | "documents" | "history";
-
-const profile = currentMemberProfile;
 
 const association = {
   name: "NOVEX",
   logoInitial: "N"
 };
 
-const contributions = [
-  { period: "Aout 2026", label: "Cotisation mensuelle", due: 10000, paid: 10000, remaining: 0, status: "Payee", dueDate: "2026-08-31" },
-  { period: "Septembre 2026", label: "Cotisation mensuelle", due: 10000, paid: 0, remaining: 10000, status: "En attente", dueDate: "2026-09-30" },
-  { period: "Adhesion", label: "Frais d'adhesion", due: 25000, paid: 25000, remaining: 0, status: "Payee", dueDate: "2026-01-12" }
-];
+const contributions: Array<{ period: string; label: string; due: number; paid: number; remaining: number; status: string; dueDate: string }> = [];
 
-const payments = [
-  { reference: "NOVEX-2026-A82901", reason: "Cotisation Aout", amount: 10000, method: "Mobile Money", status: "Reussi", date: "2026-08-31", receipt: "NVX-2026-000125" },
-  { reference: "NOVEX-2026-B11042", reason: "Frais d'adhesion", amount: 25000, method: "Manuel", status: "Reussi", date: "2026-01-12", receipt: "NVX-2026-000032" }
-];
+const payments: Array<{ reference: string; reason: string; amount: number; method: string; status: string; date: string; receipt: string }> = [];
 
-const participations = [
-  { title: "Assemblee generale", date: "2026-08-12", status: "Present" },
-  { title: "Reunion mensuelle", date: "2026-08-05", status: "Absent" },
-  { title: "Atelier projets", date: "2026-07-20", status: "Present" }
-];
+const participations: Array<{ title: string; date: string; status: string }> = [];
 
-const events = [
-  { title: "Forum associatif", date: "2026-09-14", time: "18:00", location: "Abidjan", participation: "Je participe", past: false },
-  { title: "Assemblee generale", date: "2026-08-12", time: "17:30", location: "Cocody", participation: "Present", past: true }
-];
+const events: Array<{ title: string; date: string; time: string; location: string; participation: string; past: boolean }> = [];
 
-const documents = [
-  { name: "Carte membre", type: "PDF", size: "220 KB", category: "Membres" },
-  { name: "Reglement interieur", type: "PDF", size: "2.4 MB", category: "Juridique" },
-  { name: "Recu cotisation Aout", type: "PDF", size: "180 KB", category: "Cotisations" }
-];
+const documents: Array<{ name: string; type: string; size: string; category: string }> = [];
 
 const tabs: Array<{ id: Tab; label: string }> = [
   { id: "profile", label: "Profil" },
@@ -66,10 +48,25 @@ export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: str
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("profile");
   const [isEditing, setIsEditing] = useState(false);
+  const userQuery = useQuery({ queryKey: ["current-user"], queryFn: getCurrentUser, retry: false });
+  const user = userQuery.data;
+  const profile = {
+    ...currentMemberProfile,
+    firstName: (user?.profile?.first_name || displayUserName(user).split(" ")[0] || "Utilisateur"),
+    lastName: user?.profile?.last_name || "",
+    fullName: displayUserName(user),
+    initials: userInitials(user),
+    email: user?.email || "",
+    phone: user?.phone || "",
+    joinedAt: new Date().toISOString().slice(0, 10),
+    membershipNumber: "A creer",
+    completion: user?.email ? 40 : 0,
+    photoUrl: user?.profile?.avatar || ""
+  };
   const totalDue = useMemo(() => contributions.reduce((sum, item) => sum + item.due, 0), []);
   const totalPaid = useMemo(() => contributions.reduce((sum, item) => sum + item.paid, 0), []);
   const remaining = Math.max(totalDue - totalPaid, 0);
-  const participationRate = Math.round((participations.filter((item) => item.status === "Present").length / participations.length) * 100);
+  const participationRate = participations.length ? Math.round((participations.filter((item) => item.status === "Present").length / participations.length) * 100) : 0;
 
   return (
     <main className="min-h-screen bg-[#f5f7f8] px-4 pb-28 pt-4 text-slate-950 md:px-8">
@@ -85,7 +82,7 @@ export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: str
             <h1 className="mt-2 text-3xl font-black tracking-normal">Mon espace</h1>
             <p className="mt-2 text-sm font-medium leading-6 text-white/70">Voici un apercu de votre activite dans l'association.</p>
           </div>
-          <div className="grid size-12 shrink-0 place-items-center rounded-xl bg-white text-lg font-black text-slate-950">MT</div>
+          <div className="grid size-12 shrink-0 place-items-center rounded-xl bg-white text-lg font-black text-slate-950">{profile.initials}</div>
         </div>
       </section>
 
@@ -103,7 +100,7 @@ export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: str
 
         <div className="px-5 py-7 text-center">
           <div className="mx-auto grid size-24 place-items-center overflow-hidden rounded-full border-4 border-white bg-[linear-gradient(135deg,#dbeafe,#0f2347)] shadow-lg shadow-slate-900/10">
-            <span className="text-2xl font-black text-white">MT</span>
+            <span className="text-2xl font-black text-white">{profile.initials}</span>
           </div>
           <h2 className="mt-5 text-2xl font-black tracking-normal">{profile.fullName}</h2>
           <p className="mt-1 text-sm font-black text-slate-500">ID: {profile.membershipNumber}</p>
@@ -147,7 +144,7 @@ export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: str
         <p className="text-sm font-black">A retenir</p>
         <div className="mt-3 grid gap-2 text-sm font-semibold text-slate-600">
           {remaining ? <p>Votre prochaine cotisation affiche un reste de {formatMoney(remaining)}.</p> : <p>Vos cotisations sont a jour.</p>}
-          <p>Forum associatif prevu le {formatDate("2026-09-14")}.</p>
+          {events.length ? <p>Prochain evenement prevu le {formatDate(events[0].date)}.</p> : <p>Aucun evenement lie a votre profil pour le moment.</p>}
           {profile.completion < 100 ? <p>Votre profil est complete a {profile.completion} %.</p> : null}
         </div>
       </section>
@@ -202,6 +199,7 @@ export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: str
               <p className="mt-3 text-sm font-semibold text-slate-600">{formatMoney(totalPaid)} paye sur {formatMoney(totalDue)}. Reste : {formatMoney(remaining)}.</p>
             </div>
             {contributions.map((item) => <DataCard key={item.period} title={item.period} subtitle={item.label} value={formatMoney(item.due)} status={item.status} detail={`Echeance ${formatDate(item.dueDate)}`} />)}
+            {!contributions.length ? <EmptyTab label="Aucune cotisation rattachee a votre profil." /> : null}
             <Button asChild className="min-h-12 bg-blue-700 text-white hover:bg-blue-800"><Link href={`/app/${workspaceSlug}/payments`}>Payer ma cotisation</Link></Button>
           </div>
         ) : null}
@@ -209,6 +207,7 @@ export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: str
         {activeTab === "payments" ? (
           <div className="grid gap-3">
             {payments.map((item) => <DataCard key={item.reference} title={item.reason} subtitle={`${item.method} - ${formatDate(item.date)}`} value={formatMoney(item.amount)} status={item.status} detail={`Reference ${item.reference}`} action="Voir le recu" />)}
+            {!payments.length ? <EmptyTab label="Aucun paiement enregistre." /> : null}
           </div>
         ) : null}
 
@@ -216,18 +215,21 @@ export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: str
           <div className="grid gap-3">
             <div className="rounded-xl bg-white p-5 shadow-sm"><h2 className="text-xl font-black">Presences</h2><p className="mt-2 text-3xl font-black">{participationRate} %</p><p className="text-sm font-semibold text-slate-500">{participations.filter((item) => item.status === "Present").length} presents, {participations.filter((item) => item.status === "Absent").length} absence.</p></div>
             {participations.map((item) => <DataCard key={item.title} title={item.title} subtitle={formatDate(item.date)} value={item.status} status={item.status} detail="Historique de presence" />)}
+            {!participations.length ? <EmptyTab label="Aucune presence enregistree." /> : null}
           </div>
         ) : null}
 
         {activeTab === "events" ? (
           <div className="grid gap-3">
             {events.map((item) => <DataCard key={`${item.title}-${item.date}`} title={item.title} subtitle={`${formatDate(item.date)} - ${item.time} - ${item.location}`} value={item.participation} status={item.past ? "Passe" : "A venir"} detail={item.past ? "Evenement passe" : "Inscription ouverte"} />)}
+            {!events.length ? <EmptyTab label="Aucun evenement rattache a votre profil." /> : null}
           </div>
         ) : null}
 
         {activeTab === "documents" ? (
           <div className="grid gap-3">
             {documents.map((item) => <DataCard key={item.name} title={item.name} subtitle={`${item.type} - ${item.size}`} value={item.category} status="Disponible" detail="Apercu et telechargement autorises" action="Telecharger" />)}
+            {!documents.length ? <EmptyTab label="Aucun document disponible." /> : null}
           </div>
         ) : null}
 
@@ -235,16 +237,7 @@ export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: str
           <div className="rounded-xl bg-white p-5 shadow-sm">
             <h2 className="text-xl font-black">Mon historique</h2>
             <div className="mt-5 grid gap-5">
-              {[
-                ["31 aout", "Cotisation payee", "10 000 FCFA"],
-                ["12 aout", "Participation evenement", "Assemblee generale"],
-                ["12 janvier", "Adhesion", "Association NOVEX"]
-              ].map(([date, title, detail]) => (
-                <div className="grid grid-cols-[64px_1fr] gap-4" key={title}>
-                  <span className="text-xs font-black text-blue-700">{date}</span>
-                  <div className="border-l border-slate-200 pl-4"><p className="font-black">{title}</p><p className="mt-1 text-sm font-semibold text-slate-500">{detail}</p></div>
-                </div>
-              ))}
+              <EmptyTab label="Aucun historique disponible." />
             </div>
           </div>
         ) : null}
@@ -269,5 +262,13 @@ function DataCard({ title, subtitle, value, status, detail, action }: Readonly<{
       </div>
       <p className="mt-3 text-sm font-semibold text-slate-500">{detail}</p>
     </article>
+  );
+}
+
+function EmptyTab({ label }: Readonly<{ label: string }>) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm font-semibold text-slate-500 shadow-sm">
+      {label}
+    </div>
   );
 }

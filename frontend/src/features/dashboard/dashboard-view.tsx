@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Bell,
   Bot,
@@ -24,8 +25,10 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { displayUserName, getCurrentUser } from "@/features/auth/current-user";
 import { isWorkspaceSlugValid, loadWorkspaceProfile, WorkspaceProfile } from "@/features/workspace/workspace-profile";
-import type { DashboardOverview } from "./types";
+import { getDashboardOverview } from "./api";
+import type { DashboardOverview, PeriodCode } from "./types";
 import { emptyDashboardOverview } from "./data";
 
 type Metric = {
@@ -157,6 +160,13 @@ const treasuryItems: ReadonlyArray<readonly [string, string, string, LucideIcon]
   ["Creances", "1.5M", "Cotisations a recouvrer", Clock3]
 ];
 
+const periodCodes: Record<PeriodKey, PeriodCode> = {
+  "Ce mois": "month",
+  Trimestre: "quarter",
+  Annee: "year",
+  Tout: "year"
+};
+
 function displayProfile(profile: WorkspaceProfile | null, workspaceName: string): WorkspaceProfile {
   return profile || {
     country: "Non renseigne",
@@ -202,6 +212,17 @@ export function DashboardView({
   const [isReady, setIsReady] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodKey>("Ce mois");
   const [showNotifications, setShowNotifications] = useState(false);
+  const dashboardQuery = useQuery({
+    queryKey: ["dashboard-overview", workspaceSlug, selectedPeriod],
+    queryFn: () => getDashboardOverview(workspaceSlug, periodCodes[selectedPeriod]),
+    enabled: isWorkspaceSlugValid(workspaceSlug),
+    retry: false
+  });
+  const userQuery = useQuery({
+    queryKey: ["current-user"],
+    queryFn: getCurrentUser,
+    retry: false
+  });
 
   useEffect(() => {
     setProfile(loadWorkspaceProfile(workspaceSlug));
@@ -223,8 +244,41 @@ export function DashboardView({
     );
   }
 
-  const current = periodData[selectedPeriod];
-  const currentProfile = displayProfile(profile, initialData.workspace.name);
+  const overview = dashboardQuery.data || initialData;
+  const currentProfile = displayProfile(profile, overview.workspace.name);
+  const moneyFallback = `0 ${overview.workspace.currency === "XOF" ? "FCFA" : overview.workspace.currency}`;
+  const current = {
+    balance: overview.kpis.finance.current_balance || moneyFallback,
+    balanceTrend: overview.empty_state ? "Aucune donnee enregistree" : `Periode: ${overview.period.label}`,
+    revenues: overview.kpis.finance.revenues || moneyFallback,
+    expenses: overview.kpis.finance.expenses || moneyFallback,
+    totalContributions: overview.kpis.contributions.objective || moneyFallback,
+    paidContributions: overview.kpis.contributions.collected || moneyFallback,
+    lateContributions: `${overview.kpis.contributions.late_members.toLocaleString("fr-FR")} membre(s)`,
+    upcomingContributions: overview.kpis.contributions.remaining || moneyFallback,
+    recoveryRate: overview.kpis.contributions.recovery_rate,
+    metrics: [
+      { label: "Membres actifs", value: overview.kpis.members.active.toLocaleString("fr-FR"), detail: `${overview.kpis.members.total.toLocaleString("fr-FR")} total`, tone: "green" as const },
+      { label: "Cotisations", value: overview.kpis.contributions.collected || moneyFallback, detail: `${overview.kpis.contributions.recovery_rate}% recouvres`, tone: "blue" as const },
+      { label: "Depenses", value: overview.kpis.finance.expenses || moneyFallback, detail: overview.kpis.finance.masked ? "Acces limite" : overview.period.label, tone: "slate" as const },
+      { label: "Projets actifs", value: overview.kpis.projects.active.toLocaleString("fr-FR"), detail: `${overview.kpis.projects.total.toLocaleString("fr-FR")} total`, tone: "slate" as const },
+      { label: "Evenements", value: overview.kpis.events.upcoming.toLocaleString("fr-FR"), detail: "A venir", tone: "blue" as const },
+      { label: "Documents", value: overview.kpis.documents.recent.toLocaleString("fr-FR"), detail: "Recents", tone: "green" as const }
+    ]
+  };
+  const notificationItems = overview.alerts;
+  const activityItems = overview.activity;
+  const steeringMetrics: ReadonlyArray<readonly [string, string, string, LucideIcon]> = [
+    ["Budget annuel", overview.kpis.finance.expenses || moneyFallback, "0%", Landmark],
+    ["Objectifs membres", `${overview.kpis.members.active.toLocaleString("fr-FR")} actifs`, `${Math.round(overview.kpis.members.active_rate)}%`, Target],
+    ["Evenements", `${overview.kpis.events.upcoming.toLocaleString("fr-FR")} a venir`, "0%", CalendarDays],
+    ["Documents", `${overview.kpis.documents.recent.toLocaleString("fr-FR")} recents`, "0%", FileText]
+  ];
+  const treasuryMetrics: ReadonlyArray<readonly [string, string, string, LucideIcon]> = [
+    ["Solde", overview.kpis.finance.current_balance || moneyFallback, "Disponible selon transactions validees", CreditCard],
+    ["Recettes", overview.kpis.finance.revenues || moneyFallback, overview.period.label, WalletCards],
+    ["Cotisations restantes", overview.kpis.contributions.remaining || moneyFallback, "A recouvrer", Clock3]
+  ];
 
   return (
     <main className="min-h-screen bg-[#f5f7f8] px-5 pb-28 pt-5 text-slate-950 md:rounded-[28px]">
@@ -242,7 +296,7 @@ export function DashboardView({
             onClick={() => setShowNotifications((open) => !open)}
           >
             <Bell className="size-5" />
-            <span className="absolute right-2 top-2 size-2 rounded-full bg-red-600" />
+            {notificationItems.length ? <span className="absolute right-2 top-2 size-2 rounded-full bg-red-600" /> : null}
           </button>
           <div className="grid size-12 place-items-center rounded-full" style={{ backgroundColor: currentProfile.color }}>
             <Logo profile={currentProfile} />
@@ -254,28 +308,28 @@ export function DashboardView({
         <section className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-lg shadow-slate-900/10">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-xl font-black tracking-normal">Notifications</h2>
-            <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-black text-red-700">{notifications.length} nouvelles</span>
+            <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-black text-red-700">{notificationItems.length} nouvelle(s)</span>
           </div>
           <div className="grid gap-3">
-            {notifications.map(([title, detail, date]) => (
+            {notificationItems.length ? notificationItems.map(({ title, description, level }) => (
               <div className="rounded-lg bg-slate-50 p-4" key={title}>
                 <div className="flex items-center justify-between gap-3">
                   <strong className="text-sm">{title}</strong>
-                  <span className="text-[11px] font-bold text-slate-400">{date}</span>
+                  <span className="text-[11px] font-bold text-slate-400">{level}</span>
                 </div>
-                <p className="mt-1 text-sm leading-5 text-slate-600">{detail}</p>
+                <p className="mt-1 text-sm leading-5 text-slate-600">{description}</p>
               </div>
-            ))}
+            )) : <p className="rounded-lg bg-slate-50 p-4 text-sm font-semibold text-slate-500">Aucune notification pour le moment.</p>}
           </div>
         </section>
       ) : null}
 
       <section className="mb-6">
-        <h1 className="text-3xl font-black leading-tight tracking-normal">Bonjour, President</h1>
+        <h1 className="text-3xl font-black leading-tight tracking-normal">Bonjour, {displayUserName(userQuery.data)}</h1>
         <p className="mt-2 text-base font-semibold text-slate-600">{currentProfile.associationName || initialData.workspace.name}</p>
         <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">
           <span className="size-2 rounded-full bg-emerald-500" />
-          Tout est a jour
+          {overview.empty_state ? "Workspace pret" : "Donnees synchronisees"}
         </div>
       </section>
 
@@ -300,7 +354,7 @@ export function DashboardView({
           </span>
           <ChevronRight className="size-5 text-blue-700" />
         </div>
-        <div className="mt-6 text-4xl font-black tracking-normal">{current.balance} {currentProfile.currency}</div>
+        <div className="mt-6 text-4xl font-black tracking-normal">{current.balance}</div>
         <p className="mt-2 text-sm font-bold text-emerald-600">{current.balanceTrend}</p>
         <div className="mt-5 grid grid-cols-2 gap-3">
           <div className="rounded-lg bg-emerald-50 p-3">
@@ -329,7 +383,7 @@ export function DashboardView({
       <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <SectionTitle title="Etat des Cotisations" action="Voir tout" />
         <div className="mb-4 flex justify-end">
-          <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">{current.totalContributions} {currentProfile.currency} Total</span>
+          <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">{current.totalContributions} Total</span>
         </div>
         <div className="grid grid-cols-[120px_minmax(0,1fr)] items-center gap-5">
           <div
@@ -363,34 +417,30 @@ export function DashboardView({
         </div>
       </section>
 
-      <section className="mt-6 rounded-xl border border-red-100 bg-red-50 p-5">
+      {notificationItems.length ? <section className="mt-6 rounded-xl border border-red-100 bg-red-50 p-5">
         <h2 className="flex items-center gap-2 text-xl font-black text-red-700">
           <CircleAlert className="size-6 fill-red-600 text-white" />
           Attention requise
         </h2>
         <div className="mt-4 grid gap-3">
-          {[
-            ["45 membres impayes", "Delai depasse de 15 jours"],
-            ["4 projets a risque", "Budget consomme a plus de 85%"],
-            ["2 justificatifs manquants", "A valider par la tresorerie"]
-          ].map(([title, detail]) => (
+          {notificationItems.map(({ title, description }) => (
             <div className="flex items-center gap-3 rounded-lg border border-red-100 bg-white p-4" key={title}>
               <div className="grid size-12 place-items-center rounded-full bg-red-50 text-red-600">
                 <ShieldCheck className="size-5" />
               </div>
               <div className="min-w-0 flex-1">
                 <strong className="block text-sm">{title}</strong>
-                <span className="text-xs font-medium text-slate-500">{detail}</span>
+                <span className="text-xs font-medium text-slate-500">{description}</span>
               </div>
               <Button className="min-h-9 px-3 text-xs" type="button" variant="outline">Traiter</Button>
             </div>
           ))}
         </div>
-      </section>
+      </section> : null}
 
       <section className="mt-6 grid gap-4">
         <SectionTitle title="Pilotage association" />
-        {steeringItems.map(([title, detail, progress, Icon]) => (
+        {steeringMetrics.map(([title, detail, progress, Icon]) => (
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" key={String(title)}>
             <div className="flex items-center gap-4">
               <div className="grid size-12 place-items-center rounded-lg bg-slate-100">
@@ -412,7 +462,7 @@ export function DashboardView({
       <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <SectionTitle title="Tresorerie" action="Details" />
         <div className="grid gap-4">
-          {treasuryItems.map(([title, value, detail, Icon]) => (
+          {treasuryMetrics.map(([title, value, detail, Icon]) => (
             <div className="flex items-center gap-4 rounded-lg bg-slate-50 p-4" key={String(title)}>
               <div className="grid size-11 place-items-center rounded-md bg-white">
                 <Icon className="size-5 text-blue-700" />
@@ -430,18 +480,18 @@ export function DashboardView({
       <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <SectionTitle title="Activite recente" />
         <div className="grid gap-4">
-          {activities.map(([title, detail, date]) => (
+          {activityItems.length ? activityItems.map(({ title, description, occurred_at }) => (
             <div className="grid grid-cols-[32px_minmax(0,1fr)] gap-3" key={title}>
               <div className="mt-1 grid size-8 place-items-center rounded-full bg-emerald-50 text-emerald-700">
                 <CheckCircle2 className="size-4" />
               </div>
               <div>
                 <strong className="block text-sm">{title}</strong>
-                <p className="mt-1 text-sm leading-5 text-slate-500">{detail}</p>
-                <span className="mt-1 block text-xs font-bold text-slate-400">{date}</span>
+                <p className="mt-1 text-sm leading-5 text-slate-500">{description}</p>
+                <span className="mt-1 block text-xs font-bold text-slate-400">{new Intl.DateTimeFormat("fr-FR").format(new Date(occurred_at))}</span>
               </div>
             </div>
-          ))}
+          )) : <p className="rounded-lg bg-slate-50 p-4 text-sm font-semibold text-slate-500">Aucune activite recente.</p>}
         </div>
       </section>
 

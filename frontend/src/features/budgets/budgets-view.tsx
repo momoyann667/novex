@@ -115,7 +115,7 @@ export function BudgetsView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
         }
       />
 
-      {dashboardQuery.error ? <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">Impossible de charger les budgets. Reessayez.</div> : null}
+      {(dashboardQuery.error as { status?: number } | null)?.status === 503 ? <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">Backend indisponible. Verifiez que Django tourne sur le port 8002.</div> : null}
 
       <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
         <Card className="rounded-md">
@@ -153,7 +153,7 @@ export function BudgetsView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
           <Button type="button" variant="outline" onClick={() => setYear(now.getFullYear())}><RotateCcw className="size-4" /> Reinitialiser</Button>
         </div>
         {budgetsQuery.isLoading ? <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{[1, 2, 3].map((item) => <SkeletonCard key={item} />)}</div> : null}
-        {!budgetsQuery.isLoading && !budgetsQuery.data?.length ? (
+        {!budgetsQuery.isLoading && (!budgetsQuery.data?.length || budgetsQuery.isError) ? (
           <Card className="rounded-md">
             <CardContent className="grid place-items-center p-10 text-center">
               <Landmark className="size-10 text-blue-700" />

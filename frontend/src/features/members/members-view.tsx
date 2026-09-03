@@ -49,16 +49,7 @@ type Member = {
   avatar: string;
 };
 
-const members: Member[] = [
-  { id: "1", number: "NVX-2024-001", name: "Amara Diallo", email: "amara.diallo@example.com", phone: "+225 07 00 00 00 01", function: "President", category: "Bureau", city: "Abidjan", gender: "Homme", joinedAt: "2024-01-15", status: "Actif", contribution: "A jour", lastActivity: "Il y a 2 h", avatar: "bg-[linear-gradient(135deg,#0f172a,#64748b)]" },
-  { id: "2", number: "NVX-2024-014", name: "Jean-Marc Oka", email: "jm.oka@example.com", phone: "+225 05 00 00 00 02", function: "Tresorier", category: "Bureau", city: "Yamoussoukro", gender: "Homme", joinedAt: "2024-03-22", status: "Inactif", contribution: "En retard", lastActivity: "Hier", avatar: "bg-[linear-gradient(135deg,#dbeafe,#334155)]" },
-  { id: "3", number: "NVX-2023-089", name: "Koffi Kouakou", email: "k.kouakou@example.com", phone: "+225 01 00 00 00 03", function: "Secretaire general", category: "Bureau", city: "Bouake", gender: "Homme", joinedAt: "2023-11-04", status: "Actif", contribution: "Partiel", lastActivity: "12 aout", avatar: "bg-[linear-gradient(135deg,#ecfeff,#0f766e)]" },
-  { id: "4", number: "NVX-2025-021", name: "Fatou Diop", email: "f.diop@example.com", phone: "+221 77 000 00 04", function: "Responsable communication", category: "Benevole", city: "Dakar", gender: "Femme", joinedAt: "2025-02-18", status: "Actif", contribution: "A jour", lastActivity: "25 aout", avatar: "bg-[linear-gradient(135deg,#fee2e2,#7c2d12)]" },
-  { id: "5", number: "NVX-2025-048", name: "Awa Traore", email: "awa.traore@example.com", phone: "+225 07 00 00 00 05", function: "Membre", category: "Membres", city: "Abidjan", gender: "Femme", joinedAt: "2025-06-09", status: "Actif", contribution: "Aucune cotisation", lastActivity: "30 aout", avatar: "bg-[linear-gradient(135deg,#fef3c7,#92400e)]" },
-  { id: "6", number: "NVX-2022-032", name: "Serge Nguessan", email: "serge.nguessan@example.com", phone: "+225 05 00 00 00 06", function: "Commissaire aux comptes", category: "Comite", city: "San Pedro", gender: "Homme", joinedAt: "2022-09-30", status: "Inactif", contribution: "En retard", lastActivity: "4 aout", avatar: "bg-[linear-gradient(135deg,#e0e7ff,#312e81)]" },
-  { id: "7", number: "NVX-2021-117", name: "Nadia Bamba", email: "nadia.bamba@example.com", phone: "+225 01 00 00 00 07", function: "Membre", category: "Section", city: "Korhogo", gender: "Femme", joinedAt: "2021-05-12", status: "Suspendu", contribution: "Partiel", lastActivity: "1 aout", avatar: "bg-[linear-gradient(135deg,#fef2f2,#991b1b)]" },
-  { id: "8", number: "NVX-2020-004", name: "Paul Ehouman", email: "paul.ehouman@example.com", phone: "+225 07 00 00 00 08", function: "Ancien membre", category: "Archives", city: "Abidjan", gender: "Homme", joinedAt: "2020-08-18", status: "Archive", contribution: "A jour", lastActivity: "12 juin", avatar: "bg-[linear-gradient(135deg,#f1f5f9,#475569)]" }
-];
+const members: Member[] = [];
 
 const avatarStyles = [
   "bg-[linear-gradient(135deg,#0f172a,#64748b)]",
@@ -477,9 +468,11 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-black text-slate-500">Taux de croissance</p>
           <p className="mt-2 text-2xl font-black text-slate-950">+{summary.growthRate}%</p>
-          <div className="mt-3 flex h-10 items-end gap-1" aria-label="Croissance des membres">
-            {[30, 45, 38, 70, 52, 90, 76].map((height, index) => <span className="w-full rounded-t bg-blue-600" style={{ height: `${height}%` }} key={index} />)}
-          </div>
+          {summary.total ? (
+            <div className="mt-3 flex h-10 items-end gap-1" aria-label="Croissance des membres">
+              {[summary.newMembers, summary.active, summary.total].map((height, index) => <span className="w-full rounded-t bg-blue-600" style={{ height: `${Math.max(8, Math.min(100, height * 10))}%` }} key={index} />)}
+            </div>
+          ) : <p className="mt-3 text-xs font-bold text-slate-500">Aucune evolution a afficher.</p>}
         </div>
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-black text-slate-500">Taux de cotisation</p>

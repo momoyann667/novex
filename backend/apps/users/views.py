@@ -24,3 +24,7 @@ class AuthViewSet(viewsets.GenericViewSet):
         user = serializer.validated_data["user"]
         django_login(request, user)
         return Response(UserSerializer(user).data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["get"], url_path="me", permission_classes=[permissions.IsAuthenticated])
+    def me(self, request):
+        return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)
