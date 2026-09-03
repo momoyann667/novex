@@ -10,7 +10,8 @@ export type PlanResource = {
   price: string | number;
   currency: string;
   billing_period: string;
-  limits: Record<string, number>;
+  limits: Record<string, number | null>;
+  quotas: Array<{ code: string; label: string; limit: number | null; period: string }>;
   entitlements: Record<string, boolean | string>;
 };
 
@@ -30,7 +31,7 @@ export type SubscriptionResource = {
   period_ends_at: string | null;
   days_remaining: number | null;
   trial_progress: number | null;
-  limits: Record<string, number>;
+  limits: Record<string, number | null>;
   entitlements: Record<string, boolean | string>;
 };
 
@@ -59,7 +60,7 @@ export type SubscriptionUsage = {
   key: string;
   label: string;
   used: number;
-  limit: number;
+  limit: number | null;
 };
 
 export type SubscriptionOverview = {

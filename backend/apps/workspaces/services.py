@@ -20,6 +20,7 @@ SYSTEM_ROLES = {
 }
 
 MEMBER_PERMISSIONS = {
+    "workspace.view": "Voir le workspace",
     "members.view": "Voir les membres",
     "members.create": "Creer des membres",
     "members.update": "Modifier les membres",
@@ -36,6 +37,10 @@ MEMBER_PERMISSIONS = {
     "members.invitations.cancel": "Annuler les invitations membres",
     "members.invitations.resend": "Renvoyer les invitations membres",
     "members.onboarding.manage": "Gerer les parametres d'adhesion",
+    "subscriptions.view": "Voir l'abonnement",
+    "subscriptions.manage": "Gerer l'abonnement",
+    "billing.view": "Voir la facturation",
+    "billing.manage": "Gerer la facturation",
 }
 
 ROLE_MEMBER_PERMISSIONS = {

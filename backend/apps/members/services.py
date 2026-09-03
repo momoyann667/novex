@@ -220,6 +220,10 @@ def sync_member_relations(member: Member, *, tags=None, groups=None) -> None:
 
 @transaction.atomic
 def create_member(*, workspace: Workspace, actor, tags=None, groups=None, **data) -> Member:
+    from apps.subscriptions.services import check_subscription_quota
+
+    current_members = Member.objects.filter(workspace=workspace).exclude(status=Member.Status.ARCHIVED).count()
+    check_subscription_quota(workspace, "MAX_MEMBERS", current_usage=current_members)
     if not data.get("membership_number"):
         data["membership_number"] = next_membership_number(workspace)
 

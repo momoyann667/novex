@@ -303,16 +303,15 @@ def admin_plans() -> dict:
     paid_payments = saas_payments_queryset().filter(status=PaymentStatus.SUCCESS)
     rows = []
     for plan in Plan.objects.order_by("id"):
-        catalog = PLAN_CATALOG.get(plan.code, {})
         plan_payments = paid_payments.filter(metadata__plan_code=plan.code)
         rows.append(
             {
                 "id": plan.id,
                 "code": plan.code,
                 "name": plan.name,
-                "price": catalog.get("price", Decimal("0.00")),
-                "currency": catalog.get("currency", "XOF"),
-                "billing_period": catalog.get("billing_period", ""),
+                "price": plan.price,
+                "currency": plan.currency,
+                "billing_period": plan.billing_period,
                 "is_active": plan.is_active,
                 "entitlements": plan.entitlements,
                 "subscriptions": Subscription.objects.filter(plan=plan).count(),

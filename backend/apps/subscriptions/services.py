@@ -19,20 +19,22 @@ from .models import Plan, Subscription
 TRIAL_DAYS = 14
 
 FEATURES = {
-    "MEMBERS": "Gestion des membres",
+    "DASHBOARD": "Dashboard",
+    "MEMBERS_MANAGEMENT": "Gestion des membres",
     "CONTRIBUTIONS_MANAGEMENT": "Cotisations",
     "ONLINE_CONTRIBUTION_PAYMENT": "Paiement en ligne des cotisations",
-    "DONATIONS": "Dons",
-    "PROJECTS": "Projets",
-    "EVENTS": "Evenements",
-    "EXPENSES": "Depenses",
-    "REVENUES": "Recettes",
+    "PROJECTS_MANAGEMENT": "Projets",
+    "EVENTS_MANAGEMENT": "Evenements",
+    "EXPENSES_MANAGEMENT": "Depenses",
+    "REVENUES_MANAGEMENT": "Recettes",
     "DOCUMENTS": "Documents",
-    "REPORTS": "Rapports",
+    "REPORTS_BASIC": "Rapports",
     "ADVANCED_REPORTS": "Rapports avances",
+    "COMMUNICATION": "Communication",
     "AI_ASSISTANT": "Assistant IA",
     "ADVANCED_FINANCE": "Finance avancee",
     "ADVANCED_COMMUNICATION": "Communication avancee",
+    "EXPORTS": "Exports",
 }
 
 PLAN_CATALOG = {
@@ -42,12 +44,17 @@ PLAN_CATALOG = {
         "price": Decimal("0.00"),
         "currency": "XOF",
         "billing_period": "trial",
-        "limits": {"members": 25, "documents_mb": 250, "users": 2},
+        "limits": {"MAX_MEMBERS": 25, "MAX_DOCUMENTS_MB": 250, "MAX_USERS": 2},
         "entitlements": {
-            "MEMBERS": True,
+            "DASHBOARD": True,
+            "MEMBERS_MANAGEMENT": True,
             "CONTRIBUTIONS_MANAGEMENT": True,
+            "REVENUES_MANAGEMENT": True,
+            "EXPENSES_MANAGEMENT": True,
+            "PROJECTS_MANAGEMENT": True,
+            "EVENTS_MANAGEMENT": True,
             "DOCUMENTS": True,
-            "REPORTS": "LIMITED",
+            "REPORTS_BASIC": True,
         },
     },
     Plan.Code.NOVEX_START: {
@@ -56,42 +63,47 @@ PLAN_CATALOG = {
         "price": Decimal("5000.00"),
         "currency": "XOF",
         "billing_period": "month",
-        "limits": {"members": 200, "documents_mb": 5120, "users": 5},
+        "limits": {"MAX_MEMBERS": 200, "MAX_DOCUMENTS_MB": 5120, "MAX_USERS": 5, "MAX_EXPORTS": 20},
         "entitlements": {
-            "MEMBERS": True,
+            "DASHBOARD": True,
+            "MEMBERS_MANAGEMENT": True,
             "CONTRIBUTIONS_MANAGEMENT": True,
-            "DONATIONS": True,
-            "PROJECTS": True,
-            "EVENTS": True,
-            "EXPENSES": True,
-            "REVENUES": True,
+            "PROJECTS_MANAGEMENT": True,
+            "EVENTS_MANAGEMENT": True,
+            "EXPENSES_MANAGEMENT": True,
+            "REVENUES_MANAGEMENT": True,
             "DOCUMENTS": True,
-            "REPORTS": True,
+            "REPORTS_BASIC": True,
+            "COMMUNICATION": True,
+            "AI_ASSISTANT": True,
+            "EXPORTS": True,
             "ONLINE_CONTRIBUTION_PAYMENT": False,
         },
     },
     Plan.Code.NOVEX_PRO: {
         "name": "NOVEX Pro",
         "description": "L'offre complete pour les associations.",
-        "price": Decimal("15000.00"),
+        "price": Decimal("10000.00"),
         "currency": "XOF",
         "billing_period": "month",
-        "limits": {"members": 2000, "documents_mb": 51200, "users": 25},
+        "limits": {"MAX_MEMBERS": 2000, "MAX_DOCUMENTS_MB": 51200, "MAX_USERS": 25, "MAX_EXPORTS": None, "MAX_AI_REQUESTS": None},
         "entitlements": {
-            "MEMBERS": True,
+            "DASHBOARD": True,
+            "MEMBERS_MANAGEMENT": True,
             "CONTRIBUTIONS_MANAGEMENT": True,
             "ONLINE_CONTRIBUTION_PAYMENT": True,
-            "DONATIONS": True,
-            "PROJECTS": True,
-            "EVENTS": True,
-            "EXPENSES": True,
-            "REVENUES": True,
+            "PROJECTS_MANAGEMENT": True,
+            "EVENTS_MANAGEMENT": True,
+            "EXPENSES_MANAGEMENT": True,
+            "REVENUES_MANAGEMENT": True,
             "DOCUMENTS": True,
-            "REPORTS": True,
+            "REPORTS_BASIC": True,
             "ADVANCED_REPORTS": True,
+            "COMMUNICATION": True,
             "AI_ASSISTANT": True,
             "ADVANCED_FINANCE": True,
             "ADVANCED_COMMUNICATION": True,
+            "EXPORTS": True,
         },
     },
 }
@@ -103,23 +115,47 @@ def log_subscription_action(*, workspace: Workspace, actor, action: str, metadat
 
 def catalog_payload(plan_code: str) -> dict:
     plan = PLAN_CATALOG[plan_code]
+    db_plan = Plan.objects.filter(code=plan_code).first()
     return {
         "code": plan_code,
-        "name": plan["name"],
+        "name": db_plan.name if db_plan else plan["name"],
         "description": plan["description"],
-        "price": plan["price"],
-        "currency": plan["currency"],
-        "billing_period": plan["billing_period"],
-        "limits": plan["limits"],
-        "entitlements": plan["entitlements"],
+        "price": db_plan.price if db_plan else plan["price"],
+        "currency": db_plan.currency if db_plan else plan["currency"],
+        "billing_period": db_plan.billing_period if db_plan else plan["billing_period"],
+        "limits": db_plan.limits if db_plan else plan["limits"],
+        "quotas": quota_payload(db_plan.limits if db_plan else plan["limits"]),
+        "entitlements": db_plan.entitlements if db_plan else plan["entitlements"],
     }
+
+
+def quota_payload(limits: dict) -> list[dict]:
+    labels = {
+        "MAX_MEMBERS": "Membres",
+        "MAX_DOCUMENTS_MB": "Stockage documents",
+        "MAX_USERS": "Utilisateurs",
+        "MAX_EXPORTS": "Exports",
+        "MAX_AI_REQUESTS": "Requetes IA",
+    }
+    rows = []
+    for code, limit in limits.items():
+        rows.append({"code": code, "label": labels.get(code, code), "limit": limit, "period": "monthly" if code in {"MAX_EXPORTS", "MAX_AI_REQUESTS"} else "workspace"})
+    return rows
 
 
 def ensure_plan_catalog() -> None:
     for code, payload in PLAN_CATALOG.items():
         Plan.objects.update_or_create(
             code=code,
-            defaults={"name": payload["name"], "limits": payload["limits"], "entitlements": payload["entitlements"], "is_active": True},
+            defaults={
+                "name": payload["name"],
+                "price": payload["price"],
+                "currency": payload["currency"],
+                "billing_period": payload["billing_period"],
+                "limits": payload["limits"],
+                "entitlements": payload["entitlements"],
+                "is_active": True,
+            },
         )
 
 
@@ -158,15 +194,29 @@ def workspace_has_entitlement(workspace: Workspace, entitlement: str) -> bool:
     return active_entitlements(subscription).get(entitlement) is True
 
 
+def quota_limit(workspace: Workspace, quota_code: str):
+    subscription = ensure_workspace_subscription(workspace)
+    catalog = catalog_payload(subscription.plan.code)
+    return catalog["limits"].get(quota_code)
+
+
+def check_subscription_quota(workspace: Workspace, quota_code: str, *, current_usage: int, increment: int = 1) -> None:
+    limit = quota_limit(workspace, quota_code)
+    if limit is None:
+        return
+    if current_usage + increment > int(limit):
+        raise ValueError("Vous avez atteint la limite de votre forfait. Passez a une offre superieure pour continuer.")
+
+
 def subscription_usage(workspace: Workspace, limits: dict) -> list[dict]:
     rows = []
-    if "members" in limits:
-        rows.append({"key": "members", "label": "Membres", "used": Member.objects.filter(workspace=workspace).exclude(status=Member.Status.ARCHIVED).count(), "limit": limits["members"]})
-    if "users" in limits:
-        rows.append({"key": "users", "label": "Utilisateurs", "used": workspace.memberships.filter(status="active").count(), "limit": limits["users"]})
-    if "documents_mb" in limits:
+    if "MAX_MEMBERS" in limits:
+        rows.append({"key": "MAX_MEMBERS", "label": "Membres", "used": Member.objects.filter(workspace=workspace).exclude(status=Member.Status.ARCHIVED).count(), "limit": limits["MAX_MEMBERS"]})
+    if "MAX_USERS" in limits:
+        rows.append({"key": "MAX_USERS", "label": "Utilisateurs", "used": workspace.memberships.filter(status="active").count(), "limit": limits["MAX_USERS"]})
+    if "MAX_DOCUMENTS_MB" in limits:
         total_bytes = Document.objects.filter(workspace=workspace).aggregate(count=Count("id"))["count"] * 0
-        rows.append({"key": "documents_mb", "label": "Documents", "used": total_bytes, "limit": limits["documents_mb"]})
+        rows.append({"key": "MAX_DOCUMENTS_MB", "label": "Documents", "used": total_bytes, "limit": limits["MAX_DOCUMENTS_MB"]})
     return rows
 
 
@@ -369,7 +419,31 @@ def create_subscription_checkout(*, workspace: Workspace, actor, plan_code: str)
     if plan_code not in {Plan.Code.NOVEX_START, Plan.Code.NOVEX_PRO}:
         raise ValueError("Offre invalide.")
     ensure_plan_catalog()
-    plan_payload = PLAN_CATALOG[plan_code]
+    subscription = ensure_workspace_subscription(workspace)
+    if subscription.plan.code == plan_code and subscription.status == Subscription.Status.ACTIVE:
+        raise ValueError("Ce forfait est deja actif.")
+    plan = Plan.objects.get(code=plan_code, is_active=True)
+    plan_payload = catalog_payload(plan_code)
+    existing_payment = (
+        Payment.objects.filter(
+            workspace=workspace,
+            metadata__payment_type="SUBSCRIPTION",
+            metadata__plan_code=plan_code,
+            status__in=[PaymentStatus.PENDING, PaymentStatus.PROCESSING],
+        )
+        .order_by("-created_at")
+        .first()
+    )
+    if existing_payment:
+        log_subscription_action(workspace=workspace, actor=actor, action="subscription.checkout_reused", metadata={"plan": plan_code, "payment_id": existing_payment.id})
+        return {
+            "plan": catalog_payload(plan_code),
+            "payment": serialize_subscription_payment(existing_payment),
+            "status": existing_payment.status,
+            "checkout_url": existing_payment.checkout_url,
+            "online_available": bool(existing_payment.checkout_url),
+            "message": "Paiement d'abonnement deja en attente. Votre forfait sera active apres confirmation.",
+        }
     period_start = timezone.now()
     period_end = period_start + timedelta(days=31)
     provider = get_payment_provider(None)
@@ -379,16 +453,16 @@ def create_subscription_checkout(*, workspace: Workspace, actor, plan_code: str)
         defaults={
             "reference": ensure_subscription_payment_reference(),
             "member": None,
-            "amount": plan_payload["price"],
-            "currency": plan_payload["currency"],
+            "amount": plan.price,
+            "currency": plan.currency,
             "provider": provider.code,
             "payment_method": PaymentMethod.AGGREGATOR,
             "status": PaymentStatus.PENDING,
-            "net_amount": plan_payload["price"],
+            "net_amount": plan.price,
             "metadata": {
                 "payment_type": "SUBSCRIPTION",
                 "plan_code": plan_code,
-                "plan_name": plan_payload["name"],
+                "plan_name": plan.name,
                 "period_start": period_start.date().isoformat(),
                 "period_end": period_end.date().isoformat(),
                 "initialized_by": getattr(actor, "id", None),
@@ -403,7 +477,7 @@ def create_subscription_checkout(*, workspace: Workspace, actor, plan_code: str)
         payment.metadata = {**payment.metadata, "provider_init": result.raw_response}
         payment.save(update_fields=["provider_transaction_id", "checkout_url", "status", "metadata", "updated_at"])
         log_payment_event(payment=payment, actor=actor, event_type=PaymentEventType.INITIALIZED, to_status=payment.status, metadata={"provider": provider.code, "payment_type": "SUBSCRIPTION"})
-    log_subscription_action(workspace=workspace, actor=actor, action="subscription.checkout_requested", metadata={"plan": plan_code, "amount": str(plan_payload["price"])})
+    log_subscription_action(workspace=workspace, actor=actor, action="subscription.checkout_requested", metadata={"plan": plan_code, "amount": str(plan.price)})
     return {
         "plan": catalog_payload(plan_code),
         "payment": serialize_subscription_payment(payment),

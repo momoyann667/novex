@@ -689,6 +689,13 @@ function SubscriptionSection({
                 {features.filter((feature) => plan.entitlements[feature.code]).slice(0, 7).map((feature) => (
                   <div className="flex items-center gap-2" key={`${plan.code}-${feature.code}`}><Check className="size-4 text-emerald-700" /> {feature.label}</div>
                 ))}
+                {plan.quotas.length ? (
+                  <div className="rounded-md bg-slate-50 p-3 text-xs font-bold text-slate-600">
+                    {plan.quotas.slice(0, 3).map((quota) => (
+                      <p key={`${plan.code}-${quota.code}`}>{quota.label}: {quota.limit === null ? "Illimite" : quota.limit.toLocaleString("fr-FR")}</p>
+                    ))}
+                  </div>
+                ) : null}
                 {plan.entitlements.ONLINE_CONTRIBUTION_PAYMENT ? (
                   <div className="flex items-center gap-2 text-emerald-700"><Check className="size-4" /> Paiement en ligne des cotisations</div>
                 ) : (
@@ -733,9 +740,9 @@ function SubscriptionSection({
             const percent = item.limit ? Math.min(100, Math.round((item.used / item.limit) * 100)) : 0;
             return (
               <div className="rounded-md bg-slate-50 p-3" key={item.key}>
-                <div className="flex justify-between text-sm font-black"><span>{item.label}</span><span>{item.used} / {item.limit}</span></div>
-                <div className="mt-2 h-2 rounded-full bg-slate-200"><div className={`h-full rounded-full ${percent >= 100 ? "bg-red-600" : "bg-blue-700"}`} style={{ width: `${percent}%` }} /></div>
-                {percent >= 100 ? <p className="mt-2 text-xs font-bold text-red-700">Limite atteinte. Voir les offres pour continuer.</p> : null}
+                <div className="flex justify-between text-sm font-black"><span>{item.label}</span><span>{item.used} / {item.limit === null ? "Illimite" : item.limit}</span></div>
+                {item.limit === null ? <p className="mt-2 text-xs font-bold text-emerald-700">Quota illimite sur ce forfait.</p> : <div className="mt-2 h-2 rounded-full bg-slate-200"><div className={`h-full rounded-full ${percent >= 100 ? "bg-red-600" : "bg-blue-700"}`} style={{ width: `${percent}%` }} /></div>}
+                {item.limit !== null && percent >= 100 ? <p className="mt-2 text-xs font-bold text-red-700">Limite atteinte. Voir les offres pour continuer.</p> : null}
               </div>
             );
           })}

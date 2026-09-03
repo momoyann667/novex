@@ -14,6 +14,18 @@ class PaymentProvider(Protocol):
     def initialize_payment(self, *, payment) -> "ProviderInitResult":
         ...
 
+    def get_payment_status(self, *, payment) -> str:
+        ...
+
+    def verify_payment(self, *, payment, payload: dict | None = None) -> bool:
+        ...
+
+    def handle_webhook(self, *, payload: dict, signature: str) -> dict:
+        ...
+
+    def refund_payment(self, *, payment, amount=None) -> dict:
+        ...
+
     def validate_webhook(self, *, payload: dict, signature: str) -> bool:
         ...
 
@@ -38,6 +50,18 @@ class ManualPaymentProvider:
     def validate_webhook(self, *, payload: dict, signature: str) -> bool:
         return False
 
+    def get_payment_status(self, *, payment) -> str:
+        return payment.status
+
+    def verify_payment(self, *, payment, payload: dict | None = None) -> bool:
+        return False
+
+    def handle_webhook(self, *, payload: dict, signature: str) -> dict:
+        raise NotImplementedError("Manual payments are not confirmed by webhook.")
+
+    def refund_payment(self, *, payment, amount=None) -> dict:
+        return {"status": "not_configured", "payment": payment.reference, "amount": str(amount or payment.amount)}
+
     def extract_transaction(self, *, payload: dict) -> dict:
         raise NotImplementedError("Manual payments are not confirmed by webhook.")
 
@@ -61,6 +85,25 @@ class EnvironmentHmacProvider:
         body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
         expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
         return hmac.compare_digest(signature, expected)
+
+    def get_payment_status(self, *, payment) -> str:
+        return payment.status
+
+    def verify_payment(self, *, payment, payload: dict | None = None) -> bool:
+        if not payload:
+            return False
+        data = self.extract_transaction(payload=payload)
+        return (
+            data.get("reference") == payment.reference
+            and str(data.get("amount")) == str(payment.amount)
+            and data.get("currency") == payment.currency
+        )
+
+    def handle_webhook(self, *, payload: dict, signature: str) -> dict:
+        return {"signature_valid": self.validate_webhook(payload=payload, signature=signature), "transaction": self.extract_transaction(payload=payload)}
+
+    def refund_payment(self, *, payment, amount=None) -> dict:
+        return {"status": "not_configured", "payment": payment.reference, "amount": str(amount or payment.amount)}
 
     def extract_transaction(self, *, payload: dict) -> dict:
         return {

@@ -13,4 +13,5 @@ class SubscriptionPlanSerializer(serializers.Serializer):
     currency = serializers.CharField()
     billing_period = serializers.CharField()
     limits = serializers.DictField()
+    quotas = serializers.ListField()
     entitlements = serializers.DictField()

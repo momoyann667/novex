@@ -11,6 +11,9 @@ class Plan(models.Model):
 
     code = models.CharField(max_length=32, choices=Code.choices, unique=True)
     name = models.CharField(max_length=120)
+    price = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    currency = models.CharField(max_length=3, default="XOF")
+    billing_period = models.CharField(max_length=24, default="month")
     limits = models.JSONField(default=dict, blank=True)
     entitlements = models.JSONField(default=dict, blank=True)
     is_active = models.BooleanField(default=True)
