@@ -27,6 +27,7 @@ const defaultSettings: WorkspaceSettingsResource = {
   city: "",
   description: "",
   profile: { legal_name: "", address: "", contact_email: "", contact_phone: "", website_url: "" },
+  owner: { id: 0, full_name: "", email: "", phone: "" },
   subscription: null,
   acronym: "",
   registration_number: "",
@@ -148,8 +149,10 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
     enabled: activeSection === "saas-payments"
   });
   const currentUser = currentUserQuery.data;
-  const currentUserName = displayUserName(currentUser);
-  const currentUserEmail = currentUser?.email || "";
+  const workspaceOwnerName = form.owner?.full_name || "";
+  const workspaceOwnerEmail = form.owner?.email || "";
+  const currentUserName = workspaceOwnerName || displayUserName(currentUser);
+  const currentUserEmail = workspaceOwnerEmail || currentUser?.email || "";
   const currentUserAvatar = currentUser?.profile?.avatar || "";
   const currentUserInitials = userInitials(currentUser);
 

@@ -36,6 +36,7 @@ class WorkspaceSettingsSerializer(serializers.ModelSerializer):
     description = serializers.CharField(source="workspace.description", required=False, allow_blank=True)
     profile = OrganizationProfileSerializer(source="workspace.organization_profile", required=False)
     subscription = serializers.SerializerMethodField()
+    owner = serializers.SerializerMethodField()
 
     def to_internal_value(self, data):
         if hasattr(data, "copy"):
@@ -72,6 +73,7 @@ class WorkspaceSettingsSerializer(serializers.ModelSerializer):
             "city",
             "description",
             "profile",
+            "owner",
             "subscription",
             "acronym",
             "registration_number",
@@ -100,7 +102,18 @@ class WorkspaceSettingsSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["workspace_slug", "subscription", "created_at", "updated_at"]
+        read_only_fields = ["workspace_slug", "owner", "subscription", "created_at", "updated_at"]
+
+    def get_owner(self, obj):
+        owner = obj.workspace.owner
+        profile = getattr(owner, "profile", None)
+        full_name = str(profile) if profile and str(profile) else owner.get_full_name() or owner.username or owner.email
+        return {
+            "id": owner.id,
+            "full_name": full_name,
+            "email": owner.email,
+            "phone": owner.phone,
+        }
 
     def get_subscription(self, obj):
         subscription = getattr(obj.workspace, "subscription", None)

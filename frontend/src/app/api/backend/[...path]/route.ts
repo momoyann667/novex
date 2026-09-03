@@ -20,16 +20,26 @@ function csrfTokenFromCookie(cookieHeader: string) {
     ?.slice("csrftoken=".length);
 }
 
+function cookieValue(cookieHeader: string, name: string) {
+  return cookieHeader
+    .split(";")
+    .map((item) => item.trim())
+    .find((item) => item.startsWith(`${name}=`))
+    ?.slice(name.length + 1);
+}
+
 async function proxy(request: Request, context: RouteContext) {
   const path = await resolvePath(context);
   const url = new URL(request.url);
   const targetUrl = `${apiBaseUrl}/${path}/${url.search}`;
   const cookieHeader = request.headers.get("cookie") || "";
   const headers = new Headers();
+  const adminSessionId = path.startsWith("admin/") ? cookieValue(cookieHeader, "novex_admin_sessionid") : "";
+  const forwardedCookie = adminSessionId ? `sessionid=${adminSessionId}` : cookieHeader;
 
   const contentType = request.headers.get("content-type");
   if (contentType) headers.set("Content-Type", contentType);
-  if (cookieHeader) headers.set("Cookie", cookieHeader);
+  if (forwardedCookie) headers.set("Cookie", forwardedCookie);
   if (request.headers.get("x-workspace")) headers.set("X-Workspace", request.headers.get("x-workspace") || "");
 
   const csrfToken = csrfTokenFromCookie(cookieHeader);

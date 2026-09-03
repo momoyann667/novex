@@ -38,6 +38,12 @@ export type WorkspaceSettingsResource = {
     contact_phone: string;
     website_url: string;
   };
+  owner: {
+    id: number;
+    full_name: string;
+    email: string;
+    phone: string;
+  };
   subscription: {
     plan: string;
     plan_name: string;
