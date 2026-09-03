@@ -649,19 +649,19 @@ function SubscriptionSection({
   const isCancelled = subscription.status === "cancelled";
 
   return (
-    <div className="grid gap-5">
-      <div className="rounded-xl bg-slate-950 p-4 text-white">
-        <div className="flex items-start justify-between gap-3">
-          <div>
+    <div className="grid w-full max-w-full gap-5 overflow-hidden">
+      <div className="max-w-full overflow-hidden rounded-xl bg-slate-950 p-4 text-white">
+        <div className="grid gap-3 min-[360px]:grid-cols-[1fr_auto] min-[360px]:items-start">
+          <div className="min-w-0">
             <p className="text-xs font-bold text-slate-300">Offre actuelle</p>
-            <h3 className="mt-1 text-2xl font-black">{subscription.plan_name}</h3>
-            <p className="mt-1 text-sm text-slate-300">{subscription.description}</p>
+            <h3 className="mt-1 break-words text-2xl font-black">{subscription.plan_name}</h3>
+            <p className="mt-1 break-words text-sm leading-5 text-slate-300">{subscription.description}</p>
           </div>
-          <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-950">{statusLabel(subscription.status)}</span>
+          <span className="w-fit rounded-full bg-white px-3 py-1 text-xs font-black text-slate-950">{statusLabel(subscription.status)}</span>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-          <div className="rounded-md bg-white/10 p-3"><p className="text-slate-300">Prix</p><strong>{money(subscription.price, subscription.currency)} / {subscription.billing_period === "month" ? "mois" : "periode"}</strong></div>
-          <div className="rounded-md bg-white/10 p-3"><p className="text-slate-300">Expiration</p><strong>{dateLabel(subscription.period_ends_at)}</strong></div>
+        <div className="mt-4 grid grid-cols-1 gap-3 text-sm min-[380px]:grid-cols-2">
+          <div className="min-w-0 rounded-md bg-white/10 p-3"><p className="text-slate-300">Prix</p><strong className="break-words">{money(subscription.price, subscription.currency)} / {subscription.billing_period === "month" ? "mois" : "periode"}</strong></div>
+          <div className="min-w-0 rounded-md bg-white/10 p-3"><p className="text-slate-300">Expiration</p><strong className="break-words">{dateLabel(subscription.period_ends_at)}</strong></div>
         </div>
         {isTrial ? (
           <div className="mt-4">
@@ -682,30 +682,30 @@ function SubscriptionSection({
         <h3 className="text-lg font-black">Nos offres</h3>
         <div className="mt-3 grid gap-3">
           {plans.map((plan) => (
-            <div className={`rounded-lg border p-4 ${plan.code === subscription.plan ? "border-blue-600 bg-blue-50" : "border-slate-200 bg-white"}`} key={plan.code}>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h4 className="text-lg font-black">{plan.name}</h4>
-                  <p className="mt-1 text-sm font-semibold text-slate-500">{plan.description}</p>
+            <div className={`max-w-full overflow-hidden rounded-lg border p-4 ${plan.code === subscription.plan ? "border-blue-600 bg-blue-50" : "border-slate-200 bg-white"}`} key={plan.code}>
+              <div className="grid gap-2 min-[360px]:grid-cols-[1fr_auto] min-[360px]:items-start">
+                <div className="min-w-0">
+                  <h4 className="break-words text-lg font-black">{plan.name}</h4>
+                  <p className="mt-1 break-words text-sm font-semibold leading-5 text-slate-500">{plan.description}</p>
                 </div>
-                {plan.code === "NOVEX_PRO" ? <span className="rounded-full bg-blue-700 px-2 py-1 text-[10px] font-black text-white">Recommande</span> : null}
+                {plan.code === "NOVEX_PRO" ? <span className="w-fit rounded-full bg-blue-700 px-2 py-1 text-[10px] font-black text-white">Recommande</span> : null}
               </div>
-              <p className="mt-3 text-2xl font-black">{money(plan.price, plan.currency)} <span className="text-xs text-slate-500">/{plan.billing_period === "month" ? "mois" : "14 jours"}</span></p>
+              <p className="mt-3 break-words text-2xl font-black">{money(plan.price, plan.currency)} <span className="text-xs text-slate-500">/{plan.billing_period === "month" ? "mois" : "14 jours"}</span></p>
               <div className="mt-3 grid gap-2 text-sm font-bold">
                 {features.filter((feature) => plan.entitlements[feature.code]).slice(0, 7).map((feature) => (
-                  <div className="flex items-center gap-2" key={`${plan.code}-${feature.code}`}><Check className="size-4 text-emerald-700" /> {feature.label}</div>
+                  <div className="flex min-w-0 items-center gap-2" key={`${plan.code}-${feature.code}`}><Check className="size-4 shrink-0 text-emerald-700" /> <span className="min-w-0 break-words">{feature.label}</span></div>
                 ))}
                 {plan.quotas.length ? (
                   <div className="rounded-md bg-slate-50 p-3 text-xs font-bold text-slate-600">
                     {plan.quotas.slice(0, 3).map((quota) => (
-                      <p key={`${plan.code}-${quota.code}`}>{quota.label}: {quota.limit === null ? "Illimite" : quota.limit.toLocaleString("fr-FR")}</p>
+                      <p className="break-words" key={`${plan.code}-${quota.code}`}>{quota.label}: {quota.limit === null ? "Illimite" : quota.limit.toLocaleString("fr-FR")}</p>
                     ))}
                   </div>
                 ) : null}
                 {plan.entitlements.ONLINE_CONTRIBUTION_PAYMENT ? (
-                  <div className="flex items-center gap-2 text-emerald-700"><Check className="size-4" /> Paiement en ligne des cotisations</div>
+                  <div className="flex min-w-0 items-center gap-2 text-emerald-700"><Check className="size-4 shrink-0" /> <span className="break-words">Paiement en ligne des cotisations</span></div>
                 ) : (
-                  <div className="flex items-center gap-2 text-slate-500"><X className="size-4" /> Paiement en ligne non disponible</div>
+                  <div className="flex min-w-0 items-center gap-2 text-slate-500"><X className="size-4 shrink-0" /> <span className="break-words">Paiement en ligne non disponible</span></div>
                 )}
               </div>
               {plan.code === subscription.plan ? (
@@ -722,20 +722,20 @@ function SubscriptionSection({
 
       <div>
         <h3 className="text-lg font-black">Comparer les offres</h3>
-        <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200 bg-white">
-          <table className="w-full min-w-[560px] text-sm">
-            <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
-              <tr><th className="p-3">Fonctionnalite</th>{plans.map((plan) => <th className="p-3 text-center" key={plan.code}>{plan.name}</th>)}</tr>
-            </thead>
-            <tbody>
-              {features.map((feature) => (
-                <tr className="border-t border-slate-100" key={feature.code}>
-                  <td className="p-3 font-bold">{feature.label}</td>
-                  {plans.map((plan) => <td className="p-3 text-center" key={`${feature.code}-${plan.code}`}>{entitlementValue(plan, feature.code)}</td>)}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="mt-3 grid gap-3">
+          {features.map((feature) => (
+            <div className="max-w-full overflow-hidden rounded-lg border border-slate-200 bg-white p-3" key={feature.code}>
+              <p className="break-words text-sm font-black text-slate-950">{feature.label}</p>
+              <div className="mt-3 grid gap-2">
+                {plans.map((plan) => (
+                  <div className="flex min-w-0 items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2 text-xs font-bold" key={`${feature.code}-${plan.code}`}>
+                    <span className="min-w-0 break-words text-slate-600">{plan.name}</span>
+                    <span className="shrink-0 text-right text-slate-950">{entitlementValue(plan, feature.code)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -759,9 +759,9 @@ function SubscriptionSection({
         <h3 className="text-lg font-black">Historique des paiements</h3>
         <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-white">
           {payments.length ? payments.map((payment) => (
-            <div className="grid grid-cols-[1fr_auto] gap-3 border-b border-slate-100 p-3 text-sm last:border-b-0" key={payment.id}>
-              <div><p className="font-black">{payment.reference}</p><p className="text-xs font-semibold text-slate-500">{dateLabel(payment.date)} - {payment.plan}</p></div>
-              <div className="text-right"><p className="font-black">{money(payment.amount, payment.currency)}</p><p className="text-xs font-semibold text-slate-500">{payment.status}</p></div>
+            <div className="grid gap-2 border-b border-slate-100 p-3 text-sm last:border-b-0 min-[380px]:grid-cols-[1fr_auto]" key={payment.id}>
+              <div className="min-w-0"><p className="break-words font-black">{payment.reference}</p><p className="break-words text-xs font-semibold text-slate-500">{dateLabel(payment.date)} - {payment.plan}</p></div>
+              <div className="min-w-0 min-[380px]:text-right"><p className="break-words font-black">{money(payment.amount, payment.currency)}</p><p className="text-xs font-semibold text-slate-500">{payment.status}</p></div>
             </div>
           )) : <p className="p-4 text-sm font-bold text-slate-500">Aucun paiement d'abonnement enregistre.</p>}
         </div>
