@@ -6,6 +6,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from .models import Profile
+from .otp import OTPError, check_otp_rate_limit, create_registration_otp, verify_registration_otp
 
 User = get_user_model()
 
@@ -96,5 +97,48 @@ class LoginSerializer(serializers.Serializer):
             raise serializers.ValidationError({"credentials": "Email ou mot de passe incorrect."})
         if not user.is_active:
             raise serializers.ValidationError({"credentials": "Ce compte est desactive."})
+        if not user.email_verified_at and not user.is_staff and not user.is_superuser:
+            raise serializers.ValidationError({"otp": "Compte non verifie. Valide le code OTP envoye apres inscription."})
         attrs["user"] = user
         return attrs
+
+
+class OTPRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        email = value.lower()
+        self.user = User.objects.filter(email=email).first()
+        if not self.user:
+            raise serializers.ValidationError("Aucun compte ne correspond a cet email.")
+        return email
+
+    def save(self):
+        try:
+            request = self.context.get("request")
+            if request:
+                check_otp_rate_limit(email=self.user.email, request=request, action="request")
+            return create_registration_otp(self.user)
+        except OTPError as exc:
+            raise serializers.ValidationError({"otp": str(exc)}) from exc
+
+
+class OTPVerifySerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    code = serializers.CharField(min_length=4, max_length=12)
+
+    def validate_email(self, value):
+        email = value.lower()
+        self.user = User.objects.filter(email=email).first()
+        if not self.user:
+            raise serializers.ValidationError("Aucun compte ne correspond a cet email.")
+        return email
+
+    def save(self):
+        try:
+            request = self.context.get("request")
+            if request:
+                check_otp_rate_limit(email=self.user.email, request=request, action="verify")
+            return verify_registration_otp(user=self.user, code=self.validated_data["code"].strip())
+        except OTPError as exc:
+            raise serializers.ValidationError({"code": str(exc)}) from exc

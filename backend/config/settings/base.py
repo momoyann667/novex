@@ -127,6 +127,12 @@ REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 CELERY_BROKER_URL = REDIS_URL
 CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_TIMEZONE = "UTC"
+ZAVUDEV_API_KEY = os.environ.get("ZAVUDEV_API_KEY", "")
+ZAVUDEV_API_URL = os.environ.get("ZAVUDEV_API_URL", "https://api.zavu.dev/v1")
+ZAVUDEV_OTP_CHANNEL = os.environ.get("ZAVUDEV_OTP_CHANNEL", "email")
+ZAVUDEV_OTP_SENDER = os.environ.get("ZAVUDEV_OTP_SENDER", "")
+ZAVUDEV_OTP_EXPIRY_MINUTES = int(os.environ.get("ZAVUDEV_OTP_EXPIRY_MINUTES", "10"))
+ZAVUDEV_OTP_TEST_CODE = os.environ.get("ZAVUDEV_OTP_TEST_CODE", "123456" if DEBUG else "")
 
 LOGGING = {
     "version": 1,
