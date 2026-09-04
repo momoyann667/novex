@@ -15,14 +15,16 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#10131a] text-[#0f172a]">
-      <div className={`fixed inset-0 z-50 grid place-items-center bg-[#0b1020] transition duration-500 ${showSplash ? "opacity-100" : "pointer-events-none opacity-0"}`}>
-        <div className="grid place-items-center gap-5 text-white">
-          <div className="grid size-20 place-items-center rounded-[22px] bg-[#0f7ff2] shadow-2xl shadow-blue-700/30">
-            <Grid2X2 className="size-9" />
-          </div>
-          <div className="text-5xl font-black tracking-normal">NOVEX</div>
-          <div className="h-1.5 w-40 overflow-hidden rounded-full bg-white/15">
-            <div className="h-full w-2/3 rounded-full bg-[#0f7ff2] motion-safe:animate-pulse" />
+      <div className={`fixed inset-0 z-50 overflow-hidden bg-[#07162d] transition duration-700 ${showSplash ? "opacity-100" : "pointer-events-none opacity-0"}`}>
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: "url('/brand/novex-splash.png')" }}
+          aria-hidden="true"
+        />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(255,255,255,0.04),transparent_30%),linear-gradient(180deg,rgba(5,17,37,0.08),rgba(5,17,37,0.24))]" />
+        <div className="absolute inset-x-0 bottom-12 grid place-items-center px-10">
+          <div className="h-1.5 w-full max-w-[220px] overflow-hidden rounded-full bg-white/15 shadow-lg shadow-black/20">
+            <div className="h-full w-2/3 rounded-full bg-[#f57f17] motion-safe:animate-pulse" />
           </div>
         </div>
       </div>
