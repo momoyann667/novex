@@ -4,7 +4,7 @@ import pytest
 from rest_framework.test import APIClient
 
 from apps.audit_logs.models import AuditLog
-from apps.members.models import Member, MemberActivity, MemberInvitation, MembershipApplication, MembershipSettings
+from apps.members.models import Member, MemberActivity, MemberCategory, MemberGroup, MemberInvitation, MembershipApplication, MembershipSettings
 from apps.members.services import accept_invitation, approve_application, create_member_invitation, create_membership_application, decline_invitation, member_seniority, reject_application, review_application, archive_member, create_member, restore_member, update_member
 from apps.workspaces.models import Permission, Role, RolePermission, Workspace, WorkspaceMembership
 
@@ -100,6 +100,40 @@ def test_members_api_create_patch_archive_restore(django_user_model):
     assert patched.data["status"] == Member.Status.INACTIVE
     assert archived.data["status"] == Member.Status.ARCHIVED
     assert restored.data["status"] == Member.Status.ACTIVE
+
+
+@pytest.mark.django_db
+def test_members_api_creates_manual_member_with_type_bureau_function_and_profession(django_user_model):
+    workspace, owner = make_workspace(django_user_model, "bureau")
+    api_client = APIClient()
+    api_client.force_authenticate(owner)
+
+    created = api_client.post(
+        "/api/v1/members/",
+        {
+            "first_name": "Ibrahim",
+            "last_name": "Tangora",
+            "email": "ibrahim@example.com",
+            "phone": "0700000000",
+            "function": "President",
+            "occupation": "Entrepreneur",
+            "join_date": "2026-08-31",
+            "status": Member.Status.ACTIVE,
+            "category_name": "Membre du bureau",
+            "group_names": ["Bureau executif"],
+        },
+        format="json",
+        HTTP_X_WORKSPACE=workspace.slug,
+    )
+
+    assert created.status_code == 201
+    member = Member.objects.get(email="ibrahim@example.com")
+    assert member.category.name == "Membre du bureau"
+    assert member.groups.filter(name="Bureau executif").exists()
+    assert member.function == "President"
+    assert member.occupation == "Entrepreneur"
+    assert MemberCategory.objects.filter(workspace=workspace, name="Membre du bureau").exists()
+    assert MemberGroup.objects.filter(workspace=workspace, name="Bureau executif").exists()
 
 
 @pytest.mark.django_db

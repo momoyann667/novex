@@ -52,6 +52,8 @@ class MemberSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(read_only=True)
     tags = serializers.PrimaryKeyRelatedField(many=True, queryset=MemberTag.objects.none(), required=False)
     groups = serializers.PrimaryKeyRelatedField(many=True, queryset=MemberGroup.objects.none(), required=False)
+    category_name = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=120)
+    group_names = serializers.ListField(child=serializers.CharField(max_length=120), write_only=True, required=False)
 
     class Meta:
         model = Member
@@ -81,10 +83,12 @@ class MemberSerializer(serializers.ModelSerializer):
             "suspended_until",
             "archived_at",
             "category",
+            "category_name",
             "category_detail",
             "tags",
             "tags_detail",
             "groups",
+            "group_names",
             "groups_detail",
             "custom_fields",
             "notes",
@@ -172,6 +176,7 @@ class MemberDirectorySerializer(serializers.ModelSerializer):
             "function",
             "gender",
             "city",
+            "occupation",
             "photo",
             "join_date",
             "status",

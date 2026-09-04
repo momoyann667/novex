@@ -27,7 +27,10 @@ import {
   Users,
   X
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { apiFetch, ApiError } from "@/lib/api/client";
+import { getWorkspaceSettings } from "@/features/workspace/api";
 
 type MemberStatus = "Actif" | "En attente" | "Inactif" | "Suspendu" | "Archive";
 type ContributionStatus = "A jour" | "En retard" | "Partiel" | "Aucune cotisation";
@@ -39,6 +42,7 @@ type Member = {
   email: string;
   phone: string;
   function: string;
+  profession: string;
   category: string;
   city: string;
   gender: string;
@@ -51,6 +55,29 @@ type Member = {
 
 const members: Member[] = [];
 
+type ApiMember = {
+  id: number;
+  membership_number: string;
+  first_name: string;
+  last_name: string;
+  full_name?: string;
+  email: string;
+  phone: string;
+  function: string;
+  occupation: string;
+  city: string;
+  gender: string;
+  join_date: string;
+  status: string;
+  category_detail?: { id: number; name: string } | null;
+  groups_detail?: Array<{ id: number; name: string }>;
+  contribution_status?: string;
+};
+
+type Paginated<T> = {
+  results: T[];
+};
+
 const avatarStyles = [
   "bg-[linear-gradient(135deg,#0f172a,#64748b)]",
   "bg-[linear-gradient(135deg,#dbeafe,#334155)]",
@@ -61,6 +88,78 @@ const avatarStyles = [
 ];
 
 const pageSizeOptions = [20, 50, 100];
+
+const defaultMemberCategories = ["Membre du bureau", "Membre actif", "Membre honoraire", "Membre fondateur", "Membre bienfaiteur"];
+const defaultMemberGroups = ["Bureau executif", "Commission finance", "Commission communication"];
+const defaultMemberFunctions = ["President", "Tresorier", "Secretaire", "Responsable communication"];
+
+const statusToApi: Record<MemberStatus, string> = {
+  Actif: "active",
+  "En attente": "pending",
+  Inactif: "inactive",
+  Suspendu: "suspended",
+  Archive: "archived"
+};
+
+const apiToStatus: Record<string, MemberStatus> = {
+  active: "Actif",
+  pending: "En attente",
+  inactive: "Inactif",
+  suspended: "Suspendu",
+  archived: "Archive"
+};
+
+const apiToContribution: Record<string, ContributionStatus> = {
+  up_to_date: "A jour",
+  overdue: "En retard",
+  partial: "Partiel",
+  pending: "Partiel",
+  none: "Aucune cotisation"
+};
+
+function uniqueStrings(values: string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function stringPreference(source: Record<string, unknown> | undefined, key: string, fallback: string[]) {
+  const value = source?.[key];
+  return Array.isArray(value) ? uniqueStrings(value.filter((item): item is string => typeof item === "string")) : fallback;
+}
+
+function splitName(value: string) {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return { firstName: parts[0] || "", lastName: "" };
+  return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
+}
+
+function mapApiMember(member: ApiMember, index = 0): Member {
+  const name = member.full_name || `${member.first_name} ${member.last_name}`.trim() || "Membre";
+  return {
+    id: String(member.id),
+    number: member.membership_number || `NVX-${String(member.id).padStart(4, "0")}`,
+    name,
+    email: member.email || "",
+    phone: member.phone || "",
+    function: member.function || "Membre",
+    profession: member.occupation || "",
+    category: member.category_detail?.name || "Membres",
+    city: member.city || "",
+    gender: member.gender || "Non precise",
+    joinedAt: member.join_date || new Date().toISOString().slice(0, 10),
+    status: apiToStatus[member.status] || "Actif",
+    contribution: apiToContribution[member.contribution_status || "none"] || "Aucune cotisation",
+    lastActivity: "Base de donnees",
+    avatar: avatarStyles[index % avatarStyles.length]
+  };
+}
+
+async function listMembers(workspaceSlug: string) {
+  const payload = await apiFetch<ApiMember[] | Paginated<ApiMember>>("/members/?ordering=last_name", {
+    headers: { "X-Workspace": workspaceSlug },
+    cache: "no-store"
+  });
+  return ("results" in payload ? payload.results : payload).map(mapApiMember);
+}
 
 function statusClass(status: MemberStatus) {
   return {
@@ -140,11 +239,53 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [quickMember, setQuickMember] = useState<Member | null>(null);
   const [fullName, setFullName] = useState("");
+  const [memberType, setMemberType] = useState("Membre du bureau");
+  const [bureau, setBureau] = useState("");
   const [memberFunction, setMemberFunction] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [profession, setProfession] = useState("");
   const [joinedAt, setJoinedAt] = useState(new Date().toISOString().slice(0, 10));
   const [status, setStatus] = useState<MemberStatus>("Actif");
+  const settingsQuery = useQuery({
+    queryKey: ["workspace-settings", workspaceSlug],
+    queryFn: () => getWorkspaceSettings(workspaceSlug),
+    retry: false
+  });
+  const membersQuery = useQuery({
+    queryKey: ["members", workspaceSlug],
+    queryFn: () => listMembers(workspaceSlug),
+    retry: false
+  });
+  const memberPreferences = settingsQuery.data?.member_preferences;
+  const memberTypeOptions = useMemo(() => uniqueStrings(["Membre du bureau", ...stringPreference(memberPreferences, "categories", defaultMemberCategories)]), [memberPreferences]);
+  const bureauOptions = useMemo(() => stringPreference(memberPreferences, "groups", defaultMemberGroups), [memberPreferences]);
+  const memberFunctionOptions = useMemo(() => stringPreference(memberPreferences, "functions", defaultMemberFunctions), [memberPreferences]);
+  const isBureauMember = memberType.toLowerCase().includes("bureau");
+
+  useEffect(() => {
+    if (membersQuery.data) {
+      setMemberRows(membersQuery.data);
+    }
+  }, [membersQuery.data]);
+
+  useEffect(() => {
+    if (!memberTypeOptions.includes(memberType)) {
+      setMemberType(memberTypeOptions[0] || "Membre du bureau");
+    }
+  }, [memberType, memberTypeOptions]);
+
+  useEffect(() => {
+    if (!bureau && bureauOptions[0]) {
+      setBureau(bureauOptions[0]);
+    }
+  }, [bureau, bureauOptions]);
+
+  useEffect(() => {
+    if (!memberFunction && memberFunctionOptions[0]) {
+      setMemberFunction(memberFunctionOptions[0]);
+    }
+  }, [memberFunction, memberFunctionOptions]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebouncedQuery(query), 350);
@@ -155,8 +296,8 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
     setPage(1);
   }, [debouncedQuery, statusFilter, functionFilter, categoryFilter, cityFilter, datePreset, contributionFilter, sort, pageSize]);
 
-  const functions = useMemo(() => ["Toutes", ...Array.from(new Set(memberRows.map((member) => member.function))).sort()], [memberRows]);
-  const categories = useMemo(() => ["Toutes", ...Array.from(new Set(memberRows.map((member) => member.category))).sort()], [memberRows]);
+  const functions = useMemo(() => ["Toutes", ...Array.from(new Set([...memberFunctionOptions, ...memberRows.map((member) => member.function)])).filter(Boolean).sort()], [memberFunctionOptions, memberRows]);
+  const categories = useMemo(() => ["Toutes", ...Array.from(new Set([...memberTypeOptions, ...memberRows.map((member) => member.category)])).filter(Boolean).sort()], [memberRows, memberTypeOptions]);
   const cities = useMemo(() => ["Toutes", ...Array.from(new Set(memberRows.map((member) => member.city))).sort()], [memberRows]);
 
   const summary = useMemo(() => {
@@ -182,14 +323,14 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
     { label: "Actifs", count: summary.active, apply: () => setStatusFilter("Actif") },
     { label: "Nouveaux", count: summary.newMembers, apply: () => setDatePreset("30 derniers jours") },
     { label: "Cotisations en retard", count: memberRows.filter((member) => member.contribution === "En retard").length, apply: () => setContributionFilter("En retard") },
-    { label: "Bureau", count: memberRows.filter((member) => member.category === "Bureau").length, apply: () => setCategoryFilter("Bureau") }
+    { label: "Bureau", count: memberRows.filter((member) => member.category.toLowerCase().includes("bureau")).length, apply: () => setCategoryFilter("Membre du bureau") }
   ];
 
   const visibleMembers = useMemo(() => {
     const normalizedQuery = debouncedQuery.trim().toLowerCase();
     return memberRows
       .filter((member) => {
-        const haystack = `${member.name} ${member.email} ${member.phone} ${member.number} ${member.function}`.toLowerCase();
+        const haystack = `${member.name} ${member.email} ${member.phone} ${member.number} ${member.function} ${member.profession}`.toLowerCase();
         const matchesQuery = !normalizedQuery || haystack.includes(normalizedQuery);
         const matchesStatus = statusFilter === "Tous" || member.status === statusFilter;
         const matchesFunction = functionFilter === "Toutes" || member.function === functionFilter;
@@ -228,37 +369,50 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
     setSort("name");
   }
 
-  function addMember() {
+  async function addMember() {
     const cleanName = fullName.trim();
     const cleanFunction = memberFunction.trim();
-    if (!cleanName || !cleanFunction) return;
+    const cleanProfession = profession.trim();
+    const cleanType = memberType.trim();
+    const cleanBureau = bureau.trim();
+    if (!cleanName || !cleanType || !cleanProfession || (isBureauMember && (!cleanBureau || !cleanFunction))) return;
 
-    setMemberRows((current) => [
-      {
-        id: `${Date.now()}`,
-        number: `NVX-${new Date().getFullYear()}-${String(current.length + 1).padStart(3, "0")}`,
-        name: cleanName,
-        email: email.trim() || `${cleanName.toLowerCase().replace(/[^a-z0-9]+/g, ".").replace(/^\.+|\.+$/g, "") || "membre"}@example.com`,
-        phone: phone.trim(),
-        function: cleanFunction,
-        category: "Membres",
-        city: "Abidjan",
-        gender: "Non precise",
-        joinedAt,
-        status,
-        contribution: "Aucune cotisation",
-        lastActivity: "Maintenant",
-        avatar: avatarStyles[current.length % avatarStyles.length]
-      },
-      ...current
-    ]);
-    setFullName("");
-    setMemberFunction("");
-    setPhone("");
-    setEmail("");
-    setJoinedAt(new Date().toISOString().slice(0, 10));
-    setStatus("Actif");
-    setShowForm(false);
+    const { firstName, lastName } = splitName(cleanName);
+
+    try {
+      const created = await apiFetch<ApiMember>("/members/", {
+        method: "POST",
+        headers: { "X-Workspace": workspaceSlug },
+        body: JSON.stringify({
+          first_name: firstName,
+          last_name: lastName,
+          email: email.trim(),
+          phone: phone.trim(),
+          function: isBureauMember ? cleanFunction : cleanType,
+          occupation: cleanProfession,
+          join_date: joinedAt,
+          status: statusToApi[status],
+          category_name: cleanType,
+          group_names: isBureauMember ? [cleanBureau] : []
+        })
+      });
+
+      setMemberRows((current) => [mapApiMember(created, current.length), ...current.filter((member) => member.id !== String(created.id))]);
+      setFullName("");
+      setMemberType("Membre du bureau");
+      setBureau(bureauOptions[0] || "");
+      setMemberFunction(memberFunctionOptions[0] || "");
+      setPhone("");
+      setEmail("");
+      setProfession("");
+      setJoinedAt(new Date().toISOString().slice(0, 10));
+      setStatus("Actif");
+      setImportNotice("Membre enregistre dans la base de donnees.");
+      setShowForm(false);
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Impossible d'enregistrer le membre.";
+      setImportNotice(message);
+    }
   }
 
   function changeStatus(memberId: string, nextStatus: MemberStatus) {
@@ -275,8 +429,8 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
   }
 
   function exportMembers() {
-    const header = ["Numero", "Nom et prenoms", "Email", "Telephone", "Role", "Categorie", "Ville", "Date adhesion", "Statut", "Cotisation", "Derniere activite"];
-    const rows = visibleMembers.map((member) => [member.number, member.name, member.email, member.phone, member.function, member.category, member.city, member.joinedAt, member.status, member.contribution, member.lastActivity]);
+    const header = ["Numero", "Nom et prenoms", "Email", "Telephone", "Profession", "Fonction", "Categorie", "Ville", "Date adhesion", "Statut", "Cotisation", "Derniere activite"];
+    const rows = visibleMembers.map((member) => [member.number, member.name, member.email, member.phone, member.profession, member.function, member.category, member.city, member.joinedAt, member.status, member.contribution, member.lastActivity]);
     const csvContent = [header, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -313,6 +467,7 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
             email: emailAddress?.trim() || `${cleanName.toLowerCase().replace(/[^a-z0-9]+/g, ".").replace(/^\.+|\.+$/g, "") || "membre"}@example.com`,
             phone: phoneNumber?.trim() || "",
             function: cleanRole,
+            profession: "",
             category: "Membres",
             city: "Abidjan",
             gender: "Non precise",
@@ -552,6 +707,8 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
       ) : null}
 
       {importNotice ? <p className="mt-3 rounded-md bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">{importNotice}</p> : null}
+      {membersQuery.isLoading ? <p className="mt-3 rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Chargement des membres...</p> : null}
+      {membersQuery.isError ? <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">Impossible de charger les membres pour le moment. Vous pouvez reessayer apres avoir verifie le backend.</p> : null}
 
       <section className="mt-5 grid gap-3 md:hidden">
         {pagedMembers.map((member) => (
@@ -568,6 +725,7 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
                   <span className={`rounded-full px-2 py-1 text-[10px] font-black ${statusClass(member.status)}`}>{member.status}</span>
                   <span className={`rounded-full px-2 py-1 text-[10px] font-black ${contributionClass(member.contribution)}`}>Cotisation: {member.contribution}</span>
                   <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-600">{member.function}</span>
+                  {member.profession ? <span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-black text-blue-700">{member.profession}</span> : null}
                 </div>
               </div>
               <button className="grid size-9 place-items-center rounded-full bg-slate-100" type="button" aria-label="Actions" onClick={() => setQuickMember(member)}>
@@ -605,7 +763,7 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
               </div>
               <div className="min-w-0">
                 <Link className="block truncate font-black hover:text-blue-700" href={`/app/${workspaceSlug}/members/${member.id}`}>{member.name}</Link>
-                <span className="block truncate text-xs text-slate-500">{member.category} - {member.city}</span>
+                <span className="block truncate text-xs text-slate-500">{member.category}{member.profession ? ` - ${member.profession}` : ""}</span>
               </div>
             </div>
             <span className="font-bold text-slate-600">{member.number}</span>
@@ -685,6 +843,7 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
               <p><span className="font-black text-slate-950">Statut:</span> {quickMember.status}</p>
               <p><span className="font-black text-slate-950">Telephone:</span> {quickMember.phone || "Non renseigne"}</p>
               <p><span className="font-black text-slate-950">Email:</span> {quickMember.email || "Non renseigne"}</p>
+              <p><span className="font-black text-slate-950">Profession:</span> {quickMember.profession || "Non renseignee"}</p>
               <p><span className="font-black text-slate-950">Cotisation:</span> {quickMember.contribution}</p>
               <p><span className="font-black text-slate-950">Derniere activite:</span> {quickMember.lastActivity}</p>
               <p><span className="font-black text-slate-950">Adhesion:</span> {formatDate(quickMember.joinedAt)}</p>
@@ -716,19 +875,38 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
                 <input className="min-h-12 rounded-md border border-slate-300 px-3 text-base outline-none" placeholder="Ex: Mariam Kone" value={fullName} onChange={(event) => setFullName(event.target.value)} />
               </label>
               <label className="grid gap-2 text-sm font-bold">
-                Role
-                <select className="min-h-12 rounded-md border border-slate-300 bg-white px-3 text-base outline-none" value={memberFunction} onChange={(event) => setMemberFunction(event.target.value)}>
-                  <option value="">Choisir une fonction</option>
-                  {functions.filter((option) => option !== "Toutes").map((option) => <option key={option}>{option}</option>)}
+                Type de membre
+                <select className="min-h-12 rounded-md border border-slate-300 bg-white px-3 text-base outline-none" value={memberType} onChange={(event) => setMemberType(event.target.value)}>
+                  {memberTypeOptions.map((option) => <option key={option}>{option}</option>)}
                 </select>
               </label>
+              {isBureauMember ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="grid gap-2 text-sm font-bold">
+                    Bureau
+                    <select className="min-h-12 rounded-md border border-slate-300 bg-white px-3 text-base outline-none" value={bureau} onChange={(event) => setBureau(event.target.value)}>
+                      {bureauOptions.map((option) => <option key={option}>{option}</option>)}
+                    </select>
+                  </label>
+                  <label className="grid gap-2 text-sm font-bold">
+                    Fonction
+                    <select className="min-h-12 rounded-md border border-slate-300 bg-white px-3 text-base outline-none" value={memberFunction} onChange={(event) => setMemberFunction(event.target.value)}>
+                      {memberFunctionOptions.map((option) => <option key={option}>{option}</option>)}
+                    </select>
+                  </label>
+                </div>
+              ) : null}
               <label className="grid gap-2 text-sm font-bold">
-                Telephone
+                Numero
                 <input className="min-h-12 rounded-md border border-slate-300 px-3 text-base outline-none" placeholder="+225 07 00 00 00 00" value={phone} onChange={(event) => setPhone(event.target.value)} />
               </label>
               <label className="grid gap-2 text-sm font-bold">
                 Email
                 <input className="min-h-12 rounded-md border border-slate-300 px-3 text-base outline-none" placeholder="membre@example.com" type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+              </label>
+              <label className="grid gap-2 text-sm font-bold">
+                Profession
+                <input className="min-h-12 rounded-md border border-slate-300 px-3 text-base outline-none" placeholder="Ex: Comptable" value={profession} onChange={(event) => setProfession(event.target.value)} required />
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <label className="grid gap-2 text-sm font-bold">
@@ -743,7 +921,7 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
                 </label>
               </div>
             </div>
-            <Button className="mt-6 min-h-12 w-full bg-blue-700 text-white hover:bg-blue-800" disabled={!fullName.trim() || !memberFunction.trim()} type="submit">
+            <Button className="mt-6 min-h-12 w-full bg-blue-700 text-white hover:bg-blue-800" disabled={!fullName.trim() || !memberType.trim() || !profession.trim() || (isBureauMember && (!bureau.trim() || !memberFunction.trim()))} type="submit">
               Enregistrer le membre
             </Button>
           </form>

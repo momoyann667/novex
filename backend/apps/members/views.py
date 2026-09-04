@@ -69,6 +69,26 @@ def current_workspace(request):
     return request.user.workspace_memberships.get(workspace__slug=request.headers.get("X-Workspace"), status="active").workspace
 
 
+def resolve_member_relations(workspace, validated_data):
+    category_name = (validated_data.pop("category_name", "") or "").strip()
+    group_names = [name.strip() for name in validated_data.pop("group_names", []) if name.strip()]
+
+    if category_name and not validated_data.get("category"):
+        category = MemberCategory.objects.filter(workspace=workspace, name__iexact=category_name).first()
+        if not category:
+            category = MemberCategory.objects.create(workspace=workspace, name=category_name)
+        validated_data["category"] = category
+
+    resolved_groups = []
+    for group_name in group_names:
+        group = MemberGroup.objects.filter(workspace=workspace, name__iexact=group_name).first()
+        if not group:
+            group = MemberGroup.objects.create(workspace=workspace, name=group_name)
+        resolved_groups.append(group)
+
+    return resolved_groups or None
+
+
 def member_contribution_label(member):
     return {
         "up_to_date": "A jour",
@@ -140,9 +160,11 @@ class MemberViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        workspace = current_workspace(request)
         tags = serializer.validated_data.pop("tags", None)
         groups = serializer.validated_data.pop("groups", None)
-        member = create_member(workspace=current_workspace(request), actor=request.user, tags=tags, groups=groups, **serializer.validated_data)
+        named_groups = resolve_member_relations(workspace, serializer.validated_data)
+        member = create_member(workspace=workspace, actor=request.user, tags=tags, groups=named_groups or groups, **serializer.validated_data)
         return Response(self.get_serializer(member).data, status=status.HTTP_201_CREATED)
 
     def update(self, request, *args, **kwargs):
@@ -150,8 +172,12 @@ class MemberViewSet(viewsets.ModelViewSet):
         member = self.get_object()
         serializer = self.get_serializer(member, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
+        workspace = current_workspace(request)
         tags = serializer.validated_data.pop("tags", None)
         groups = serializer.validated_data.pop("groups", None)
+        named_groups = resolve_member_relations(workspace, serializer.validated_data)
+        if named_groups is not None:
+            groups = named_groups
         updated = update_member(member=member, actor=request.user, tags=tags, groups=groups, **serializer.validated_data)
         return Response(self.get_serializer(updated).data)
 
