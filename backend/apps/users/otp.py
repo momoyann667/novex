@@ -103,6 +103,8 @@ def _zavu_error_detail(exc: urllib.error.HTTPError) -> str:
 
     if exc.code in {401, 403}:
         return "Zavu refuse la cle API. Verifie ZAVUDEV_API_KEY dans .env.local."
+    if exc.code == 400 and "Channel 'sms' is not available" in message:
+        return "Ton sender Zavu n'a pas le canal SMS actif. Ajoute un numero SMS au sender dans Zavu ou utilise un sender compatible SMS."
     if exc.code == 400 and message:
         return f"Zavu refuse l'envoi OTP: {message}"
     if exc.code == 400:
