@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, Bot, Grid2X2, Loader2, MessageSquarePlus, Paperclip, Send } from "lucide-react";
+import { Bell, Bot, Loader2, MessageSquarePlus, Paperclip, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createAIConversation, listAIConversations, sendAIMessage, type AIConversation, type AIMessage } from "./api";
 
@@ -125,9 +125,9 @@ export function AssistantView({ workspaceSlug }: Readonly<{ workspaceSlug: strin
     <main className="min-h-screen bg-[#f6f8fb] pb-24 text-slate-950 md:rounded-[28px]">
       <header className="sticky top-0 z-10 grid min-h-14 grid-cols-[44px_1fr_44px] items-center border-b border-slate-200 bg-[#f8fafc]/95 px-3 backdrop-blur">
         <button className="grid size-9 place-items-center rounded-full text-slate-700" type="button" aria-label="Menu">
-          <Grid2X2 className="size-4" />
+          <img className="size-6 rounded-md object-cover" src="/brand/novex-favicon.jpg" alt="NOVEX" />
         </button>
-        <strong className="text-center text-xs font-black tracking-normal">NOVEX</strong>
+        <img className="mx-auto h-8 w-24 object-contain" src="/brand/novex-logo.jpg" alt="NOVEX" />
         <button className="grid size-9 place-items-center rounded-full text-slate-700" type="button" aria-label="Notifications">
           <Bell className="size-4" />
         </button>

@@ -51,7 +51,7 @@ export function AdminLogin() {
       <section className="grid min-h-screen grid-cols-[1.1fr_0.9fr]">
         <div className="flex flex-col justify-between bg-slate-950 p-12 text-white">
           <div className="flex items-center gap-3">
-            <div className="grid size-12 place-items-center rounded-md bg-blue-600 text-lg font-black">N</div>
+            <img className="size-12 rounded-md bg-white object-cover" src="/brand/novex-favicon.jpg" alt="NOVEX" />
             <div>
               <strong className="block text-2xl">NOVEX Admin</strong>
               <span className="text-sm font-semibold text-slate-400">Back-office interne</span>
@@ -70,6 +70,7 @@ export function AdminLogin() {
         <div className="flex items-center justify-center bg-slate-100 p-12">
           <form className="w-full max-w-[520px] rounded-xl border border-slate-200 bg-white p-8 shadow-xl" onSubmit={submit}>
             <div>
+              <img className="mb-5 h-auto w-full max-w-[260px] object-contain object-left" src="/brand/novex-logo.jpg" alt="NOVEX - Synchronisation et croissance des associations" />
               <p className="text-sm font-black uppercase tracking-[0.14em] text-blue-700">Connexion admin</p>
               <h2 className="mt-3 text-3xl font-black">Bienvenue sur NOVEX</h2>
               <p className="mt-2 text-sm font-semibold text-slate-500">Connectez-vous avec votre compte administrateur interne.</p>

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Bell, CheckCircle2, Clock3, Copy, FileText, Grid2X2, Link2, Mail, MessageCircle, Search, Send, ShieldCheck, UserCheck, UserPlus, X, XCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bell, CheckCircle2, Clock3, Copy, FileText, Link2, Mail, MessageCircle, Search, Send, ShieldCheck, UserCheck, UserPlus, X, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type ApplicationStatus = "pending" | "under_review" | "approved" | "rejected" | "cancelled" | "expired";
@@ -145,8 +145,8 @@ export function MembershipApplicationsView() {
       <BackButton />
       <header className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Grid2X2 className="size-6" />
-          <strong className="text-sm">NOVEX</strong>
+          <img className="size-8 rounded-md object-cover" src="/brand/novex-favicon.jpg" alt="NOVEX" />
+          <img className="h-8 w-24 object-contain object-left" src="/brand/novex-logo.jpg" alt="NOVEX" />
         </div>
         <button className="grid size-10 place-items-center rounded-full bg-white shadow-sm" type="button" aria-label="Notifications">
           <Bell className="size-5" />
@@ -419,7 +419,7 @@ export function PublicMembershipFormView({ slug }: Readonly<{ slug: string }>) {
       <section className="mx-auto flex min-h-[calc(100vh-48px)] w-full max-w-md flex-col justify-center rounded-2xl bg-white p-6 shadow-2xl">
         <div className="text-center">
           <div className="mx-auto grid size-14 place-items-center rounded-full bg-blue-50 text-blue-700"><ShieldCheck className="size-7" /></div>
-          <h1 className="mt-5 text-4xl font-black tracking-normal">NOVEX</h1>
+          <img className="mx-auto mt-5 h-auto w-full max-w-[240px] object-contain" src="/brand/novex-logo.jpg" alt="NOVEX" />
           <p className="mt-3 text-lg font-bold">Rejoindre l'association</p>
           <p className="mt-2 text-sm font-medium text-slate-500">Formulaire public securise pour {slug}.</p>
         </div>
@@ -458,7 +458,7 @@ export function InvitationAcceptanceView({ token }: Readonly<{ token: string }>)
       <section className="mx-auto flex min-h-[calc(100vh-48px)] w-full max-w-md flex-col justify-center rounded-2xl bg-white p-6 shadow-2xl">
         <div className="text-center">
           <div className="mx-auto grid size-14 place-items-center rounded-full bg-blue-50 text-blue-700"><UserPlus className="size-7" /></div>
-          <h1 className="mt-5 text-4xl font-black tracking-normal">NOVEX</h1>
+          <img className="mx-auto mt-5 h-auto w-full max-w-[240px] object-contain" src="/brand/novex-logo.jpg" alt="NOVEX" />
           <p className="mt-3 text-lg font-bold">Invitation membre</p>
           <p className="mt-2 text-sm font-medium text-slate-500">Association demo vous invite a rejoindre son espace securise.</p>
         </div>

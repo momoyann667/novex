@@ -34,7 +34,7 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
     <div className="grid min-h-screen min-w-[1180px] grid-cols-[280px_minmax(0,1fr)] bg-slate-100 text-slate-950">
       <aside className="sticky top-0 flex h-screen flex-col border-r border-slate-800 bg-slate-950 px-5 py-6 text-white">
         <div className="flex items-center gap-3">
-          <div className="grid size-10 place-items-center rounded-md bg-blue-600 text-sm font-black">N</div>
+          <img className="size-11 rounded-md bg-white object-cover" src="/brand/novex-favicon.jpg" alt="NOVEX" />
           <div>
             <strong className="block text-lg">NOVEX Admin</strong>
             <span className="text-xs font-semibold text-slate-400">Console interne</span>

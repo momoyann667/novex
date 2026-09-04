@@ -12,7 +12,6 @@ import {
   Clock3,
   CreditCard,
   FileText,
-  Grid2X2,
   Landmark,
   Plus,
   Search,
@@ -184,7 +183,7 @@ function Logo({ profile }: Readonly<{ profile: WorkspaceProfile | null }>) {
     return <img alt="" className="size-full rounded-full object-cover" src={profile.logoDataUrl} />;
   }
 
-  return <span className="text-base font-black text-white">N</span>;
+  return <img alt="NOVEX" className="size-full rounded-full object-cover" src="/brand/novex-favicon.jpg" />;
 }
 
 function toneClass(tone: Metric["tone"]) {
@@ -294,8 +293,8 @@ export function DashboardView({
     <main className="min-h-screen bg-[#f5f7f8] px-5 pb-28 pt-5 text-slate-950 md:rounded-[28px]">
       <header className="mb-7 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Grid2X2 className="size-6" />
-          <strong className="text-sm">NOVEX</strong>
+          <img className="size-8 rounded-md object-cover" src="/brand/novex-favicon.jpg" alt="NOVEX" />
+          <img className="h-8 w-24 object-contain object-left" src="/brand/novex-logo.jpg" alt="NOVEX" />
         </div>
         <div className="flex items-center gap-3">
           <button

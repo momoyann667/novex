@@ -89,7 +89,7 @@ export function LoginForm() {
         >
           <div className="rounded-[18px] border border-slate-200 bg-white px-7 py-9 md:px-8">
             <div className="text-center">
-              <div className="text-5xl font-black tracking-normal text-black">NOVEX</div>
+              <img className="mx-auto h-auto w-full max-w-[250px] object-contain" src="/brand/novex-logo.jpg" alt="NOVEX - Synchronisation et croissance des associations" />
               <h1 className="mt-4 text-lg font-medium tracking-normal text-slate-800">Connexion a votre espace securise</h1>
             </div>
 

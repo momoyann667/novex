@@ -7,6 +7,11 @@ export const metadata: Metadata = {
   title: "NOVEX",
   description: "SaaS multi-tenant de gestion des associations.",
   manifest: "/manifest.webmanifest",
+  icons: {
+    icon: "/brand/novex-favicon.jpg",
+    shortcut: "/brand/novex-favicon.jpg",
+    apple: "/brand/novex-favicon.jpg"
+  },
   appleWebApp: {
     capable: true,
     title: "NOVEX",

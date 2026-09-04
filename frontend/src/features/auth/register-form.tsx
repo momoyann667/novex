@@ -125,7 +125,7 @@ export function RegisterForm() {
         >
           <div className="rounded-[18px] border border-slate-200 bg-white px-6 py-7 md:px-7">
             <div className="text-center">
-              <div className="text-5xl font-black tracking-normal text-black">NOVEX</div>
+              <img className="mx-auto h-auto w-full max-w-[250px] object-contain" src="/brand/novex-logo.jpg" alt="NOVEX - Synchronisation et croissance des associations" />
               <h1 className="mt-2 text-2xl font-bold tracking-normal text-slate-800">Creer un compte</h1>
               <p className="mt-2 text-sm text-slate-500">Rejoignez-nous pour gerer votre association.</p>
             </div>
