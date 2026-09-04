@@ -13,8 +13,8 @@ import { currentMemberProfile } from "./current-member-profile";
 type Tab = "profile" | "contributions" | "payments" | "attendance" | "events" | "documents" | "history";
 
 const association = {
-  name: "NOVEX",
-  logoInitial: "N"
+  name: "Association",
+  logoInitial: "A"
 };
 
 const contributions: Array<{ period: string; label: string; due: number; paid: number; remaining: number; status: string; dueDate: string }> = [];

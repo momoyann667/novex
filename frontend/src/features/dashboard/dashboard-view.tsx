@@ -178,12 +178,18 @@ function displayProfile(profile: WorkspaceProfile | null, workspaceName: string)
   };
 }
 
+function initialsFromAssociation(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "A";
+  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
+}
+
 function Logo({ profile }: Readonly<{ profile: WorkspaceProfile | null }>) {
   if (profile?.logoDataUrl) {
     return <img alt="" className="size-full rounded-full object-cover" src={profile.logoDataUrl} />;
   }
 
-  return <img alt="NOVEX" className="size-full rounded-full object-cover" src="/brand/novex-favicon.jpg" />;
+  return <span className="text-base font-black text-white">{initialsFromAssociation(profile?.associationName || "Association")}</span>;
 }
 
 function toneClass(tone: Metric["tone"]) {
