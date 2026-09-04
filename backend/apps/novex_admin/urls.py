@@ -13,6 +13,7 @@ from .views import (
     AdminReportsView,
     AdminSettingsView,
     AdminSubscriptionsView,
+    AdminUserDetailView,
     AdminUsersView,
 )
 
@@ -23,6 +24,7 @@ urlpatterns = [
     path("associations/<int:workspace_id>/suspend/", AdminAssociationSuspendView.as_view(), name="novex-admin-association-suspend"),
     path("associations/<int:workspace_id>/activate/", AdminAssociationActivateView.as_view(), name="novex-admin-association-activate"),
     path("users/", AdminUsersView.as_view(), name="novex-admin-users"),
+    path("users/<int:user_id>/", AdminUserDetailView.as_view(), name="novex-admin-user-detail"),
     path("subscriptions/", AdminSubscriptionsView.as_view(), name="novex-admin-subscriptions"),
     path("payments/", AdminPaymentsView.as_view(), name="novex-admin-payments"),
     path("plans/", AdminPlansView.as_view(), name="novex-admin-plans"),

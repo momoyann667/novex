@@ -6,7 +6,7 @@ from django.core.management import call_command
 from rest_framework.test import APIClient
 
 from apps.audit_logs.models import AuditLog
-from apps.novex_admin.services import ADMIN_PERMISSIONS, admin_dashboard, ensure_admin_rbac, update_association_status
+from apps.novex_admin.services import ADMIN_PERMISSIONS, admin_dashboard, create_admin_user, delete_admin_user, ensure_admin_rbac, update_admin_user, update_association_status
 from apps.payments.models import Payment
 from apps.payments.statuses import PaymentMethod, PaymentStatus
 from apps.subscriptions.models import Plan, Subscription
@@ -148,6 +148,40 @@ def test_admin_can_suspend_and_activate_association_with_audit(admin_user, works
     assert workspace.status == Workspace.Status.ACTIVE
     assert activated["association"]["status"] == Workspace.Status.ACTIVE
     assert AuditLog.objects.filter(workspace=workspace, action="admin.association_activated", metadata__reason="Retour conforme").exists()
+
+
+@pytest.mark.django_db
+def test_admin_can_create_update_and_delete_backoffice_user(admin_user):
+    created = create_admin_user(
+        actor=admin_user,
+        data={"first_name": "Support", "last_name": "NOVEX", "email": "support@novex.local", "phone": "+2250000", "password": "Secret123456", "is_staff": True},
+    )
+    user = User.objects.get(id=created["id"])
+
+    updated = update_admin_user(actor=admin_user, user_id=user.id, data={"first_name": "Finance", "email": "finance@novex.local", "phone": "+2251111"})
+
+    assert created["source"] == "admin"
+    assert created["can_manage"] is True
+    assert updated["name"] == "Finance NOVEX"
+    assert updated["email"] == "finance@novex.local"
+
+    delete_admin_user(actor=admin_user, user_id=user.id)
+
+    assert User.objects.filter(id=user.id).exists() is False
+    assert AuditLog.objects.filter(action="admin.user_deleted", metadata__email="finance@novex.local").exists()
+
+
+@pytest.mark.django_db
+def test_admin_cannot_update_or_delete_application_user(admin_user, workspace, normal_user):
+    listed = User.objects.get(id=normal_user.id)
+
+    with pytest.raises(ValueError, match="application mobile"):
+        update_admin_user(actor=admin_user, user_id=listed.id, data={"first_name": "Bloque"})
+
+    with pytest.raises(ValueError, match="application mobile"):
+        delete_admin_user(actor=admin_user, user_id=listed.id)
+
+    assert User.objects.filter(id=listed.id).exists() is True
 
 
 @pytest.mark.django_db

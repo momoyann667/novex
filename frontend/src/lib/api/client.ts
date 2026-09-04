@@ -54,5 +54,10 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     throw new ApiError(errorMessageFromPayload(payload), response.status, payload?.code);
   }
 
-  return response.json() as Promise<T>;
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }

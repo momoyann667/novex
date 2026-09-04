@@ -15,7 +15,10 @@ import {
   getAdminSubscriptions,
   getAdminUsers,
   activateAdminAssociation,
+  createAdminUser,
+  deleteAdminUser,
   suspendAdminAssociation,
+  updateAdminUser,
   type AdminActivity,
   type AdminAssociation,
   type AdminDashboard,
@@ -24,6 +27,7 @@ import {
   type AdminSection,
   type AdminSubscription,
   type AdminUser,
+  type AdminUserPayload,
   type Paginated
 } from "./api";
 
@@ -153,8 +157,61 @@ function AssociationsSection({ search, setSearch }: Readonly<{ search: string; s
 }
 
 function UsersSection({ search, setSearch }: Readonly<{ search: string; setSearch: (value: string) => void }>) {
-  const query = useQuery({ queryKey: ["novex-admin-users", search], queryFn: () => getAdminUsers({ search }) });
-  return <TablePanel title="Utilisateurs NOVEX" search={search} setSearch={setSearch}>{query.data ? <UserRows data={query.data} /> : <SkeletonRows />}</TablePanel>;
+  const queryClient = useQueryClient();
+  const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [notice, setNotice] = useState("");
+  const query = useQuery({ queryKey: ["novex-admin-users", search], queryFn: () => getAdminUsers({ search, page_size: 50 }) });
+  const createMutation = useMutation({
+    mutationFn: createAdminUser,
+    onSuccess: async () => {
+      setNotice("Utilisateur admin cree.");
+      setShowForm(false);
+      await queryClient.invalidateQueries({ queryKey: ["novex-admin-users"] });
+    }
+  });
+  const updateMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: AdminUserPayload }) => updateAdminUser(id, payload),
+    onSuccess: async () => {
+      setNotice("Utilisateur admin modifie.");
+      setEditingUser(null);
+      await queryClient.invalidateQueries({ queryKey: ["novex-admin-users"] });
+    }
+  });
+  const deleteMutation = useMutation({
+    mutationFn: deleteAdminUser,
+    onSuccess: async () => {
+      setNotice("Utilisateur admin supprime.");
+      await queryClient.invalidateQueries({ queryKey: ["novex-admin-users"] });
+    }
+  });
+
+  return (
+    <div className="grid gap-4">
+      {notice ? <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm font-bold text-emerald-800">{notice}</div> : null}
+      {createMutation.error || updateMutation.error || deleteMutation.error ? <ErrorPanel message="Action impossible. Les utilisateurs venant de l'application mobile sont proteges." /> : null}
+      <div className="flex justify-end">
+        <button className="min-h-10 rounded-md bg-blue-700 px-4 text-sm font-black text-white" type="button" onClick={() => { setEditingUser(null); setShowForm(true); }}>
+          Creer un utilisateur
+        </button>
+      </div>
+      {showForm || editingUser ? (
+        <AdminUserForm
+          key={editingUser?.id || "create-user"}
+          user={editingUser}
+          pending={createMutation.isPending || updateMutation.isPending}
+          onCancel={() => { setShowForm(false); setEditingUser(null); }}
+          onSubmit={(payload) => {
+            if (editingUser) updateMutation.mutate({ id: editingUser.id, payload });
+            else createMutation.mutate(payload);
+          }}
+        />
+      ) : null}
+      <TablePanel title="Utilisateurs NOVEX" search={search} setSearch={setSearch}>
+        {query.data ? <UserRows data={query.data} onEdit={(user) => { setEditingUser(user); setShowForm(false); }} onDelete={(user) => deleteMutation.mutate(user.id)} /> : <SkeletonRows />}
+      </TablePanel>
+    </div>
+  );
 }
 
 function SubscriptionsSection({ search, setSearch }: Readonly<{ search: string; setSearch: (value: string) => void }>) {
@@ -241,13 +298,59 @@ function AssociationRows({ data, onStatusChange }: Readonly<{ data: Paginated<Ad
   );
 }
 
-function UserRows({ data }: Readonly<{ data: Paginated<AdminUser> }>) {
+function UserRows({ data, onEdit, onDelete }: Readonly<{ data: Paginated<AdminUser>; onEdit?: (user: AdminUser) => void; onDelete?: (user: AdminUser) => void }>) {
   return (
-    <table className="w-full min-w-[980px] text-left text-sm">
-      <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><Th>Utilisateur</Th><Th>Email</Th><Th>Statut</Th><Th>Associations</Th><Th>Inscription</Th><Th>Derniere connexion</Th></tr></thead>
-      <tbody>{data.results.map((row) => <tr className="border-t border-slate-100" key={row.id}><Td strong>{row.name}</Td><Td>{row.email}</Td><Td><Badge>{row.status}</Badge></Td><Td>{row.workspaces.map((item) => item.name).join(", ") || "Aucune"}</Td><Td>{dateLabel(row.joined_at)}</Td><Td>{row.last_login ? dateLabel(row.last_login) : "Jamais"}</Td></tr>)}</tbody>
+    <table className="w-full min-w-[1180px] text-left text-sm">
+      <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><Th>Utilisateur</Th><Th>Email</Th><Th>Telephone</Th><Th>Source</Th><Th>Statut</Th><Th>Associations</Th><Th>Inscription</Th><Th>Derniere connexion</Th><Th>Actions</Th></tr></thead>
+      <tbody>{data.results.map((row) => <tr className="border-t border-slate-100" key={row.id}><Td strong>{row.name}</Td><Td>{row.email}</Td><Td>{row.phone || "Non renseigne"}</Td><Td><Badge>{row.source === "application" ? "Application mobile" : "Admin"}</Badge></Td><Td><Badge>{row.status}</Badge></Td><Td>{row.workspaces.map((item) => item.name).join(", ") || "Aucune"}</Td><Td>{dateLabel(row.joined_at)}</Td><Td>{row.last_login ? dateLabel(row.last_login) : "Jamais"}</Td><Td>{row.can_manage ? <div className="flex gap-2"><button className="rounded-md bg-slate-950 px-3 py-2 text-xs font-black text-white" type="button" onClick={() => onEdit?.(row)}>Modifier</button><button className="rounded-md bg-red-600 px-3 py-2 text-xs font-black text-white" type="button" onClick={() => onDelete?.(row)}>Supprimer</button></div> : <span className="text-xs font-black text-slate-400">Protege</span>}</Td></tr>)}</tbody>
     </table>
   );
+}
+
+function AdminUserForm({ user, pending, onSubmit, onCancel }: Readonly<{ user: AdminUser | null; pending: boolean; onSubmit: (payload: AdminUserPayload) => void; onCancel: () => void }>) {
+  const [form, setForm] = useState<AdminUserPayload>({
+    first_name: user?.first_name || "",
+    last_name: user?.last_name || "",
+    email: user?.email || "",
+    phone: user?.phone || "",
+    password: "",
+    is_staff: user?.is_staff ?? true,
+    is_superuser: user?.is_superuser ?? false,
+    is_active: user?.status !== "disabled"
+  });
+
+  function update<K extends keyof AdminUserPayload>(key: K, value: AdminUserPayload[K]) {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-black">{user ? "Modifier l'utilisateur admin" : "Creer un utilisateur admin"}</h2>
+          <p className="mt-1 text-sm font-semibold text-slate-500">Les utilisateurs lies a un workspace application restent en lecture seule.</p>
+        </div>
+        <button className="rounded-md border border-slate-200 px-3 py-2 text-sm font-black" type="button" onClick={onCancel}>Annuler</button>
+      </div>
+      <div className="mt-5 grid grid-cols-4 gap-3">
+        <AdminInput label="Prenom" value={form.first_name} onChange={(value) => update("first_name", value)} />
+        <AdminInput label="Nom" value={form.last_name} onChange={(value) => update("last_name", value)} />
+        <AdminInput label="Email" value={form.email} onChange={(value) => update("email", value)} />
+        <AdminInput label="Telephone" value={form.phone} onChange={(value) => update("phone", value)} />
+        <AdminInput label={user ? "Nouveau mot de passe" : "Mot de passe"} value={form.password || ""} type="password" onChange={(value) => update("password", value)} />
+        <label className="flex min-h-12 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-bold"><input checked={form.is_staff} type="checkbox" onChange={(event) => update("is_staff", event.target.checked)} /> Staff</label>
+        <label className="flex min-h-12 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-bold"><input checked={form.is_superuser} type="checkbox" onChange={(event) => update("is_superuser", event.target.checked)} /> Super-admin</label>
+        <label className="flex min-h-12 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-bold"><input checked={form.is_active} type="checkbox" onChange={(event) => update("is_active", event.target.checked)} /> Actif</label>
+      </div>
+      <button className="mt-5 min-h-11 rounded-md bg-blue-700 px-4 text-sm font-black text-white disabled:opacity-50" type="button" disabled={pending} onClick={() => onSubmit(form)}>
+        {pending ? "Enregistrement..." : user ? "Modifier" : "Creer"}
+      </button>
+    </section>
+  );
+}
+
+function AdminInput({ label, value, type = "text", onChange }: Readonly<{ label: string; value: string; type?: string; onChange: (value: string) => void }>) {
+  return <label className="grid gap-2 text-sm font-black text-slate-700">{label}<input className="h-11 rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-blue-600" type={type} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
 function SubscriptionRows({ data }: Readonly<{ data: Paginated<AdminSubscription> }>) {

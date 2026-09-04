@@ -1,5 +1,5 @@
 from django.shortcuts import get_object_or_404
-from rest_framework import response, views
+from rest_framework import response, status, views
 
 from .permissions import IsNovexAdmin
 from .services import (
@@ -12,6 +12,9 @@ from .services import (
     admin_reports,
     admin_subscriptions,
     admin_users,
+    create_admin_user,
+    delete_admin_user,
+    update_admin_user,
     update_association_status,
 )
 from apps.workspaces.models import Workspace
@@ -52,6 +55,29 @@ class AdminAssociationActivateView(AdminBaseView):
 class AdminUsersView(AdminBaseView):
     def get(self, request):
         return response.Response(admin_users(request.query_params))
+
+    def post(self, request):
+        try:
+            payload = create_admin_user(actor=request.user, data=request.data)
+        except ValueError as exc:
+            return response.Response({"message": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(payload, status=status.HTTP_201_CREATED)
+
+
+class AdminUserDetailView(AdminBaseView):
+    def patch(self, request, user_id):
+        try:
+            payload = update_admin_user(actor=request.user, user_id=user_id, data=request.data)
+        except ValueError as exc:
+            return response.Response({"message": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(payload)
+
+    def delete(self, request, user_id):
+        try:
+            delete_admin_user(actor=request.user, user_id=user_id)
+        except ValueError as exc:
+            return response.Response({"message": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class AdminSubscriptionsView(AdminBaseView):

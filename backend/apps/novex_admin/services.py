@@ -13,6 +13,7 @@ from apps.payments.models import Payment
 from apps.payments.statuses import PaymentStatus
 from apps.subscriptions.models import Plan, Subscription
 from apps.subscriptions.services import PLAN_CATALOG, ensure_plan_catalog
+from apps.users.models import Profile
 from apps.workspaces.models import Permission, Role, RolePermission, Workspace
 
 User = get_user_model()
@@ -168,17 +169,106 @@ def serialize_workspace(workspace: Workspace) -> dict:
 
 def serialize_user(user) -> dict:
     memberships = list(user.workspace_memberships.select_related("workspace", "role").all()[:5])
+    is_application_user = bool(memberships) or user.owned_workspaces.exists()
+    profile = getattr(user, "profile", None)
     return {
         "id": user.id,
-        "name": user.get_full_name() or user.username or user.email,
+        "name": str(profile) if profile and str(profile) else user.get_full_name() or user.username or user.email,
+        "first_name": profile.first_name if profile else user.first_name,
+        "last_name": profile.last_name if profile else user.last_name,
         "email": user.email,
         "username": user.username,
+        "phone": user.phone,
         "status": "active" if user.is_active else "disabled",
         "is_staff": user.is_staff,
+        "is_superuser": user.is_superuser,
+        "source": "application" if is_application_user else "admin",
+        "can_manage": not is_application_user,
         "joined_at": user.date_joined,
         "last_login": user.last_login,
         "workspaces": [{"name": item.workspace.name, "slug": item.workspace.slug, "role": item.role.label} for item in memberships],
     }
+
+
+def normalize_user_payload(data: dict) -> dict:
+    email = (data.get("email") or "").strip().lower()
+    first_name = (data.get("first_name") or data.get("firstName") or "").strip()
+    last_name = (data.get("last_name") or data.get("lastName") or "").strip()
+    phone = (data.get("phone") or "").strip()
+    username = (data.get("username") or email).strip() or email
+    return {"email": email, "username": username, "first_name": first_name, "last_name": last_name, "phone": phone}
+
+
+def ensure_admin_manageable_user(user) -> None:
+    if user.workspace_memberships.exists() or user.owned_workspaces.exists():
+        raise ValueError("Cet utilisateur vient de l'application mobile et ne peut pas etre modifie ou supprime depuis l'admin.")
+
+
+@transaction.atomic
+def create_admin_user(*, actor, data: dict) -> dict:
+    payload = normalize_user_payload(data)
+    password = data.get("password") or ""
+    if not payload["email"]:
+        raise ValueError("Email obligatoire.")
+    if not password:
+        raise ValueError("Mot de passe obligatoire.")
+    if User.objects.filter(email=payload["email"]).exists():
+        raise ValueError("Un utilisateur existe deja avec cet email.")
+    user = User.objects.create_user(
+        username=payload["username"],
+        email=payload["email"],
+        password=password,
+        first_name=payload["first_name"],
+        last_name=payload["last_name"],
+        phone=payload["phone"],
+        is_staff=bool(data.get("is_staff", False)),
+        is_superuser=bool(data.get("is_superuser", False)),
+    )
+    if payload["first_name"] or payload["last_name"]:
+        Profile.objects.get_or_create(user=user, defaults={"first_name": payload["first_name"], "last_name": payload["last_name"]})
+    AuditLog.objects.create(actor=actor, action="admin.user_created", resource="user", resource_id=str(user.id), metadata={"email": user.email})
+    return serialize_user(user)
+
+
+@transaction.atomic
+def update_admin_user(*, actor, user_id: int, data: dict) -> dict:
+    user = User.objects.select_for_update().get(id=user_id)
+    ensure_admin_manageable_user(user)
+    payload = normalize_user_payload(data)
+    if payload["email"] and User.objects.exclude(id=user.id).filter(email=payload["email"]).exists():
+        raise ValueError("Un utilisateur existe deja avec cet email.")
+    for field in ["email", "username", "first_name", "last_name", "phone"]:
+        if payload[field]:
+            setattr(user, field, payload[field])
+    if "is_active" in data:
+        user.is_active = bool(data["is_active"])
+    if "is_staff" in data:
+        user.is_staff = bool(data["is_staff"])
+    if "is_superuser" in data:
+        user.is_superuser = bool(data["is_superuser"])
+    if data.get("password"):
+        user.set_password(data["password"])
+    user.save()
+    if payload["first_name"] or payload["last_name"]:
+        profile, _created = Profile.objects.get_or_create(user=user, defaults={"first_name": payload["first_name"], "last_name": payload["last_name"]})
+        profile.first_name = payload["first_name"] or profile.first_name
+        profile.last_name = payload["last_name"] or profile.last_name
+        profile.save()
+    AuditLog.objects.create(actor=actor, action="admin.user_updated", resource="user", resource_id=str(user.id), metadata={"email": user.email})
+    return serialize_user(user)
+
+
+@transaction.atomic
+def delete_admin_user(*, actor, user_id: int) -> None:
+    user = User.objects.select_for_update().get(id=user_id)
+    ensure_admin_manageable_user(user)
+    if user.id == actor.id:
+        raise ValueError("Vous ne pouvez pas supprimer votre propre compte admin.")
+    if user.is_superuser and User.objects.filter(is_superuser=True, is_active=True).exclude(id=user.id).count() == 0:
+        raise ValueError("Impossible de supprimer le dernier super-admin actif.")
+    email = user.email
+    AuditLog.objects.create(actor=actor, action="admin.user_deleted", resource="user", resource_id=str(user.id), metadata={"email": email})
+    user.delete()
 
 
 def serialize_subscription(subscription: Subscription) -> dict:

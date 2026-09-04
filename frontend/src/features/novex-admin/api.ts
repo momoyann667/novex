@@ -48,13 +48,30 @@ export type AdminAssociation = {
 export type AdminUser = {
   id: number;
   name: string;
+  first_name: string;
+  last_name: string;
   email: string;
   username: string;
+  phone: string;
   status: string;
   is_staff: boolean;
+  is_superuser: boolean;
+  source: "application" | "admin";
+  can_manage: boolean;
   joined_at: string;
   last_login: string | null;
   workspaces: Array<{ name: string; slug: string; role: string }>;
+};
+
+export type AdminUserPayload = {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  password?: string;
+  is_staff: boolean;
+  is_superuser: boolean;
+  is_active?: boolean;
 };
 
 export type AdminSubscription = {
@@ -145,6 +162,26 @@ export function activateAdminAssociation(id: number, reason: string) {
 
 export function getAdminUsers(params: Record<string, string | number | undefined>) {
   return apiFetch<Paginated<AdminUser>>(`/admin/users/${qs(params)}`);
+}
+
+export function createAdminUser(payload: AdminUserPayload) {
+  return apiFetch<AdminUser>("/admin/users/", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateAdminUser(id: number, payload: AdminUserPayload) {
+  return apiFetch<AdminUser>(`/admin/users/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function deleteAdminUser(id: number) {
+  return apiFetch<void>(`/admin/users/${id}/`, {
+    method: "DELETE"
+  });
 }
 
 export function getAdminSubscriptions(params: Record<string, string | number | undefined>) {
