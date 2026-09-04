@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { z } from "zod";
-import { ArrowLeft, ArrowRight, Eye, LockKeyhole, Mail, RotateCcw, ShieldCheck, User } from "lucide-react";
+import { ArrowLeft, ArrowRight, Eye, LockKeyhole, Mail, Phone, RotateCcw, ShieldCheck, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ApiError, apiFetch } from "@/lib/api/client";
 
@@ -14,6 +14,7 @@ const schema = z
   .object({
     fullName: z.string().min(1),
     email: z.string().email(),
+    phone: z.string().min(8),
     password: z.string().min(8).regex(/[A-Za-z]/).regex(/[0-9]/),
     passwordConfirmation: z.string(),
     acceptedTerms: z.boolean().refine(Boolean)
@@ -71,6 +72,7 @@ export function RegisterForm() {
           first_name: firstName,
           last_name: lastName,
           email: values.email,
+          phone: values.phone,
           password: values.password,
           password_confirmation: values.passwordConfirmation,
           accepted_terms: values.acceptedTerms
@@ -80,7 +82,7 @@ export function RegisterForm() {
       if (payload.requires_otp) {
         setOtpEmail(payload.email || values.email);
         setOtpDestination(payload.otp_delivery?.destination || payload.email || values.email);
-        setOtpNotice("Un code de verification vient d'etre envoye. Saisis-le pour activer ton compte.");
+        setOtpNotice("Un code de verification vient d'etre envoye par message. Saisis-le pour activer ton compte.");
         return;
       }
 
@@ -148,7 +150,7 @@ export function RegisterForm() {
                 </div>
                 <h1 className="mt-5 text-2xl font-bold tracking-normal text-slate-800">Verification OTP</h1>
                 <p className="mt-2 text-sm leading-6 text-slate-500">
-                  Entre le code recu sur <span className="font-semibold text-slate-700">{otpDestination || otpEmail}</span>.
+                  Entre le code recu par message sur <span className="font-semibold text-slate-700">{otpDestination || otpEmail}</span>.
                 </p>
               </div>
 
@@ -212,6 +214,14 @@ export function RegisterForm() {
                 <span className="flex min-h-11 items-center gap-3 rounded-md border border-slate-300 px-4 text-slate-500">
                   <Mail className="size-5" />
                   <input className="min-w-0 flex-1 bg-transparent text-sm font-normal outline-none placeholder:text-slate-500" placeholder="contact@association.org" type="email" {...form.register("email")} />
+                </span>
+              </label>
+
+              <label className="grid gap-1.5 text-sm font-bold text-slate-950">
+                Numero de telephone
+                <span className="flex min-h-11 items-center gap-3 rounded-md border border-slate-300 px-4 text-slate-500">
+                  <Phone className="size-5" />
+                  <input className="min-w-0 flex-1 bg-transparent text-sm font-normal outline-none placeholder:text-slate-500" placeholder="+225 07 00 00 00 00" type="tel" {...form.register("phone")} />
                 </span>
               </label>
 

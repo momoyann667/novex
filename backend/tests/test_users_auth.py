@@ -9,7 +9,7 @@ from apps.users.models import Profile, UserOTPVerification
 
 
 @pytest.mark.django_db
-@override_settings(ZAVUDEV_API_KEY="", ZAVUDEV_OTP_TEST_CODE="123456")
+@override_settings(ZAVUDEV_API_KEY="", ZAVUDEV_OTP_CHANNEL="sms", ZAVUDEV_OTP_TEST_CODE="123456")
 def test_register_creates_user_and_profile():
     cache.clear()
     api_client = APIClient()
@@ -19,6 +19,7 @@ def test_register_creates_user_and_profile():
             "first_name": "Jean",
             "last_name": "Dupont",
             "email": "JEAN@example.com",
+            "phone": "+2250700000000",
             "password": "NovexPass123",
             "password_confirmation": "NovexPass123",
             "accepted_terms": True,
@@ -29,8 +30,10 @@ def test_register_creates_user_and_profile():
     assert response.status_code == 201
     assert response.data["email"] == "jean@example.com"
     assert response.data["requires_otp"] is True
-    assert response.data["otp_delivery"]["channel"] == "email"
+    assert response.data["otp_delivery"]["channel"] == "sms"
+    assert response.data["otp_delivery"]["destination"] == "+2250700000000"
     user = get_user_model().objects.get(email="jean@example.com")
+    assert user.phone == "+2250700000000"
     assert user.terms_accepted_at is not None
     assert user.email_verified_at is None
     assert Profile.objects.get(user=user).first_name == "Jean"
@@ -48,6 +51,7 @@ def test_register_rejects_existing_email():
             "first_name": "Jean",
             "last_name": "Dupont",
             "email": "jean@example.com",
+            "phone": "+2250700000000",
             "password": "NovexPass123",
             "password_confirmation": "NovexPass123",
             "accepted_terms": True,
@@ -102,11 +106,11 @@ def test_login_rejects_unverified_user():
 
 
 @pytest.mark.django_db
-@override_settings(ZAVUDEV_API_KEY="", ZAVUDEV_OTP_TEST_CODE="123456")
+@override_settings(ZAVUDEV_API_KEY="", ZAVUDEV_OTP_CHANNEL="sms", ZAVUDEV_OTP_TEST_CODE="123456")
 def test_otp_verify_logs_in_and_marks_email_verified():
     cache.clear()
     api_client = APIClient()
-    user = get_user_model().objects.create_user(username="jean@example.com", email="jean@example.com", password="NovexPass123")
+    user = get_user_model().objects.create_user(username="jean@example.com", email="jean@example.com", phone="+2250700000000", password="NovexPass123")
     api_client.post("/api/v1/auth/otp/request/", {"email": user.email}, format="json")
 
     response = api_client.post(
@@ -125,11 +129,11 @@ def test_otp_verify_logs_in_and_marks_email_verified():
 
 
 @pytest.mark.django_db
-@override_settings(ZAVUDEV_API_KEY="", ZAVUDEV_OTP_TEST_CODE="123456")
+@override_settings(ZAVUDEV_API_KEY="", ZAVUDEV_OTP_CHANNEL="sms", ZAVUDEV_OTP_TEST_CODE="123456")
 def test_otp_request_is_rate_limited():
     cache.clear()
     api_client = APIClient()
-    user = get_user_model().objects.create_user(username="jean@example.com", email="jean@example.com", password="NovexPass123")
+    user = get_user_model().objects.create_user(username="jean@example.com", email="jean@example.com", phone="+2250700000000", password="NovexPass123")
 
     for _ in range(3):
         response = api_client.post("/api/v1/auth/otp/request/", {"email": user.email}, format="json")

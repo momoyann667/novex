@@ -15,7 +15,7 @@ class RegisterSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=120)
     last_name = serializers.CharField(max_length=120)
     email = serializers.EmailField()
-    phone = serializers.CharField(max_length=32, required=False, allow_blank=True)
+    phone = serializers.CharField(max_length=32)
     password = serializers.CharField(write_only=True)
     password_confirmation = serializers.CharField(write_only=True)
     accepted_terms = serializers.BooleanField()
@@ -28,8 +28,12 @@ class RegisterSerializer(serializers.Serializer):
             raise serializers.ValidationError({"password_confirmation": "Les mots de passe ne correspondent pas."})
         if not attrs["accepted_terms"]:
             raise serializers.ValidationError({"accepted_terms": "Vous devez accepter les conditions."})
+        phone = attrs["phone"].strip()
+        if len(phone) < 8:
+            raise serializers.ValidationError({"phone": "Renseigne un numero valide pour recevoir le code OTP par message."})
         validate_password(attrs["password"])
         attrs["email"] = email
+        attrs["phone"] = phone
         return attrs
 
     @transaction.atomic
