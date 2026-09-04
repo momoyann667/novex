@@ -2,6 +2,7 @@ from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.db.models.functions import TruncMonth
 from django.utils import timezone
@@ -58,6 +59,11 @@ def period_bounds(period: str | None) -> tuple:
     if period == "month":
         start = timezone.make_aware(datetime(today.year, today.month, 1))
         return start, now
+    if period == "previous_month":
+        first_day = today.replace(day=1)
+        previous_end = first_day - timedelta(days=1)
+        previous_start = previous_end.replace(day=1)
+        return timezone.make_aware(datetime.combine(previous_start, time.min)), timezone.make_aware(datetime.combine(previous_end, time.max))
     if period == "quarter":
         quarter_month = ((today.month - 1) // 3) * 3 + 1
         start = timezone.make_aware(datetime(today.year, quarter_month, 1))
@@ -65,7 +71,19 @@ def period_bounds(period: str | None) -> tuple:
     if period == "year":
         start = timezone.make_aware(datetime(today.year, 1, 1))
         return start, now
+    if period == "previous_year":
+        start = timezone.make_aware(datetime(today.year - 1, 1, 1))
+        end = timezone.make_aware(datetime(today.year - 1, 12, 31, 23, 59, 59))
+        return start, end
     return now - timedelta(days=30), now
+
+
+def previous_period_bounds(period: str | None) -> tuple:
+    start, end = period_bounds(period)
+    duration = end - start
+    previous_end = start
+    previous_start = start - duration
+    return previous_start, previous_end
 
 
 def filter_by_period(queryset, period: str | None, field: str = "created_at"):
@@ -79,6 +97,55 @@ def saas_payments_queryset():
 
 def money(value) -> Decimal:
     return value or Decimal("0.00")
+
+
+def paid_plan_subscriptions():
+    return Subscription.objects.select_related("plan", "workspace").filter(plan__code__in=[Plan.Code.NOVEX_START, Plan.Code.NOVEX_PRO])
+
+
+def calculate_mrr() -> Decimal:
+    """MRR = somme des prix mensuels des abonnements payants actifs, hors Freemium et hors paiements non confirmes."""
+    ensure_plan_catalog()
+    subscriptions = paid_plan_subscriptions().filter(status=Subscription.Status.ACTIVE)
+    return sum((subscription.plan.price for subscription in subscriptions), Decimal("0.00"))
+
+
+def calculate_arr(mrr: Decimal) -> Decimal:
+    """ARR = MRR annualise sur 12 mois."""
+    return mrr * Decimal("12")
+
+
+def calculate_churn(period: str | None) -> dict:
+    """Churn payant = abonnements payants perdus sur la periode / base payante estimable au debut."""
+    start, end = period_bounds(period)
+    lost = paid_plan_subscriptions().filter(Q(cancelled_at__gte=start, cancelled_at__lte=end) | Q(status=Subscription.Status.EXPIRED, current_period_ends_at__gte=start, current_period_ends_at__lte=end)).count()
+    current_active = paid_plan_subscriptions().filter(status=Subscription.Status.ACTIVE).count()
+    denominator = current_active + lost
+    rate = Decimal(lost * 100) / Decimal(denominator) if denominator else Decimal("0.00")
+    return {"lost": lost, "base": denominator, "rate": round(rate, 2)}
+
+
+def calculate_conversion() -> dict:
+    trials_started = Subscription.objects.filter(trial_started_at__isnull=False).count()
+    start = Subscription.objects.filter(plan__code=Plan.Code.NOVEX_START).count()
+    pro = Subscription.objects.filter(plan__code=Plan.Code.NOVEX_PRO).count()
+    paid = start + pro
+    divisor = Decimal(trials_started or 1)
+    return {
+        "trials_started": trials_started,
+        "paid": paid,
+        "start": start,
+        "pro": pro,
+        "rate": round((Decimal(paid) / divisor) * Decimal("100"), 2),
+        "start_rate": round((Decimal(start) / divisor) * Decimal("100"), 2),
+        "pro_rate": round((Decimal(pro) / divisor) * Decimal("100"), 2),
+    }
+
+
+def growth_rate(current_count: int, previous_count: int) -> Decimal:
+    if previous_count <= 0:
+        return Decimal("100.00") if current_count else Decimal("0.00")
+    return round((Decimal(current_count - previous_count) / Decimal(previous_count)) * Decimal("100"), 2)
 
 
 def serialize_workspace(workspace: Workspace) -> dict:
@@ -170,20 +237,35 @@ def admin_dashboard(period: str | None = "30d") -> dict:
     period_workspaces = filter_by_period(Workspace.objects.all(), period)
     period_users = filter_by_period(User.objects.all(), period, "date_joined")
     period_start, period_end = period_bounds(period)
+    previous_start, previous_end = previous_period_bounds(period)
+    previous_workspaces = Workspace.objects.filter(created_at__gte=previous_start, created_at__lte=previous_end)
+    previous_users = User.objects.filter(date_joined__gte=previous_start, date_joined__lte=previous_end)
     period_subscriptions = Subscription.objects.select_related("plan", "workspace").filter(
         Q(trial_started_at__gte=period_start, trial_started_at__lte=period_end)
         | Q(current_period_started_at__gte=period_start, current_period_started_at__lte=period_end)
     )
+    previous_subscriptions = Subscription.objects.select_related("plan", "workspace").filter(
+        Q(trial_started_at__gte=previous_start, trial_started_at__lte=previous_end)
+        | Q(current_period_started_at__gte=previous_start, current_period_started_at__lte=previous_end)
+    )
     all_saas_payments = saas_payments_queryset()
     period_saas_payments = filter_by_period(all_saas_payments, period)
+    previous_saas_payments = all_saas_payments.filter(created_at__gte=previous_start, created_at__lte=previous_end)
     paid_payments = period_saas_payments.filter(status=PaymentStatus.SUCCESS)
+    previous_paid_revenue = money(previous_saas_payments.filter(status=PaymentStatus.SUCCESS).aggregate(total=Sum("amount"))["total"])
     revenue_by_plan = list(
         paid_payments.values("metadata__plan_name").annotate(total=Sum("amount"), count=Count("id")).order_by("-total")
     )
-    plan_distribution = list(Subscription.objects.values("plan__name").annotate(count=Count("id")).order_by("plan__name"))
+    plan_distribution = list(Subscription.objects.values("plan__name", "plan__code").annotate(count=Count("id")).order_by("plan__name"))
+    status_distribution = list(Subscription.objects.values("status").annotate(count=Count("id")).order_by("status"))
     monthly_associations = list(Workspace.objects.annotate(month=TruncMonth("created_at")).values("month").annotate(new=Count("id")).order_by("month"))[-12:]
     monthly_users = list(User.objects.annotate(month=TruncMonth("date_joined")).values("month").annotate(new=Count("id")).order_by("month"))[-12:]
     monthly_revenue = list(all_saas_payments.filter(status=PaymentStatus.SUCCESS).annotate(month=TruncMonth("created_at")).values("month").annotate(total=Sum("amount")).order_by("month"))[-12:]
+    mrr = calculate_mrr()
+    arr = calculate_arr(mrr)
+    churn = calculate_churn(period)
+    conversion = calculate_conversion()
+    revenue_paid = money(paid_payments.aggregate(total=Sum("amount"))["total"])
     expiring_limit = timezone.now() + timedelta(days=14)
     alerts = []
     failed_count = all_saas_payments.filter(status=PaymentStatus.FAILED).count()
@@ -194,25 +276,55 @@ def admin_dashboard(period: str | None = "30d") -> dict:
         alerts.append({"level": "warning", "title": "Abonnements proches expiration", "description": f"{expiring_count} abonnement(s) arrivent a echeance sous 14 jours."})
     return {
         "period": period,
+        "period_bounds": {"start": period_start, "end": period_end, "previous_start": previous_start, "previous_end": previous_end},
         "kpis": {
             "associations_total": Workspace.objects.count(),
             "associations_active": Workspace.objects.filter(status=Workspace.Status.ACTIVE).count(),
+            "associations_suspended": Workspace.objects.filter(status=Workspace.Status.SUSPENDED).count(),
+            "associations_archived": Workspace.objects.filter(status=Workspace.Status.ARCHIVED).count(),
             "users_total": User.objects.count(),
+            "users_active": User.objects.filter(is_active=True).count(),
+            "users_inactive": User.objects.filter(is_active=False).count(),
+            "users_staff": User.objects.filter(is_staff=True).count(),
             "subscriptions_active": Subscription.objects.filter(status=Subscription.Status.ACTIVE).count(),
-            "revenue_paid": money(paid_payments.aggregate(total=Sum("amount"))["total"]),
+            "subscriptions_trial": Subscription.objects.filter(status=Subscription.Status.TRIAL).count(),
+            "subscriptions_expired": Subscription.objects.filter(status=Subscription.Status.EXPIRED).count(),
+            "subscriptions_cancelled": Subscription.objects.filter(status=Subscription.Status.CANCELLED).count(),
+            "subscriptions_past_due": Subscription.objects.filter(status=Subscription.Status.PAST_DUE).count(),
+            "subscriptions_start": Subscription.objects.filter(plan__code=Plan.Code.NOVEX_START).count(),
+            "subscriptions_pro": Subscription.objects.filter(plan__code=Plan.Code.NOVEX_PRO).count(),
+            "subscriptions_freemium": Subscription.objects.filter(plan__code=Plan.Code.FREEMIUM).count(),
+            "revenue_paid": revenue_paid,
+            "revenue_previous": previous_paid_revenue,
+            "revenue_growth": growth_rate(int(revenue_paid), int(previous_paid_revenue)),
+            "mrr": mrr,
+            "arr": arr,
+            "churn_rate": churn["rate"],
+            "churn_lost": churn["lost"],
+            "conversion_rate": conversion["rate"],
+            "conversion_start_rate": conversion["start_rate"],
+            "conversion_pro_rate": conversion["pro_rate"],
             "currency": "XOF",
             "payments_pending": period_saas_payments.filter(status__in=[PaymentStatus.PENDING, PaymentStatus.PROCESSING]).count(),
             "payments_failed": period_saas_payments.filter(status=PaymentStatus.FAILED).count(),
             "new_subscriptions": period_subscriptions.count(),
             "new_associations": period_workspaces.count(),
             "new_users": period_users.count(),
+            "associations_growth": growth_rate(period_workspaces.count(), previous_workspaces.count()),
+            "users_growth": growth_rate(period_users.count(), previous_users.count()),
+            "subscriptions_growth": growth_rate(period_subscriptions.count(), previous_subscriptions.count()),
         },
         "charts": {
             "associations_growth": monthly_associations,
             "registrations": monthly_users,
             "revenue": monthly_revenue,
             "plan_distribution": plan_distribution,
+            "status_distribution": status_distribution,
             "revenue_by_plan": revenue_by_plan,
+            "mrr": [{"month": row["month"], "total": row["total"]} for row in monthly_revenue],
+            "arr": [{"month": row["month"], "total": money(row["total"]) * Decimal("12")} for row in monthly_revenue],
+            "conversion": conversion,
+            "churn": churn,
         },
         "recent_activity": [
             {
@@ -259,6 +371,25 @@ def admin_association_detail(workspace_id: int) -> dict:
             for item in AuditLog.objects.filter(workspace=workspace).select_related("actor").order_by("-created_at")[:20]
         ],
     }
+
+
+@transaction.atomic
+def update_association_status(*, workspace_id: int, actor, status: str, reason: str = "") -> dict:
+    if status not in {Workspace.Status.ACTIVE, Workspace.Status.SUSPENDED}:
+        raise ValueError("Statut association invalide.")
+    workspace = Workspace.objects.select_for_update().get(id=workspace_id)
+    previous_status = workspace.status
+    workspace.status = status
+    workspace.save(update_fields=["status", "updated_at"])
+    AuditLog.objects.create(
+        workspace=workspace,
+        actor=actor,
+        action="admin.association_activated" if status == Workspace.Status.ACTIVE else "admin.association_suspended",
+        resource="workspace",
+        resource_id=str(workspace.id),
+        metadata={"previous_status": previous_status, "new_status": status, "reason": reason},
+    )
+    return admin_association_detail(workspace.id)
 
 
 def admin_users(params: dict) -> dict:
@@ -357,6 +488,10 @@ def admin_reports(period: str | None = "30d") -> dict:
         "subscriptions": {"active": dashboard["kpis"]["subscriptions_active"], "new": dashboard["kpis"]["new_subscriptions"], "plans": dashboard["charts"]["plan_distribution"]},
         "payments": {
             "paid_revenue": dashboard["kpis"]["revenue_paid"],
+            "mrr": dashboard["kpis"]["mrr"],
+            "arr": dashboard["kpis"]["arr"],
+            "churn_rate": dashboard["kpis"]["churn_rate"],
+            "conversion_rate": dashboard["kpis"]["conversion_rate"],
             "pending": dashboard["kpis"]["payments_pending"],
             "failed": dashboard["kpis"]["payments_failed"],
             "revenue_by_plan": dashboard["charts"]["revenue_by_plan"],

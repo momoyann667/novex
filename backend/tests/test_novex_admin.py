@@ -5,10 +5,11 @@ from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from rest_framework.test import APIClient
 
-from apps.novex_admin.services import ADMIN_PERMISSIONS, ensure_admin_rbac
+from apps.audit_logs.models import AuditLog
+from apps.novex_admin.services import ADMIN_PERMISSIONS, admin_dashboard, ensure_admin_rbac, update_association_status
 from apps.payments.models import Payment
 from apps.payments.statuses import PaymentMethod, PaymentStatus
-from apps.subscriptions.models import Plan
+from apps.subscriptions.models import Plan, Subscription
 from apps.subscriptions.services import ensure_plan_catalog
 from apps.workspaces.models import Permission, Role, Workspace
 from apps.workspaces.services import create_workspace_for_owner
@@ -114,6 +115,39 @@ def test_admin_revenue_uses_only_confirmed_saas_payments(admin_user, workspace):
     assert response.status_code == 200
     assert Decimal(str(response.data["kpis"]["revenue_paid"])) == Decimal("15000.00")
     assert response.data["kpis"]["payments_pending"] == 1
+
+
+@pytest.mark.django_db
+def test_admin_dashboard_calculates_mrr_arr_and_conversion(admin_user, workspace):
+    ensure_plan_catalog()
+    start = Plan.objects.get(code=Plan.Code.NOVEX_START)
+    workspace.subscription.plan = start
+    workspace.subscription.status = Subscription.Status.ACTIVE
+    workspace.subscription.save(update_fields=["plan", "status"])
+
+    dashboard = admin_dashboard("year")
+
+    assert Decimal(str(dashboard["kpis"]["mrr"])) == Decimal("5000.00")
+    assert Decimal(str(dashboard["kpis"]["arr"])) == Decimal("60000.00")
+    assert Decimal(str(dashboard["kpis"]["conversion_rate"])) == Decimal("100.00")
+    assert dashboard["kpis"]["subscriptions_start"] == 1
+
+
+@pytest.mark.django_db
+def test_admin_can_suspend_and_activate_association_with_audit(admin_user, workspace):
+    suspended = update_association_status(workspace_id=workspace.id, actor=admin_user, status=Workspace.Status.SUSPENDED, reason="Test support")
+    workspace.refresh_from_db()
+
+    assert workspace.status == Workspace.Status.SUSPENDED
+    assert suspended["association"]["status"] == Workspace.Status.SUSPENDED
+    assert AuditLog.objects.filter(workspace=workspace, action="admin.association_suspended", metadata__reason="Test support").exists()
+
+    activated = update_association_status(workspace_id=workspace.id, actor=admin_user, status=Workspace.Status.ACTIVE, reason="Retour conforme")
+    workspace.refresh_from_db()
+
+    assert workspace.status == Workspace.Status.ACTIVE
+    assert activated["association"]["status"] == Workspace.Status.ACTIVE
+    assert AuditLog.objects.filter(workspace=workspace, action="admin.association_activated", metadata__reason="Retour conforme").exists()
 
 
 @pytest.mark.django_db

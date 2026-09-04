@@ -12,6 +12,7 @@ from .services import (
     admin_reports,
     admin_subscriptions,
     admin_users,
+    update_association_status,
 )
 from apps.workspaces.models import Workspace
 
@@ -34,6 +35,18 @@ class AdminAssociationDetailView(AdminBaseView):
     def get(self, request, workspace_id):
         get_object_or_404(Workspace, id=workspace_id)
         return response.Response(admin_association_detail(workspace_id))
+
+
+class AdminAssociationSuspendView(AdminBaseView):
+    def post(self, request, workspace_id):
+        payload = update_association_status(workspace_id=workspace_id, actor=request.user, status=Workspace.Status.SUSPENDED, reason=request.data.get("reason", ""))
+        return response.Response(payload)
+
+
+class AdminAssociationActivateView(AdminBaseView):
+    def post(self, request, workspace_id):
+        payload = update_association_status(workspace_id=workspace_id, actor=request.user, status=Workspace.Status.ACTIVE, reason=request.data.get("reason", ""))
+        return response.Response(payload)
 
 
 class AdminUsersView(AdminBaseView):

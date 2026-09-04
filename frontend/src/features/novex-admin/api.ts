@@ -18,8 +18,13 @@ export type AdminDashboard = {
     associations_growth: Array<{ month: string; new: number }>;
     registrations: Array<{ month: string; new: number }>;
     revenue: Array<{ month: string; total: string }>;
-    plan_distribution: Array<{ plan__name: string; count: number }>;
+    plan_distribution: Array<{ plan__name: string; plan__code: string; count: number }>;
+    status_distribution: Array<{ status: string; count: number }>;
     revenue_by_plan: Array<{ metadata__plan_name: string; total: string; count: number }>;
+    mrr: Array<{ month: string; total: string }>;
+    arr: Array<{ month: string; total: string }>;
+    conversion: Record<string, number>;
+    churn: Record<string, number>;
   };
   recent_activity: AdminActivity[];
   recent_associations: AdminAssociation[];
@@ -122,6 +127,20 @@ export function getAdminDashboard(period: string) {
 
 export function getAdminAssociations(params: Record<string, string | number | undefined>) {
   return apiFetch<Paginated<AdminAssociation>>(`/admin/associations/${qs(params)}`);
+}
+
+export function suspendAdminAssociation(id: number, reason: string) {
+  return apiFetch(`/admin/associations/${id}/suspend/`, {
+    method: "POST",
+    body: JSON.stringify({ reason })
+  });
+}
+
+export function activateAdminAssociation(id: number, reason: string) {
+  return apiFetch(`/admin/associations/${id}/activate/`, {
+    method: "POST",
+    body: JSON.stringify({ reason })
+  });
 }
 
 export function getAdminUsers(params: Record<string, string | number | undefined>) {

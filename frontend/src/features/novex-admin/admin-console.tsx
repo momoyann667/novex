@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, Building2, CreditCard, Layers3, RefreshCw, ShieldCheck, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
@@ -14,6 +14,8 @@ import {
   getAdminSettings,
   getAdminSubscriptions,
   getAdminUsers,
+  activateAdminAssociation,
+  suspendAdminAssociation,
   type AdminActivity,
   type AdminAssociation,
   type AdminDashboard,
@@ -29,9 +31,11 @@ const periods = [
   { label: "Aujourd'hui", value: "today" },
   { label: "7 derniers jours", value: "7d" },
   { label: "30 derniers jours", value: "30d" },
-  { label: "Mois", value: "month" },
-  { label: "Trimestre", value: "quarter" },
-  { label: "Annee", value: "year" }
+  { label: "Ce mois", value: "month" },
+  { label: "Mois precedent", value: "previous_month" },
+  { label: "Ce trimestre", value: "quarter" },
+  { label: "Cette annee", value: "year" },
+  { label: "Annee precedente", value: "previous_year" }
 ];
 
 const sectionTitles: Record<AdminSection, string> = {
@@ -94,10 +98,14 @@ function DashboardContent({ data, isLoading }: Readonly<{ data?: AdminDashboard;
         <Kpi title="Utilisateurs" value={kpis.users_total} icon={Users} hint={`${kpis.new_users} nouveaux sur la periode`} />
         <Kpi title="Abonnements actifs" value={kpis.subscriptions_active} icon={Layers3} hint={`${kpis.new_subscriptions} nouveaux`} />
         <Kpi title="Revenus NOVEX encaisses" value={money(kpis.revenue_paid, String(kpis.currency || "XOF"))} icon={CreditCard} hint="Paiements SaaS SUCCESS uniquement" />
+        <Kpi title="MRR" value={money(kpis.mrr, String(kpis.currency || "XOF"))} icon={ArrowUpRight} hint="Abonnements payants actifs" />
+        <Kpi title="ARR" value={money(kpis.arr, String(kpis.currency || "XOF"))} icon={ArrowUpRight} hint="MRR x 12" />
+        <Kpi title="Churn payant" value={`${kpis.churn_rate}%`} icon={ArrowDownRight} hint={`${kpis.churn_lost} perdu(s) sur la periode`} danger={Number(kpis.churn_rate || 0) > 0} />
+        <Kpi title="Conversion Freemium" value={`${kpis.conversion_rate}%`} icon={RefreshCw} hint={`Start ${kpis.conversion_start_rate}% - Pro ${kpis.conversion_pro_rate}%`} />
         <Kpi title="Paiements en attente" value={kpis.payments_pending} icon={RefreshCw} />
         <Kpi title="Paiements echoues" value={kpis.payments_failed} icon={AlertTriangle} danger />
-        <Kpi title="Nouvelles associations" value={kpis.new_associations} icon={ArrowUpRight} />
-        <Kpi title="Croissance utilisateurs" value={kpis.new_users} icon={ArrowDownRight} />
+        <Kpi title="Nouvelles associations" value={kpis.new_associations} icon={ArrowUpRight} hint={`${kpis.associations_growth}% vs periode precedente`} />
+        <Kpi title="Croissance utilisateurs" value={kpis.new_users} icon={ArrowDownRight} hint={`${kpis.users_growth}% vs periode precedente`} />
       </div>
 
       <div className="grid grid-cols-[1.4fr_1fr] gap-5">
@@ -132,8 +140,16 @@ function DashboardContent({ data, isLoading }: Readonly<{ data?: AdminDashboard;
 }
 
 function AssociationsSection({ search, setSearch }: Readonly<{ search: string; setSearch: (value: string) => void }>) {
-  const query = useQuery({ queryKey: ["novex-admin-associations", search], queryFn: () => getAdminAssociations({ search }) });
-  return <TablePanel title="Toutes les associations" search={search} setSearch={setSearch}>{query.data ? <AssociationRows data={query.data} /> : <SkeletonRows />}</TablePanel>;
+  const queryClient = useQueryClient();
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) => (status === "active" ? activateAdminAssociation(id, "Action admin depuis le back-office") : suspendAdminAssociation(id, "Action admin depuis le back-office")),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["novex-admin-associations"] });
+      await queryClient.invalidateQueries({ queryKey: ["novex-admin-dashboard"] });
+    }
+  });
+  const query = useQuery({ queryKey: ["novex-admin-associations", search], queryFn: () => getAdminAssociations({ search, page_size: 50 }) });
+  return <TablePanel title="Toutes les associations" search={search} setSearch={setSearch}>{query.data ? <AssociationRows data={query.data} onStatusChange={(id, status) => statusMutation.mutate({ id, status })} /> : <SkeletonRows />}</TablePanel>;
 }
 
 function UsersSection({ search, setSearch }: Readonly<{ search: string; setSearch: (value: string) => void }>) {
@@ -216,11 +232,11 @@ function AssociationTable({ rows }: Readonly<{ rows: AdminAssociation[] }>) {
   return <TablePanel title="Associations recentes" search="" setSearch={() => undefined}><AssociationRows data={{ results: rows, count: rows.length, page: 1, page_size: rows.length, next: null, previous: null }} /></TablePanel>;
 }
 
-function AssociationRows({ data }: Readonly<{ data: Paginated<AdminAssociation> }>) {
+function AssociationRows({ data, onStatusChange }: Readonly<{ data: Paginated<AdminAssociation>; onStatusChange?: (id: number, status: string) => void }>) {
   return (
     <table className="w-full min-w-[980px] text-left text-sm">
-      <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><Th>Association</Th><Th>Admin</Th><Th>Plan</Th><Th>Statut</Th><Th>Membres</Th><Th>Creee le</Th><Th>Derniere activite</Th></tr></thead>
-      <tbody>{data.results.map((row) => <tr className="border-t border-slate-100" key={row.id}><Td strong>{row.name}</Td><Td>{row.admin}</Td><Td>{row.plan}</Td><Td><Badge>{row.status}</Badge></Td><Td>{row.members}</Td><Td>{dateLabel(row.created_at)}</Td><Td>{row.last_activity ? dateLabel(row.last_activity) : "Non disponible"}</Td></tr>)}</tbody>
+      <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><Th>Association</Th><Th>Admin</Th><Th>Plan</Th><Th>Statut</Th><Th>Membres</Th><Th>Creee le</Th><Th>Derniere activite</Th><Th>Actions</Th></tr></thead>
+      <tbody>{data.results.map((row) => <tr className="border-t border-slate-100" key={row.id}><Td strong>{row.name}</Td><Td>{row.admin}</Td><Td>{row.plan}</Td><Td><Badge>{row.status}</Badge></Td><Td>{row.members}</Td><Td>{dateLabel(row.created_at)}</Td><Td>{row.last_activity ? dateLabel(row.last_activity) : "Non disponible"}</Td><Td>{onStatusChange ? <button className={`rounded-md px-3 py-2 text-xs font-black ${row.status === "suspended" ? "bg-emerald-600 text-white" : "bg-red-600 text-white"}`} type="button" onClick={() => onStatusChange(row.id, row.status === "suspended" ? "active" : "suspended")}>{row.status === "suspended" ? "Reactiver" : "Suspendre"}</button> : "Voir"}</Td></tr>)}</tbody>
     </table>
   );
 }
