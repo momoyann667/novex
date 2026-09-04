@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Bell, CheckCircle2, Clock3, Copy, FileText, Link2, MessageCircle, Search, Send, ShieldCheck, UserCheck, UserPlus, X, XCircle } from "lucide-react";
@@ -322,7 +322,8 @@ export function MemberInvitationsView({ workspaceSlug }: Readonly<{ workspaceSlu
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [manualOpen, setManualOpen] = useState(false);
-  const publicLink = typeof window !== "undefined" ? `${window.location.origin}/join/${workspaceSlug}` : `/join/${workspaceSlug}`;
+  const [browserOrigin, setBrowserOrigin] = useState("");
+  const publicLink = browserOrigin ? `${browserOrigin}/join/${workspaceSlug}` : `/join/${workspaceSlug}`;
 
   const membersQuery = useQuery({ queryKey: ["invitable-members", workspaceSlug], queryFn: () => listMembers(workspaceSlug) });
   const invitationsQuery = useQuery({ queryKey: ["member-invitations", workspaceSlug], queryFn: () => listInvitations(workspaceSlug) });
@@ -332,6 +333,10 @@ export function MemberInvitationsView({ workspaceSlug }: Readonly<{ workspaceSlu
   const acceptedMemberIds = new Set(allInvitations.filter((item) => item.status === "accepted" && item.member).map((item) => item.member as number));
   const pendingMemberIds = new Set(allInvitations.filter((item) => item.status === "pending" && item.member).map((item) => item.member as number));
   const members = (membersQuery.data || []).filter((member) => member.status !== "archived" && !acceptedMemberIds.has(member.id));
+
+  useEffect(() => {
+    setBrowserOrigin(window.location.origin);
+  }, []);
 
   const refreshInvitations = async () => {
     await Promise.all([
