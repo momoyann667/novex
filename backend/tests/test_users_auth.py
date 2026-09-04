@@ -9,7 +9,7 @@ from apps.users.models import Profile, UserOTPVerification
 
 
 @pytest.mark.django_db
-@override_settings(ZAVUDEV_API_KEY="", ZAVUDEV_OTP_CHANNEL="sms", ZAVUDEV_OTP_TEST_CODE="123456")
+@override_settings(ZAVUDEV_API_KEY="", ZAVUDEV_OTP_CHANNEL="sms_oneway", ZAVUDEV_OTP_TEST_CODE="123456")
 def test_register_creates_user_and_profile():
     cache.clear()
     api_client = APIClient()
@@ -30,7 +30,7 @@ def test_register_creates_user_and_profile():
     assert response.status_code == 201
     assert response.data["email"] == "jean@example.com"
     assert response.data["requires_otp"] is True
-    assert response.data["otp_delivery"]["channel"] == "sms"
+    assert response.data["otp_delivery"]["channel"] == "sms_oneway"
     assert response.data["otp_delivery"]["destination"] == "+2250700000000"
     user = get_user_model().objects.get(email="jean@example.com")
     assert user.phone == "+2250700000000"
@@ -106,7 +106,7 @@ def test_login_rejects_unverified_user():
 
 
 @pytest.mark.django_db
-@override_settings(ZAVUDEV_API_KEY="", ZAVUDEV_OTP_CHANNEL="sms", ZAVUDEV_OTP_TEST_CODE="123456")
+@override_settings(ZAVUDEV_API_KEY="", ZAVUDEV_OTP_CHANNEL="sms_oneway", ZAVUDEV_OTP_TEST_CODE="123456")
 def test_otp_verify_logs_in_and_marks_email_verified():
     cache.clear()
     api_client = APIClient()
@@ -129,7 +129,7 @@ def test_otp_verify_logs_in_and_marks_email_verified():
 
 
 @pytest.mark.django_db
-@override_settings(ZAVUDEV_API_KEY="", ZAVUDEV_OTP_CHANNEL="sms", ZAVUDEV_OTP_TEST_CODE="123456")
+@override_settings(ZAVUDEV_API_KEY="", ZAVUDEV_OTP_CHANNEL="sms_oneway", ZAVUDEV_OTP_TEST_CODE="123456")
 def test_otp_request_is_rate_limited():
     cache.clear()
     api_client = APIClient()

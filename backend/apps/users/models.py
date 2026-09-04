@@ -33,6 +33,7 @@ class UserOTPVerification(models.Model):
     class Channel(models.TextChoices):
         EMAIL = "email", "Email"
         SMS = "sms", "SMS"
+        SMS_ONEWAY = "sms_oneway", "SMS one way"
         WHATSAPP = "whatsapp", "WhatsApp"
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="otp_verifications")
