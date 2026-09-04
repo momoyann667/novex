@@ -19,7 +19,7 @@ def test_register_creates_user_and_profile():
             "first_name": "Jean",
             "last_name": "Dupont",
             "email": "JEAN@example.com",
-            "phone": "+2250700000000",
+            "phone": "+225 07 00 00 00 00",
             "password": "NovexPass123",
             "password_confirmation": "NovexPass123",
             "accepted_terms": True,

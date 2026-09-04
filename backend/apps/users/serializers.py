@@ -4,11 +4,19 @@ from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
+import re
 
 from .models import Profile
 from .otp import OTPError, check_otp_rate_limit, create_registration_otp, verify_registration_otp
 
 User = get_user_model()
+
+
+def normalize_phone(value: str) -> str:
+    phone = re.sub(r"[\s().-]+", "", value.strip())
+    if phone.startswith("00"):
+        phone = f"+{phone[2:]}"
+    return phone
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -28,9 +36,9 @@ class RegisterSerializer(serializers.Serializer):
             raise serializers.ValidationError({"password_confirmation": "Les mots de passe ne correspondent pas."})
         if not attrs["accepted_terms"]:
             raise serializers.ValidationError({"accepted_terms": "Vous devez accepter les conditions."})
-        phone = attrs["phone"].strip()
-        if len(phone) < 8:
-            raise serializers.ValidationError({"phone": "Renseigne un numero valide pour recevoir le code OTP par message."})
+        phone = normalize_phone(attrs["phone"])
+        if not re.fullmatch(r"\+[1-9]\d{7,14}", phone):
+            raise serializers.ValidationError({"phone": "Renseigne le numero au format international, exemple +2250700000000."})
         validate_password(attrs["password"])
         attrs["email"] = email
         attrs["phone"] = phone

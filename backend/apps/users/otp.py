@@ -2,8 +2,8 @@ import json
 import secrets
 import urllib.error
 import urllib.request
-from hashlib import sha256
 from datetime import timedelta
+from hashlib import sha256
 
 from django.conf import settings
 from django.core.cache import cache
@@ -76,11 +76,40 @@ def send_zavu_otp(*, destination: str, code: str, channel: str) -> str:
     try:
         with urllib.request.urlopen(request, timeout=8) as response:
             body = json.loads(response.read().decode("utf-8") or "{}")
+    except urllib.error.HTTPError as exc:
+        detail = _zavu_error_detail(exc)
+        raise OTPError(detail) from exc
     except urllib.error.URLError as exc:
         raise OTPError("Impossible d'envoyer le code OTP pour le moment.") from exc
 
     message = body.get("message") if isinstance(body, dict) else None
     return str((message or {}).get("id") or body.get("id") or "")
+
+
+def _zavu_error_detail(exc: urllib.error.HTTPError) -> str:
+    try:
+        raw_body = exc.read().decode("utf-8")
+        payload = json.loads(raw_body) if raw_body else {}
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        payload = {}
+
+    message = ""
+    if isinstance(payload, dict):
+        for key in ("message", "error", "detail"):
+            value = payload.get(key)
+            if isinstance(value, str):
+                message = value
+                break
+
+    if exc.code in {401, 403}:
+        return "Zavu refuse la cle API. Verifie ZAVUDEV_API_KEY dans .env.local."
+    if exc.code == 400 and message:
+        return f"Zavu refuse l'envoi OTP: {message}"
+    if exc.code == 400:
+        return "Zavu refuse l'envoi OTP. Verifie que le numero est au format +2250700000000."
+    if exc.code == 429:
+        return "Trop de demandes OTP cote Zavu. Reessaie dans quelques minutes."
+    return "Impossible d'envoyer le code OTP pour le moment."
 
 
 def create_registration_otp(user):
