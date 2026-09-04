@@ -39,7 +39,9 @@ class WorkspaceSettingsSerializer(serializers.ModelSerializer):
     owner = serializers.SerializerMethodField()
 
     def to_internal_value(self, data):
-        if hasattr(data, "copy"):
+        if hasattr(data, "lists"):
+            data = {key: values[-1] if values else "" for key, values in data.lists()}
+        elif hasattr(data, "copy"):
             data = data.copy()
         for key in [
             "profile",

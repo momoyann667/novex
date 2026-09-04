@@ -2,6 +2,8 @@ import pytest
 
 pytest.importorskip("pytest_django")
 
+import json
+
 from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APIClient
 
@@ -112,7 +114,12 @@ def test_owner_can_upload_workspace_logo_from_settings(api_client, django_user_m
 
     response = api_client.patch(
         f"/api/v1/workspaces/{workspace.slug}/settings/",
-        {"workspace_name": workspace.name, "logo": logo},
+        {
+            "workspace_name": workspace.name,
+            "logo": logo,
+            "money_format": json.dumps({"symbol": "FCFA", "symbol_position": "after", "decimals": 0}),
+            "member_preferences": json.dumps({"categories": ["Membre actif"], "groups": ["Bureau"]}),
+        },
         format="multipart",
         HTTP_X_WORKSPACE=workspace.slug,
     )
@@ -120,6 +127,8 @@ def test_owner_can_upload_workspace_logo_from_settings(api_client, django_user_m
     workspace.refresh_from_db()
     assert response.status_code == 200
     assert workspace.logo.name.startswith("workspace-logos/")
+    assert workspace.settings.money_format["symbol"] == "FCFA"
+    assert workspace.settings.member_preferences["groups"] == ["Bureau"]
     assert response.data["logo"]
 
 
