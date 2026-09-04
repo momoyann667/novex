@@ -434,6 +434,18 @@ def active_invitation_filter(*, workspace: Workspace, email: str = "", phone: st
     return MemberInvitation.objects.filter(filters).filter(identity) if identity else MemberInvitation.objects.none()
 
 
+def active_member_invitation_filter(*, workspace: Workspace, member: Member | None = None, email: str = "", phone: str = ""):
+    queryset = MemberInvitation.objects.filter(workspace=workspace, status=MemberInvitation.Status.PENDING, expires_at__gt=timezone.now())
+    identity = Q()
+    if member:
+        identity |= Q(member=member)
+    if email:
+        identity |= Q(email__iexact=email)
+    if phone:
+        identity |= Q(phone=phone)
+    return queryset.filter(identity) if identity else MemberInvitation.objects.none()
+
+
 @transaction.atomic
 def create_member_invitation(*, workspace: Workspace, actor, **data) -> tuple[MemberInvitation, str, bool]:
     settings = get_membership_settings(workspace)
@@ -441,7 +453,8 @@ def create_member_invitation(*, workspace: Workspace, actor, **data) -> tuple[Me
         raise ValueError("Les invitations sont desactivees pour cette association.")
     email = (data.get("email") or "").lower()
     phone = data.get("phone") or ""
-    existing = active_invitation_filter(workspace=workspace, email=email, phone=phone).first()
+    member = data.get("member")
+    existing = active_member_invitation_filter(workspace=workspace, member=member, email=email, phone=phone).first()
     if existing:
         return existing, "", False
     token = generate_invitation_token()
@@ -482,7 +495,7 @@ def accept_invitation(*, token: str, user=None) -> MemberInvitation:
     linked_user = user if getattr(user, "is_authenticated", False) else None
     if not linked_user and invitation.email:
         linked_user = get_user_model().objects.filter(email__iexact=invitation.email).first()
-    member = find_existing_member(workspace=invitation.workspace, email=invitation.email, phone=invitation.phone)
+    member = invitation.member or find_existing_member(workspace=invitation.workspace, email=invitation.email, phone=invitation.phone)
     if not member:
         member = create_member(
             workspace=invitation.workspace,

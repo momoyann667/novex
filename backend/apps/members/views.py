@@ -504,7 +504,14 @@ class MemberInvitationViewSet(viewsets.ModelViewSet):
         status_filter = self.request.query_params.get("status")
         if status_filter:
             queryset = queryset.filter(status=status_filter)
+        if self.request.query_params.get("exclude_accepted") == "true":
+            queryset = queryset.exclude(status=MemberInvitation.Status.ACCEPTED)
         return queryset.distinct()
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["workspace"] = current_workspace(self.request)
+        return context
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)

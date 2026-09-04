@@ -215,6 +215,37 @@ def test_self_payable_contributions_are_limited_to_linked_member(django_user_mod
 
 
 @pytest.mark.django_db
+def test_self_payable_contributions_keep_partial_and_hide_paid(django_user_model):
+    owner = django_user_model.objects.create_user(username="self-partial@example.com", email="self-partial@example.com", password="pass")
+    workspace = Workspace.objects.create(name="Association Partial", slug="association-partial", organization_type="association", owner=owner)
+    member = Member.objects.create(workspace=workspace, linked_user=owner, membership_number="A-000033", first_name="Nadia", last_name="Kone")
+    partial_campaign = create_campaign(workspace=workspace, actor=owner, name="Cotisation Septembre", amount=Decimal("10000.00"))
+    paid_campaign = create_campaign(workspace=workspace, actor=owner, name="Cotisation Aout", amount=Decimal("10000.00"))
+    partial = Contribution.objects.create(
+        workspace=workspace,
+        campaign=partial_campaign,
+        member=member,
+        amount_due=Decimal("10000.00"),
+        amount_paid=Decimal("4000.00"),
+        status=ContributionStatus.PARTIALLY_PAID,
+    )
+    paid = Contribution.objects.create(
+        workspace=workspace,
+        campaign=paid_campaign,
+        member=member,
+        amount_due=Decimal("10000.00"),
+        amount_paid=Decimal("10000.00"),
+        status=ContributionStatus.PAID,
+    )
+
+    payload = payable_contributions_for_member(workspace=workspace, user=owner)
+
+    assert [item.id for item in payload["contributions"]] == [partial.id]
+    assert paid.id not in [item.id for item in payload["contributions"]]
+    assert payload["contributions"][0].remaining_amount == Decimal("6000.00")
+
+
+@pytest.mark.django_db
 def test_donation_payment_keeps_project_relation_and_filters_cancelled_projects(django_user_model):
     owner = django_user_model.objects.create_user(username="donor@example.com", email="donor@example.com", password="pass")
     workspace = Workspace.objects.create(name="Association Donation", slug="association-donation", organization_type="association", owner=owner)

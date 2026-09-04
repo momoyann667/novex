@@ -335,9 +335,12 @@ class PublicMembershipApplicationSerializer(MembershipApplicationSerializer):
 
 
 class MemberInvitationSerializer(serializers.ModelSerializer):
+    first_name = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    last_name = serializers.CharField(max_length=120, required=False, allow_blank=True)
     invitee_name = serializers.CharField(source="__str__", read_only=True)
     invited_by_name = serializers.CharField(source="invited_by.__str__", read_only=True)
     accept_url = serializers.SerializerMethodField()
+    member_id = serializers.IntegerField(write_only=True, required=False)
 
     class Meta:
         model = MemberInvitation
@@ -345,6 +348,7 @@ class MemberInvitationSerializer(serializers.ModelSerializer):
             "id",
             "workspace",
             "member",
+            "member_id",
             "first_name",
             "last_name",
             "invitee_name",
@@ -386,6 +390,20 @@ class MemberInvitationSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
+        member_id = attrs.pop("member_id", None)
+        workspace = self.context.get("workspace")
+        if member_id:
+            member = Member.objects.filter(workspace=workspace, id=member_id).first()
+            if not member:
+                raise serializers.ValidationError({"member_id": "Membre introuvable dans ce workspace."})
+            attrs["member"] = member
+            attrs.setdefault("first_name", member.first_name)
+            attrs.setdefault("last_name", member.last_name)
+            attrs.setdefault("email", member.email)
+            attrs.setdefault("phone", member.phone)
+            attrs.setdefault("function", member.function or "Membre")
+        if not attrs.get("first_name") or not attrs.get("last_name"):
+            raise serializers.ValidationError({"member_id": "Choisissez un membre ou renseignez le nom et le prenom."})
         if not attrs.get("email") and not attrs.get("phone"):
             raise serializers.ValidationError("Un email ou un telephone est requis.")
         return attrs

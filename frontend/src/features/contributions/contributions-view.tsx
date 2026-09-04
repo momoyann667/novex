@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, BarChart3, CheckCircle2, ChevronLeft, ChevronRight, CreditCard, Download, Loader2, Plus, Search, Send, SlidersHorizontal, Sparkles, TrendingUp } from "lucide-react";
+import { AlertTriangle, BarChart3, CheckCircle2, ChevronLeft, ChevronRight, CreditCard, Download, Loader2, Plus, Save, Search, Send, SlidersHorizontal, Sparkles, TrendingUp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { workspacePath } from "@/lib/workspace/routing";
 import {
+  activateContributionCampaign,
+  createContributionCampaign,
   getContributionAnalytics,
   getContributionDashboard,
   listContributionCampaigns,
@@ -245,6 +247,83 @@ function PaymentDrawer({ contribution, onClose, onSubmit, isPending, error }: Re
   );
 }
 
+function defaultDueDate() {
+  const date = new Date();
+  date.setDate(date.getDate() + 7);
+  return date.toISOString().slice(0, 10);
+}
+
+function contributionPeriodLabel(periodicity: string) {
+  if (periodicity === "MONTHLY") return "Cotisation mensuelle";
+  if (periodicity === "QUARTERLY") return "Cotisation trimestrielle";
+  if (periodicity === "YEARLY") return "Cotisation annuelle";
+  return "Cotisation";
+}
+
+function contributionTypeForPeriodicity(periodicity: string) {
+  if (periodicity === "MONTHLY") return "MONTHLY";
+  if (periodicity === "QUARTERLY") return "QUARTERLY";
+  if (periodicity === "YEARLY") return "YEARLY";
+  return "OTHER";
+}
+
+function CreateContributionDrawer({
+  open,
+  onClose,
+  onSubmit,
+  isPending,
+  error
+}: Readonly<{
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (payload: { name: string; amount: string; periodicity: string; due_date: string }) => void;
+  isPending: boolean;
+  error?: string;
+}>) {
+  const [name, setName] = useState("");
+  const [amount, setAmount] = useState("");
+  const [periodicity, setPeriodicity] = useState("MONTHLY");
+  const [dueDate, setDueDate] = useState(defaultDueDate);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 grid items-end bg-slate-950/40" role="dialog" aria-modal="true">
+      <form
+        className="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit({ name, amount, periodicity, due_date: dueDate });
+        }}
+      >
+        <div className="mb-5 flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-blue-700">Nouvelle cotisation</p>
+            <h2 className="text-2xl font-black tracking-normal">Creer une cotisation</h2>
+          </div>
+          <button className="grid size-9 place-items-center rounded-lg bg-slate-100" type="button" onClick={onClose} aria-label="Fermer">
+            <X className="size-5" />
+          </button>
+        </div>
+        <div className="grid gap-4">
+          <label className="grid gap-2 text-sm font-black">Nom de la cotisation<input className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" required value={name} onChange={(event) => setName(event.target.value)} placeholder="Ex: Cotisation Septembre" /></label>
+          <label className="grid gap-2 text-sm font-black">Frequence<select className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" value={periodicity} onChange={(event) => setPeriodicity(event.target.value)}><option value="MONTHLY">Mensuelle</option><option value="QUARTERLY">Trimestrielle</option><option value="YEARLY">Annuelle</option><option value="ONE_TIME">Ponctuelle</option><option value="CUSTOM">Personnalisee</option></select></label>
+          <label className="grid gap-2 text-sm font-black">Montant<input className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" min="1" required type="number" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="10000" /></label>
+          <label className="grid gap-2 text-sm font-black">Date limite<input className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" required type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></label>
+        </div>
+        {error ? <p className="mt-3 text-sm font-bold text-red-600">{error}</p> : null}
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          <Button className="min-h-12" type="button" variant="outline" onClick={onClose}>Annuler</Button>
+          <Button className="min-h-12 bg-blue-700 text-white hover:bg-blue-800" disabled={isPending || !name.trim() || !amount} type="submit">
+            {isPending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+            Creer
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: string }>) {
   const queryClient = useQueryClient();
   const [period, setPeriod] = useState<ContributionPeriod>("year");
@@ -257,6 +336,7 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
   const [ordering, setOrdering] = useState("due_date");
   const [page, setPage] = useState(1);
   const [selectedContribution, setSelectedContribution] = useState<ContributionResource | null>(null);
+  const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [notice, setNotice] = useState("");
   const today = useMemo(() => new Date(), []);
@@ -332,6 +412,28 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
   const exportMutation = useMutation({
     mutationFn: () => requestContributionExport(workspaceSlug, filters, "CSV"),
     onSuccess: (result) => setNotice(`Export cree #${result.id}.`)
+  });
+
+  const createCampaignMutation = useMutation({
+    mutationFn: async (payload: { name: string; amount: string; periodicity: string; due_date: string }) => {
+      const campaign = await createContributionCampaign(workspaceSlug, {
+        name: payload.name,
+        amount: payload.amount,
+        periodicity: payload.periodicity,
+        contribution_type: contributionTypeForPeriodicity(payload.periodicity),
+        period_label: contributionPeriodLabel(payload.periodicity),
+        due_date: payload.due_date,
+        status: "DRAFT"
+      });
+      await activateContributionCampaign(workspaceSlug, campaign.id);
+      return campaign;
+    },
+    onSuccess: async () => {
+      setCreateDrawerOpen(false);
+      setNotice("Cotisation creee et generee pour les membres actifs.");
+      await refreshAll();
+      await queryClient.invalidateQueries({ queryKey: ["contribution-campaigns", workspaceSlug] });
+    }
   });
 
   return (
@@ -512,6 +614,21 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
         onClose={() => setSelectedContribution(null)}
         onSubmit={(payload) => paymentMutation.mutate(payload)}
       />
+      <CreateContributionDrawer
+        error={createCampaignMutation.error instanceof Error ? createCampaignMutation.error.message : undefined}
+        isPending={createCampaignMutation.isPending}
+        onClose={() => setCreateDrawerOpen(false)}
+        onSubmit={(payload) => createCampaignMutation.mutate(payload)}
+        open={createDrawerOpen}
+      />
+      <button
+        className="fixed bottom-24 right-5 z-30 grid size-14 place-items-center rounded-full bg-blue-700 text-white shadow-xl shadow-blue-900/30 hover:bg-blue-800"
+        type="button"
+        onClick={() => setCreateDrawerOpen(true)}
+        aria-label="Creer une cotisation"
+      >
+        <Plus className="size-7" />
+      </button>
     </main>
   );
 }

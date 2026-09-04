@@ -203,6 +203,31 @@ def test_member_invitation_token_accept_decline_and_idempotence(django_user_mode
 
 
 @pytest.mark.django_db
+def test_member_invitation_api_can_target_existing_member_without_duplicate(django_user_model):
+    workspace, owner = make_workspace(django_user_model, "memberinvite", ONBOARDING_PERMISSIONS)
+    MembershipSettings.objects.create(workspace=workspace, invitation_enabled=True)
+    member = create_member(workspace=workspace, actor=owner, first_name="Fatou", last_name="Diop", email="fatou@example.com", phone="+2250700000011")
+    api_client = APIClient()
+    api_client.force_authenticate(owner)
+
+    first = api_client.post("/api/v1/members/invitations/", {"member_id": member.id, "message": "Bienvenue"}, format="json", HTTP_X_WORKSPACE=workspace.slug)
+    second = api_client.post("/api/v1/members/invitations/", {"member_id": member.id, "message": "Bienvenue"}, format="json", HTTP_X_WORKSPACE=workspace.slug)
+
+    assert first.status_code == 201, first.data
+    assert second.status_code == 200
+    assert first.data["member"] == member.id
+    assert second.data["id"] == first.data["id"]
+    assert MemberInvitation.objects.filter(workspace=workspace, member=member, status=MemberInvitation.Status.PENDING).count() == 1
+
+    token = first.data["accept_url"].rsplit("/", 1)[-1]
+    accepted = accept_invitation(token=token)
+
+    assert accepted.member_id == member.id
+    assert accepted.status == MemberInvitation.Status.ACCEPTED
+    assert Member.objects.filter(workspace=workspace, email="fatou@example.com").count() == 1
+
+
+@pytest.mark.django_db
 def test_membership_applications_api_and_public_form_are_workspace_scoped(django_user_model):
     workspace, owner = make_workspace(django_user_model, "publicform", ONBOARDING_PERMISSIONS)
     MembershipSettings.objects.create(workspace=workspace, public_form_enabled=True, membership_enabled=True)

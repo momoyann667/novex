@@ -1,5 +1,6 @@
 import { PublicMembershipFormView } from "@/features/members/membership-onboarding-view";
 
-export default function PublicMembershipPage({ params }: Readonly<{ params: { slug: string } }>) {
-  return <PublicMembershipFormView slug={params.slug} />;
+export default async function PublicMembershipPage({ params }: Readonly<{ params: Promise<{ slug: string }> }>) {
+  const { slug } = await params;
+  return <PublicMembershipFormView slug={slug} />;
 }
