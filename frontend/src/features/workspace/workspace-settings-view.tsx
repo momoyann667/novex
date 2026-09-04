@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowLeft, Building2, Check, CheckCircle2, ChevronLeft, ChevronRight, CreditCard, Download, Eye, LogOut, Pencil, Plus, Save, Search, ShieldCheck, Star, Trash2, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { backendMediaUrl } from "@/lib/api/media";
 import { displayUserName, getCurrentUser, userInitials } from "@/features/auth/current-user";
 import { activateContributionCampaign, createContributionCampaign, listContributionCampaigns } from "@/features/contributions/api";
 import { cancelSubscription, createSubscriptionCheckout, getSaasPaymentsOverview, getSubscriptionOverview, reactivateSubscription, retrySaasPayment, type PlanCode, type PlanResource, type SaasPaymentFilters, type SaasPaymentsOverview, type SubscriptionOverview, type SubscriptionPayment } from "@/features/subscriptions/api";
@@ -126,6 +127,7 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
   const [activeSection, setActiveSection] = useState<SettingsSection | null>(section || null);
   const [form, setForm] = useState<WorkspaceSettingsResource>(defaultSettings);
   const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState("");
   const [notice, setNotice] = useState("");
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [contributionDraft, setContributionDraft] = useState({ name: "", periodicity: "MONTHLY", amount: "" });
@@ -178,6 +180,8 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
         money_format: { ...defaultSettings.money_format, ...settingsQuery.data.money_format },
         security_preferences: { ...defaultSettings.security_preferences, ...settingsQuery.data.security_preferences }
       });
+      setLogoFile(null);
+      setLogoPreview(backendMediaUrl(settingsQuery.data.logo));
     }
   }, [settingsQuery.data]);
 
@@ -185,6 +189,8 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
     mutationFn: (payload: WorkspaceSettingsUpdatePayload) => updateWorkspaceSettings(workspaceSlug, payload),
     onSuccess: async (settings) => {
       setForm({ ...defaultSettings, ...settings, profile: { ...defaultSettings.profile, ...settings.profile } });
+      setLogoFile(null);
+      setLogoPreview(backendMediaUrl(settings.logo));
       setNotice(`Parametres de ${settings.workspace_name} enregistres.`);
       await queryClient.invalidateQueries({ queryKey: ["workspace-settings", workspaceSlug] });
       if (settings.workspace_slug && settings.workspace_slug !== workspaceSlug) {
@@ -324,6 +330,17 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
     });
   }
 
+  function handleAssociationLogo(file: File | null) {
+    setLogoFile(file);
+    if (!file) {
+      setLogoPreview(backendMediaUrl(form.logo));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setLogoPreview(String(reader.result || ""));
+    reader.readAsDataURL(file);
+  }
+
   async function signOut() {
     setIsSigningOut(true);
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => null);
@@ -407,7 +424,19 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
                 <label className={labelClass}>N° enregistrement<input className={fieldClass} value={form.registration_number} onChange={(event) => update("registration_number", event.target.value)} /></label>
               </div>
               <label className={labelClass}>Description<textarea className={`${fieldClass} min-h-24 py-3`} value={form.description} onChange={(event) => update("description", event.target.value)} /></label>
-              <label className={labelClass}>Logo<input className={fieldClass} type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setLogoFile(event.target.files?.[0] || null)} /></label>
+              <label className={labelClass}>
+                Logo de l'association
+                <span className="flex min-h-24 items-center gap-4 rounded-md border border-dashed border-slate-300 bg-slate-50 px-4">
+                  <span className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-full bg-white text-sm font-black text-slate-500 shadow-sm">
+                    {logoPreview ? <img alt="" className="size-full object-cover" src={logoPreview} /> : (form.workspace_name[0]?.toUpperCase() || "A")}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-black text-slate-800">{logoFile ? logoFile.name : "Importer ou remplacer le logo"}</span>
+                    <span className="mt-1 block text-xs font-semibold text-slate-500">PNG, JPG ou WEBP.</span>
+                  </span>
+                  <input className="hidden" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => handleAssociationLogo(event.target.files?.[0] || null)} />
+                </span>
+              </label>
               <div className="grid grid-cols-2 gap-3">
                 <label className={labelClass}>Couleur principale<input className="h-12 rounded-md border border-slate-300 bg-white p-1" type="color" value={form.primary_color} onChange={(event) => update("primary_color", event.target.value)} /></label>
                 <label className={labelClass}>Couleur secondaire<input className="h-12 rounded-md border border-slate-300 bg-white p-1" type="color" value={form.secondary_color} onChange={(event) => update("secondary_color", event.target.value)} /></label>

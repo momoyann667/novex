@@ -67,8 +67,7 @@ export function AssociationShell({ children, workspaceSlug }: Readonly<{ childre
     <div className="min-h-screen bg-slate-50 pb-20 md:grid md:grid-cols-[272px_minmax(0,1fr)] md:pb-0">
       <aside className="hidden border-r border-border bg-white p-5 md:block">
         <div className="mb-6 flex items-center gap-3">
-          <img className="size-10 rounded-md object-cover" src="/brand/novex-favicon.jpg" alt="NOVEX" />
-          <img className="h-10 w-32 object-contain object-left" src="/brand/novex-logo.jpg" alt="NOVEX" />
+          <img className="h-12 w-40 object-contain object-left" src="/brand/novex-logo.jpg" alt="NOVEX" />
         </div>
         <Button variant="outline" className="mb-5 w-full justify-start">
           Association active

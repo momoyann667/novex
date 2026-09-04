@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.conf.urls.static import static
 from django.db import connection
 from django.http import JsonResponse
 from django.urls import include, path
@@ -24,3 +25,6 @@ urlpatterns = [
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
     path("api/v1/", include("apps.api.urls")),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -568,8 +568,7 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
 
       <header className="mb-5 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <img className="size-8 rounded-md object-cover" src="/brand/novex-favicon.jpg" alt="NOVEX" />
-          <img className="h-8 w-24 object-contain object-left" src="/brand/novex-logo.jpg" alt="NOVEX" />
+          <img className="h-10 w-32 object-contain object-left" src="/brand/novex-logo.jpg" alt="NOVEX" />
         </div>
         <button className="grid size-10 place-items-center rounded-full bg-white shadow-sm" type="button" aria-label="Notifications">
           <Bell className="size-5" />

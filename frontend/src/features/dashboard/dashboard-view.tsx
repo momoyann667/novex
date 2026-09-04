@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { displayUserName, getCurrentUser } from "@/features/auth/current-user";
 import { getWorkspaceSettings } from "@/features/workspace/api";
 import { isWorkspaceSlugValid, loadWorkspaceProfile, WorkspaceProfile } from "@/features/workspace/workspace-profile";
+import { backendMediaUrl } from "@/lib/api/media";
 import { getDashboardOverview } from "./api";
 import type { DashboardOverview, PeriodCode } from "./types";
 import { emptyDashboardOverview } from "./data";
@@ -258,6 +259,7 @@ export function DashboardView({
 
   const overview = dashboardQuery.data || initialData;
   const currentProfile = displayProfile(profile, overview.workspace.name);
+  const workspaceLogoUrl = backendMediaUrl(settingsQuery.data?.logo) || currentProfile.logoDataUrl;
   const workspaceOwnerName = settingsQuery.data?.owner?.full_name?.trim() || "";
   const dashboardUserName = workspaceOwnerName || displayUserName(userQuery.data);
   const dashboardAssociationName = settingsQuery.data?.workspace_name || currentProfile.associationName || initialData.workspace.name;
@@ -299,8 +301,7 @@ export function DashboardView({
     <main className="min-h-screen bg-[#f5f7f8] px-5 pb-28 pt-5 text-slate-950 md:rounded-[28px]">
       <header className="mb-7 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <img className="size-8 rounded-md object-cover" src="/brand/novex-favicon.jpg" alt="NOVEX" />
-          <img className="h-8 w-24 object-contain object-left" src="/brand/novex-logo.jpg" alt="NOVEX" />
+          <img className="h-10 w-32 object-contain object-left" src="/brand/novex-logo.jpg" alt="NOVEX" />
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -314,7 +315,7 @@ export function DashboardView({
             {notificationItems.length ? <span className="absolute right-2 top-2 size-2 rounded-full bg-red-600" /> : null}
           </button>
           <div className="grid size-12 place-items-center rounded-full" style={{ backgroundColor: currentProfile.color }}>
-            <Logo profile={currentProfile} />
+            <Logo profile={{ ...currentProfile, logoDataUrl: workspaceLogoUrl }} />
           </div>
         </div>
       </header>
