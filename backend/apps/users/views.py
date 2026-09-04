@@ -35,7 +35,7 @@ class AuthViewSet(viewsets.GenericViewSet):
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data["user"]
         django_login(request, user)
-        return Response(UserSerializer(user).data, status=status.HTTP_200_OK)
+        return Response(UserSerializer(user, context={"request": request}).data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["post"], url_path="otp/request", serializer_class=OTPRequestSerializer)
     def request_otp(self, request):
@@ -60,8 +60,8 @@ class AuthViewSet(viewsets.GenericViewSet):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
         django_login(request, user)
-        return Response(UserSerializer(user).data, status=status.HTTP_200_OK)
+        return Response(UserSerializer(user, context={"request": request}).data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["get"], url_path="me", permission_classes=[permissions.IsAuthenticated])
     def me(self, request):
-        return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)
+        return Response(UserSerializer(request.user, context={"request": request, "workspace_slug": request.headers.get("X-Workspace")}).data, status=status.HTTP_200_OK)

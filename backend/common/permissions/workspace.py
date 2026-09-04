@@ -1,4 +1,3 @@
-from django.conf import settings
 from rest_framework.permissions import BasePermission
 
 
@@ -36,7 +35,18 @@ class RequireWorkspacePermission(BasePermission):
         )
         if not membership:
             return False
-        if settings.DEBUG:
+        from apps.workspaces.services import ensure_workspace_rbac
+
+        ensure_workspace_rbac(membership.workspace)
+        membership = (
+            request.user.workspace_memberships.filter(workspace=membership.workspace, status="active")
+            .select_related("role", "workspace")
+            .prefetch_related("role__role_permissions__permission")
+            .first()
+        )
+        if not membership:
+            return False
+        if membership.role.code.upper() in {"CREATOR", "OWNER"}:
             return True
         permissions = {rp.permission.code for rp in membership.role.role_permissions.all()}
         return "*" in permissions or self.required_permission in permissions

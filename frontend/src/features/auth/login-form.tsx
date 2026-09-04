@@ -21,6 +21,8 @@ type LoginPayload = {
   default_workspace?: {
     slug?: string;
   } | null;
+  is_staff?: boolean;
+  is_superuser?: boolean;
 };
 
 function errorMessageFromPayload(payload: unknown): string {
@@ -66,6 +68,11 @@ export function LoginForm() {
 
       if (!response.ok) {
         throw new ApiError(errorMessageFromPayload(payload), response.status);
+      }
+
+      if (payload?.is_staff && payload?.is_superuser) {
+        router.push("/admin");
+        return;
       }
 
       const workspaceSlug = payload?.default_workspace?.slug;

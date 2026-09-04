@@ -16,7 +16,8 @@ from apps.events.models import EventParticipant
 from apps.events.statuses import EventParticipantStatus, EventStatus
 from apps.payments.models import Payment
 from apps.payments.statuses import PaymentStatus
-from apps.workspaces.models import Role, Workspace, WorkspaceMembership
+from apps.workspaces.models import Workspace, WorkspaceMembership
+from apps.workspaces.services import ensure_workspace_rbac
 from .models import Member, MemberActivity, MemberInvitation, MembershipApplication, MembershipSettings
 
 
@@ -513,7 +514,7 @@ def accept_invitation(*, token: str, user=None) -> MemberInvitation:
         member.save(update_fields=["linked_user", "updated_at"])
 
     if linked_user:
-        role = Role.objects.filter(workspace=invitation.workspace, code="MEMBER").first()
+        role = ensure_workspace_rbac(invitation.workspace)["MEMBER"]
         if role:
             WorkspaceMembership.objects.get_or_create(user=linked_user, workspace=invitation.workspace, defaults={"role": role, "status": WorkspaceMembership.Status.ACTIVE, "joined_at": timezone.now()})
 

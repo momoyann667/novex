@@ -1,10 +1,13 @@
 from django.http import FileResponse, Http404, HttpResponse
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import decorators, filters, response, status, viewsets
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.views import APIView
 
 from common.permissions.workspace import RequireWorkspacePermission
+from apps.members.models import Member
+from apps.workspaces.models import WorkspaceMembership
 from .models import Document, DocumentApproval, DocumentFavorite, DocumentFolder, DocumentShare, DocumentShareLink, DocumentTag, DocumentVersion
 from .serializers import (
     DocumentActivitySerializer,
@@ -33,11 +36,26 @@ from .services import (
     trash_document,
     update_document,
 )
-from .statuses import ApprovalStatus, DocumentActivityAction, DocumentStatus
+from .statuses import ApprovalStatus, DocumentActivityAction, DocumentStatus, DocumentVisibility, ShareSubjectType
 
 
 def current_workspace(request):
     return request.user.workspace_memberships.get(workspace__slug=request.headers.get("X-Workspace"), status="active").workspace
+
+
+def current_membership(request):
+    return WorkspaceMembership.objects.select_related("workspace", "role").get(user=request.user, workspace__slug=request.headers.get("X-Workspace"), status=WorkspaceMembership.Status.ACTIVE)
+
+
+def restrict_documents_for_member(queryset, request):
+    membership = current_membership(request)
+    if membership.role.code.upper() != "MEMBER":
+        return queryset
+    member = Member.objects.filter(workspace=membership.workspace, linked_user=request.user).first()
+    member_filter = Q(visibility=DocumentVisibility.MEMBERS)
+    if member:
+        member_filter |= Q(member=member) | Q(shares__subject_type=ShareSubjectType.MEMBER, shares__member=member, shares__can_view=True)
+    return queryset.filter(member_filter).distinct()
 
 
 class DocumentAnalyticsView(APIView):
@@ -51,7 +69,7 @@ class DocumentSearchView(APIView):
     permission_classes = [RequireWorkspacePermission.for_permission("documents.view")]
 
     def get(self, request):
-        queryset = search_documents(workspace=current_workspace(request), filters=request.query_params, include_sensitive=False)
+        queryset = restrict_documents_for_member(search_documents(workspace=current_workspace(request), filters=request.query_params, include_sensitive=False), request)
         page = self.paginate_queryset(queryset.order_by("-updated_at"))
         serializer = DocumentSerializer(page, many=True, context={"request": request, "workspace": current_workspace(request)})
         return self.get_paginated_response(serializer.data)
@@ -155,7 +173,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         filters_payload = self.request.query_params
         include_sensitive = self.request.query_params.get("include_sensitive") == "true"
-        queryset = search_documents(workspace=current_workspace(self.request), filters=filters_payload, include_sensitive=include_sensitive)
+        queryset = restrict_documents_for_member(search_documents(workspace=current_workspace(self.request), filters=filters_payload, include_sensitive=include_sensitive), self.request)
         if self.request.query_params.get("view") == "trash":
             queryset = queryset.filter(status=DocumentStatus.TRASH)
         elif self.request.query_params.get("view") == "archives":

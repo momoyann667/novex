@@ -626,6 +626,8 @@ class PublicInvitationViewSet(viewsets.ViewSet):
 
 
 class SelfMemberProfileView(views.APIView):
+    permission_classes = [RequireWorkspacePermission.for_permission("member.profile.view_self")]
+
     def get_member(self, request):
         workspace = current_workspace(request)
         member = self_member_for_user(workspace=workspace, user=request.user)
@@ -650,6 +652,8 @@ class SelfMemberProfileView(views.APIView):
 
 
 class SelfMemberDashboardView(views.APIView):
+    permission_classes = [RequireWorkspacePermission.for_permission("member.profile.view_self")]
+
     def get(self, request):
         workspace = current_workspace(request)
         member = self_member_for_user(workspace=workspace, user=request.user)

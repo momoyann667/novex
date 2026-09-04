@@ -20,6 +20,16 @@ export type CurrentUser = {
     name: string;
     slug: string;
   } | null;
+  workspace_access: {
+    workspace: { id: number; name: string; slug: string } | null;
+    role: "creator" | "membre" | "super_admin" | string;
+    role_code?: string;
+    role_label: string;
+    permissions: string[];
+  } | null;
+  must_change_password: boolean;
+  is_staff: boolean;
+  is_superuser: boolean;
 };
 
 export function displayUserName(user: CurrentUser | undefined | null) {
@@ -33,6 +43,10 @@ export function userInitials(user: CurrentUser | undefined | null) {
   return name.slice(0, 2).toUpperCase();
 }
 
-export function getCurrentUser() {
-  return apiFetch<CurrentUser>("/auth/me/", { cache: "no-store" });
+export function getCurrentUser(workspaceSlugOrContext?: string | { queryKey?: readonly unknown[] }) {
+  const workspaceSlug = typeof workspaceSlugOrContext === "string" ? workspaceSlugOrContext : undefined;
+  return apiFetch<CurrentUser>("/auth/me/", {
+    cache: "no-store",
+    headers: workspaceSlug ? { "X-Workspace": workspaceSlug } : undefined
+  });
 }

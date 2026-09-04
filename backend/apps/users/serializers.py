@@ -59,12 +59,13 @@ class RegisterSerializer(serializers.Serializer):
 
 class UserSerializer(serializers.ModelSerializer):
     default_workspace = serializers.SerializerMethodField()
+    workspace_access = serializers.SerializerMethodField()
     profile = serializers.SerializerMethodField()
     full_name = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ["id", "username", "email", "phone", "first_name", "last_name", "full_name", "email_verified_at", "profile", "default_workspace"]
+        fields = ["id", "username", "email", "phone", "first_name", "last_name", "full_name", "email_verified_at", "must_change_password", "profile", "default_workspace", "workspace_access", "is_staff", "is_superuser"]
 
     def get_profile(self, obj):
         profile = getattr(obj, "profile", None)
@@ -92,6 +93,33 @@ class UserSerializer(serializers.ModelSerializer):
             "id": membership.workspace_id,
             "name": membership.workspace.name,
             "slug": membership.workspace.slug,
+        }
+
+    def get_workspace_access(self, obj):
+        workspace_slug = self.context.get("workspace_slug")
+        if obj.is_staff and obj.is_superuser:
+            return {"role": "super_admin", "role_label": "Super Admin NOVEX", "permissions": ["*"], "workspace": None}
+        if not workspace_slug:
+            return None
+        membership = (
+            obj.workspace_memberships.filter(workspace__slug=workspace_slug, status="active")
+            .select_related("workspace", "role")
+            .prefetch_related("role__role_permissions__permission")
+            .first()
+        )
+        if not membership:
+            return None
+        role_code = membership.role.code.upper()
+        permissions = sorted({role_permission.permission.code for role_permission in membership.role.role_permissions.all()})
+        if role_code in {"OWNER", "CREATOR"} and "*" not in permissions:
+            permissions.append("*")
+        role = "creator" if role_code in {"OWNER", "CREATOR"} else "membre" if role_code == "MEMBER" else role_code.lower()
+        return {
+            "workspace": {"id": membership.workspace_id, "name": membership.workspace.name, "slug": membership.workspace.slug},
+            "role": role,
+            "role_code": role_code,
+            "role_label": membership.role.label,
+            "permissions": permissions,
         }
 
 

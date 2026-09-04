@@ -2,6 +2,8 @@ from rest_framework import decorators, filters, response, status, viewsets
 from rest_framework.views import APIView
 
 from common.permissions.workspace import RequireWorkspacePermission
+from apps.members.models import Member
+from apps.workspaces.models import WorkspaceMembership
 from .models import (
     AudienceType,
     Communication,
@@ -53,6 +55,10 @@ def choices_payload():
     }
 
 
+def current_membership(request):
+    return WorkspaceMembership.objects.select_related("role").get(user=request.user, workspace__slug=request.headers.get("X-Workspace"), status=WorkspaceMembership.Status.ACTIVE)
+
+
 class CommunicationViewSet(viewsets.ModelViewSet):
     serializer_class = CommunicationSerializer
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
@@ -79,6 +85,13 @@ class CommunicationViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = communication_queryset_for_workspace(current_workspace(self.request))
+        membership = current_membership(self.request)
+        if membership.role.code.upper() == "MEMBER":
+            member = Member.objects.filter(workspace=membership.workspace, linked_user=self.request.user).first()
+            queryset = queryset.filter(recipients__user=self.request.user)
+            if member:
+                queryset = queryset | communication_queryset_for_workspace(membership.workspace).filter(recipients__member=member)
+            queryset = queryset.distinct()
         if self.request.query_params.get("status"):
             queryset = queryset.filter(status=self.request.query_params["status"])
         if self.request.query_params.get("type"):
@@ -172,7 +185,7 @@ class CommunicationTemplateViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         permission_map = {"create": "communication.manage_templates", "update": "communication.manage_templates", "partial_update": "communication.manage_templates", "destroy": "communication.manage_templates"}
-        return [RequireWorkspacePermission.for_permission(permission_map.get(self.action, "communication.view"))()]
+        return [RequireWorkspacePermission.for_permission(permission_map.get(self.action, "communication.manage_templates"))()]
 
     def get_queryset(self):
         return CommunicationTemplate.objects.filter(workspace=current_workspace(self.request))

@@ -4,6 +4,7 @@ from rest_framework import decorators, filters, response, status, views, viewset
 
 from common.permissions.workspace import RequireWorkspacePermission
 from apps.members.models import Member
+from apps.workspaces.models import WorkspaceMembership
 from .models import FinancialAdjustment, Payment, Receipt
 from .serializers import (
     FinancialAdjustmentSerializer,
@@ -42,6 +43,10 @@ def current_workspace(request):
     return request.user.workspace_memberships.get(workspace__slug=request.headers.get("X-Workspace"), status="active").workspace
 
 
+def current_membership(request):
+    return WorkspaceMembership.objects.select_related("workspace", "role").get(user=request.user, workspace__slug=request.headers.get("X-Workspace"), status=WorkspaceMembership.Status.ACTIVE)
+
+
 class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = PaymentSerializer
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
@@ -55,12 +60,12 @@ class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
             "retrieve": "payments.view_details",
             "manual": "payments.manage",
             "initialize": "payments.manage",
-            "self_contributions": "payments.view",
-            "donation_projects": "payments.view",
-            "self_initialize": "payments.view",
+            "self_contributions": "payments.view_self",
+            "donation_projects": "payments.view_self",
+            "self_initialize": "payments.view_self",
             "dashboard": "payments.view",
             "refund": "payments.refund",
-            "result": "payments.view_details",
+            "result": "payments.view_self",
             "documents": "payment_documents.view" if self.request.method == "GET" else "payment_documents.upload",
             "delete_document": "payment_documents.delete",
         }
@@ -94,6 +99,10 @@ class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(amount__gte=self.request.query_params["amount_min"])
         if self.request.query_params.get("amount_max"):
             queryset = queryset.filter(amount__lte=self.request.query_params["amount_max"])
+        membership = current_membership(self.request)
+        if membership.role.code.upper() == "MEMBER":
+            member = Member.objects.filter(workspace=membership.workspace, linked_user=self.request.user).first()
+            queryset = queryset.filter(member=member) if member else queryset.none()
         return queryset
 
     @decorators.action(detail=False, methods=["post"], url_path="manual")
