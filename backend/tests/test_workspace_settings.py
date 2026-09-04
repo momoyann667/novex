@@ -2,6 +2,7 @@ import pytest
 
 pytest.importorskip("pytest_django")
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APIClient
 
 from apps.audit_logs.models import AuditLog
@@ -97,6 +98,29 @@ def test_workspace_settings_persist_member_and_finance_preferences(api_client, d
     assert workspace.settings.member_preferences["functions"] == ["Tresorier"]
     assert workspace.settings.finance_preferences["payment_methods"] == ["Wave"]
     assert workspace.settings.money_format["symbol"] == "FCFA"
+
+
+@pytest.mark.django_db
+def test_owner_can_upload_workspace_logo_from_settings(api_client, django_user_model):
+    workspace, owner = make_workspace(django_user_model, "settings-logo")
+    api_client.force_authenticate(owner)
+    logo = SimpleUploadedFile(
+        "logo-association-au-nom-vraiment-tres-long.gif",
+        b"GIF87a\x01\x00\x01\x00\x80\x01\x00\x00\x00\x00\xff\xff\xff,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;",
+        content_type="image/gif",
+    )
+
+    response = api_client.patch(
+        f"/api/v1/workspaces/{workspace.slug}/settings/",
+        {"workspace_name": workspace.name, "logo": logo},
+        format="multipart",
+        HTTP_X_WORKSPACE=workspace.slug,
+    )
+
+    workspace.refresh_from_db()
+    assert response.status_code == 200
+    assert workspace.logo.name.startswith("workspace-logos/")
+    assert response.data["logo"]
 
 
 @pytest.mark.django_db

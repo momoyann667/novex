@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowLeft, Building2, Check, CheckCircle2, ChevronLeft, ChevronRight, CreditCard, Download, Eye, LogOut, Pencil, Plus, Save, Search, ShieldCheck, Star, Trash2, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ApiError } from "@/lib/api/client";
 import { backendMediaUrl } from "@/lib/api/media";
 import { displayUserName, getCurrentUser, userInitials } from "@/features/auth/current-user";
 import { activateContributionCampaign, createContributionCampaign, listContributionCampaigns } from "@/features/contributions/api";
@@ -255,6 +256,11 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
       await queryClient.invalidateQueries({ queryKey: ["saas-payments-overview", workspaceSlug] });
     }
   });
+  const settingsErrorMessage = updateMutation.error instanceof ApiError
+    ? updateMutation.error.message
+    : settingsQuery.isError
+      ? "Impossible de charger les parametres."
+      : "Impossible d'enregistrer les parametres.";
 
   function update<K extends keyof WorkspaceSettingsResource>(key: K, value: WorkspaceSettingsResource[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -359,7 +365,7 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
       </header>
 
       {notice ? <Alert tone="success" message={notice} /> : null}
-      {settingsQuery.isError || updateMutation.isError ? <Alert tone="error" message="Impossible de charger ou enregistrer les parametres." /> : null}
+      {settingsQuery.isError || updateMutation.isError ? <Alert tone="error" message={settingsErrorMessage} /> : null}
 
       {activeSection ? (
         <nav className="mt-4 grid grid-cols-2 gap-3" aria-label="Sous-menus parametres">
@@ -426,12 +432,12 @@ export function WorkspaceSettingsView({ workspaceSlug, section }: Readonly<{ wor
               <label className={labelClass}>Description<textarea className={`${fieldClass} min-h-24 py-3`} value={form.description} onChange={(event) => update("description", event.target.value)} /></label>
               <label className={labelClass}>
                 Logo de l'association
-                <span className="flex min-h-24 items-center gap-4 rounded-md border border-dashed border-slate-300 bg-slate-50 px-4">
+                <span className="flex min-h-24 max-w-full items-center gap-4 overflow-hidden rounded-md border border-dashed border-slate-300 bg-slate-50 px-4">
                   <span className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-full bg-white text-sm font-black text-slate-500 shadow-sm">
                     {logoPreview ? <img alt="" className="size-full object-cover" src={logoPreview} /> : (form.workspace_name[0]?.toUpperCase() || "A")}
                   </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-black text-slate-800">{logoFile ? logoFile.name : "Importer ou remplacer le logo"}</span>
+                  <span className="min-w-0 flex-1 overflow-hidden">
+                    <span className="block max-w-full truncate text-sm font-black text-slate-800">{logoFile ? logoFile.name : "Importer ou remplacer le logo"}</span>
                     <span className="mt-1 block text-xs font-semibold text-slate-500">PNG, JPG ou WEBP.</span>
                   </span>
                   <input className="hidden" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => handleAssociationLogo(event.target.files?.[0] || null)} />

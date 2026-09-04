@@ -1,4 +1,5 @@
 from rest_framework import decorators, mixins, response, viewsets
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 
 from common.permissions.workspace import IsWorkspaceMember, IsWorkspaceOwner
 from apps.audit_logs.models import AuditLog
@@ -29,7 +30,7 @@ class WorkspaceViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, mixins.Re
             return WorkspaceCreateSerializer
         return WorkspaceSerializer
 
-    @decorators.action(detail=True, methods=["get", "patch"], url_path="settings")
+    @decorators.action(detail=True, methods=["get", "patch"], parser_classes=[JSONParser, MultiPartParser, FormParser], url_path="settings")
     def workspace_settings(self, request, slug=None):
         workspace = self.get_object()
         workspace_settings = ensure_workspace_settings(workspace)
