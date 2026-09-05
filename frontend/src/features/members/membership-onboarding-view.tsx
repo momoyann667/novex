@@ -112,6 +112,15 @@ type InvitationResource = {
   created_at: string;
 };
 
+type PublicInvitationResource = {
+  association: string;
+  invitee_name: string;
+  invited_by_name: string;
+  message: string;
+  status: "pending" | "accepted" | "declined" | "cancelled" | "expired";
+  expires_at: string;
+};
+
 type MemberResource = {
   id: number;
   first_name: string;
@@ -166,6 +175,26 @@ async function resendInvitation(workspaceSlug: string, invitationId: number) {
   return apiFetch<InvitationResource>(`/members/invitations/${invitationId}/resend/`, {
     method: "POST",
     headers: workspaceHeaders(workspaceSlug)
+  });
+}
+
+async function getPublicInvitation(token: string) {
+  return apiFetch<PublicInvitationResource>(`/public/invitations/${token}/`, {
+    cache: "no-store"
+  });
+}
+
+async function acceptPublicInvitation(token: string) {
+  return apiFetch<{ status: string; member: number | null }>("/public/invitations/accept/", {
+    method: "POST",
+    body: JSON.stringify({ token })
+  });
+}
+
+async function declinePublicInvitation(token: string) {
+  return apiFetch<{ status: string }>("/public/invitations/decline/", {
+    method: "POST",
+    body: JSON.stringify({ token })
   });
 }
 
@@ -628,7 +657,32 @@ export function PublicMembershipFormView({ slug }: Readonly<{ slug: string }>) {
 }
 
 export function InvitationAcceptanceView({ token }: Readonly<{ token: string }>) {
+  const router = useRouter();
   const [status, setStatus] = useState<"pending" | "accepted" | "declined">("pending");
+  const [error, setError] = useState("");
+  const invitationQuery = useQuery({
+    queryKey: ["public-invitation", token],
+    queryFn: () => getPublicInvitation(token),
+    retry: false
+  });
+  const acceptMutation = useMutation({
+    mutationFn: () => acceptPublicInvitation(token),
+    onSuccess: () => {
+      setError("");
+      setStatus("accepted");
+    },
+    onError: (mutationError) => setError(mutationError instanceof ApiError ? mutationError.message : "Impossible d'accepter l'invitation.")
+  });
+  const declineMutation = useMutation({
+    mutationFn: () => declinePublicInvitation(token),
+    onSuccess: () => {
+      setError("");
+      setStatus("declined");
+    },
+    onError: (mutationError) => setError(mutationError instanceof ApiError ? mutationError.message : "Impossible de refuser l'invitation.")
+  });
+  const invitation = invitationQuery.data;
+  const isLoadingAction = acceptMutation.isPending || declineMutation.isPending;
 
   return (
     <main className="min-h-screen bg-[#0b1220] px-4 py-6 text-slate-950">
@@ -638,21 +692,34 @@ export function InvitationAcceptanceView({ token }: Readonly<{ token: string }>)
           <div className="mx-auto grid size-14 place-items-center rounded-full bg-blue-50 text-blue-700"><UserPlus className="size-7" /></div>
           <img className="mx-auto mt-5 h-auto w-full max-w-[240px] object-contain" src="/brand/novex-logo.jpg" alt="NOVEX" />
           <p className="mt-3 text-lg font-bold">Invitation membre</p>
-          <p className="mt-2 text-sm font-medium text-slate-500">Association demo vous invite a rejoindre son espace securise.</p>
+          <p className="mt-2 text-sm font-medium text-slate-500">
+            {invitationQuery.isLoading ? "Chargement de l'invitation..." : invitation ? `${invitation.association} vous invite a rejoindre son espace securise.` : "Invitation introuvable."}
+          </p>
         </div>
-        <div className="mt-8 rounded-xl bg-slate-50 p-4 text-sm font-semibold text-slate-600">
-          <p>Token securise : {token.slice(0, 8)}...</p>
-          <p className="mt-2">Message : bienvenue dans l'association.</p>
-        </div>
+        {error ? <p className="mt-6 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{error}</p> : null}
+        {invitation ? (
+          <div className="mt-8 rounded-xl bg-slate-50 p-4 text-sm font-semibold text-slate-600">
+            <p><strong className="text-slate-950">Invite :</strong> {invitation.invitee_name}</p>
+            <p className="mt-2"><strong className="text-slate-950">Association :</strong> {invitation.association}</p>
+            {invitation.invited_by_name ? <p className="mt-2"><strong className="text-slate-950">Envoye par :</strong> {invitation.invited_by_name}</p> : null}
+            {invitation.message ? <p className="mt-2"><strong className="text-slate-950">Message :</strong> {invitation.message}</p> : null}
+            <p className="mt-2"><strong className="text-slate-950">Expire le :</strong> {new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium" }).format(new Date(invitation.expires_at))}</p>
+          </div>
+        ) : null}
         {status === "pending" ? (
           <div className="mt-6 grid grid-cols-2 gap-3">
-            <Button type="button" variant="outline" onClick={() => setStatus("declined")}><X className="size-4" /> Refuser</Button>
-            <Button type="button" className="bg-blue-700 text-white hover:bg-blue-800" onClick={() => setStatus("accepted")}><CheckCircle2 className="size-4" /> Accepter</Button>
+            <Button type="button" variant="outline" disabled={!invitation || isLoadingAction} onClick={() => declineMutation.mutate()}><X className="size-4" /> {declineMutation.isPending ? "Refus..." : "Refuser"}</Button>
+            <Button type="button" className="bg-blue-700 text-white hover:bg-blue-800" disabled={!invitation || isLoadingAction} onClick={() => acceptMutation.mutate()}><CheckCircle2 className="size-4" /> {acceptMutation.isPending ? "Acceptation..." : "Accepter"}</Button>
           </div>
         ) : (
           <div className={`mt-6 rounded-xl p-5 text-center ${status === "accepted" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
             <h2 className="text-xl font-black">{status === "accepted" ? "Invitation acceptee" : "Invitation refusee"}</h2>
-            <p className="mt-2 text-sm font-medium">{status === "accepted" ? "Votre acces membre est en cours d'activation." : "L'association sera informee de votre choix."}</p>
+            <p className="mt-2 text-sm font-medium">{status === "accepted" ? "Votre acces membre est active. Connectez-vous avec les acces temporaires recus." : "L'association sera informee de votre choix."}</p>
+            {status === "accepted" ? (
+              <Button className="mt-4 bg-blue-700 text-white hover:bg-blue-800" type="button" onClick={() => router.push("/auth/login")}>
+                Aller a la connexion
+              </Button>
+            ) : null}
           </div>
         )}
       </section>

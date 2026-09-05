@@ -236,6 +236,48 @@ def test_member_invitation_api_can_target_existing_member_without_duplicate(djan
 
 
 @pytest.mark.django_db
+def test_public_invitation_accept_and_decline_endpoints_activate_or_decline(django_user_model):
+    workspace, owner = make_workspace(django_user_model, "publicinvite", ONBOARDING_PERMISSIONS)
+    MembershipSettings.objects.create(workspace=workspace, invitation_enabled=True)
+    api_client = APIClient()
+    api_client.force_authenticate(owner)
+
+    first = api_client.post(
+        "/api/v1/members/invitations/",
+        {"first_name": "Awa", "last_name": "Kone", "email": "awa.public@example.com", "phone": "+2250700000012"},
+        format="json",
+        HTTP_X_WORKSPACE=workspace.slug,
+    )
+    first_token = first.data["accept_url"].rsplit("/", 1)[-1]
+    public_client = APIClient()
+
+    detail = public_client.get(f"/api/v1/public/invitations/{first_token}/")
+    accepted = public_client.post("/api/v1/public/invitations/accept/", {"token": first_token}, format="json")
+    invited_user = django_user_model.objects.get(email="awa.public@example.com")
+    membership = WorkspaceMembership.objects.get(user=invited_user, workspace=workspace)
+
+    assert detail.status_code == 200
+    assert detail.data["association"] == workspace.name
+    assert accepted.status_code == 200
+    assert accepted.data["status"] == MemberInvitation.Status.ACCEPTED
+    assert membership.status == WorkspaceMembership.Status.ACTIVE
+    assert membership.role.code == "MEMBER"
+
+    api_client.force_authenticate(owner)
+    second = api_client.post(
+        "/api/v1/members/invitations/",
+        {"first_name": "Paul", "last_name": "Ake", "phone": "+2250700000013"},
+        format="json",
+        HTTP_X_WORKSPACE=workspace.slug,
+    )
+    second_token = second.data["accept_url"].rsplit("/", 1)[-1]
+    declined = public_client.post("/api/v1/public/invitations/decline/", {"token": second_token}, format="json")
+
+    assert declined.status_code == 200
+    assert declined.data["status"] == MemberInvitation.Status.DECLINED
+
+
+@pytest.mark.django_db
 def test_membership_applications_api_and_public_form_are_workspace_scoped(django_user_model):
     workspace, owner = make_workspace(django_user_model, "publicform", ONBOARDING_PERMISSIONS)
     MembershipSettings.objects.create(workspace=workspace, public_form_enabled=True, membership_enabled=True)
