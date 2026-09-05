@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, ChevronLeft, ChevronRight, Clock3, MapPin, Plus, Ticket, Users, WalletCards } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getCurrentUser } from "@/features/auth/current-user";
 import { workspacePath } from "@/lib/workspace/routing";
 import { getEventsOverview, listCalendarItems, type CalendarItem, type EventOverview } from "./api";
 
@@ -172,6 +173,13 @@ export function EventsView({ workspaceSlug }: Readonly<{ workspaceSlug: string }
     queryKey: ["events-overview", workspaceSlug],
     queryFn: () => getEventsOverview(workspaceSlug)
   });
+  const userQuery = useQuery({
+    queryKey: ["current-user", workspaceSlug],
+    queryFn: () => getCurrentUser(workspaceSlug),
+    retry: false
+  });
+  const permissions = new Set(userQuery.data?.workspace_access?.permissions ?? []);
+  const canCreateEvent = permissions.has("*") || permissions.has("events.create");
   const events = calendarQuery.data?.map(toEventRow) ?? [];
   const overview = overviewQuery.data ?? emptyOverview;
   const calendarDays = useMemo(() => getCalendarDays(visibleMonth), [visibleMonth]);
@@ -192,12 +200,12 @@ export function EventsView({ workspaceSlug }: Readonly<{ workspaceSlug: string }
           <h1 className="text-3xl font-black tracking-normal">Evenements</h1>
           <p className="mt-2 max-w-md text-sm font-semibold leading-5 text-slate-600">Gerez le calendrier et les performances de vos rassemblements.</p>
         </div>
-        <Button asChild className="hidden min-h-11 px-4 md:inline-flex">
+        {canCreateEvent ? <Button asChild className="hidden min-h-11 px-4 md:inline-flex">
           <Link href={workspacePath(workspaceSlug, "events/new")}>
             <Plus className="size-4" />
             Nouvel evenement
           </Link>
-        </Button>
+        </Button> : null}
       </header>
 
       <section className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -323,11 +331,11 @@ export function EventsView({ workspaceSlug }: Readonly<{ workspaceSlug: string }
         )}
       </section>
 
-      <Button asChild className="fixed bottom-24 right-5 z-20 grid size-14 place-items-center rounded-full bg-blue-700 p-0 text-white shadow-xl shadow-blue-900/25 md:hidden">
+      {canCreateEvent ? <Button asChild className="fixed bottom-24 right-5 z-20 grid size-14 place-items-center rounded-full bg-blue-700 p-0 text-white shadow-xl shadow-blue-900/25 md:hidden">
         <Link href={workspacePath(workspaceSlug, "events/new")} aria-label="Ajouter un evenement">
           <Plus className="size-7" />
         </Link>
-      </Button>
+      </Button> : null}
     </main>
   );
 }

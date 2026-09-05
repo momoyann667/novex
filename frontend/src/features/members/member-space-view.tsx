@@ -12,6 +12,25 @@ import { currentMemberProfile } from "./current-member-profile";
 
 type Tab = "profile" | "contributions" | "payments" | "attendance" | "events" | "documents" | "history";
 
+type SelfMemberProfile = {
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  email: string;
+  phone_country_code: string;
+  phone: string;
+  function: string;
+  status: string;
+  membership_number: string;
+  join_date: string;
+  occupation: string;
+  city: string;
+  photo: string;
+  profile_completion?: {
+    percentage?: number;
+  };
+};
+
 const association = {
   name: "Association",
   logoInitial: "A"
@@ -51,35 +70,54 @@ function initialsFromName(name: string) {
   return parts.slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
 }
 
+function getSelfMemberProfile(workspaceSlug: string) {
+  return fetch(`/api/backend/me/member/`, {
+    credentials: "include",
+    headers: { "X-Workspace": workspaceSlug },
+    cache: "no-store"
+  }).then(async (response) => {
+    if (!response.ok) return null;
+    return (await response.json()) as SelfMemberProfile;
+  });
+}
+
 export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: string }>) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("profile");
   const [isEditing, setIsEditing] = useState(false);
-  const userQuery = useQuery({ queryKey: ["current-user"], queryFn: getCurrentUser, retry: false });
+  const userQuery = useQuery({ queryKey: ["current-user", workspaceSlug], queryFn: () => getCurrentUser(workspaceSlug), retry: false });
+  const selfMemberQuery = useQuery({
+    queryKey: ["self-member-profile", workspaceSlug],
+    queryFn: () => getSelfMemberProfile(workspaceSlug),
+    retry: false
+  });
   const settingsQuery = useQuery({
     queryKey: ["workspace-settings", workspaceSlug],
     queryFn: () => getWorkspaceSettings(workspaceSlug),
     retry: false
   });
   const user = userQuery.data;
-  const owner = settingsQuery.data?.owner;
-  const ownerName = owner?.full_name?.trim() || "";
-  const fullName = ownerName || displayUserName(user);
-  const ownerFirstName = ownerName.split(/\s+/)[0] || "";
-  const ownerLastName = ownerName.split(/\s+/).slice(1).join(" ");
+  const member = selfMemberQuery.data;
+  const fullName = member?.full_name || displayUserName(user);
+  const firstName = member?.first_name || user?.profile?.first_name || fullName.split(" ")[0] || "Utilisateur";
+  const lastName = member?.last_name || user?.profile?.last_name || "";
   const workspaceName = settingsQuery.data?.workspace_name || association.name;
   const profile = {
     ...currentMemberProfile,
-    firstName: ownerFirstName || user?.profile?.first_name || fullName.split(" ")[0] || "Utilisateur",
-    lastName: ownerLastName || user?.profile?.last_name || "",
+    firstName,
+    lastName,
     fullName,
-    initials: ownerName ? initialsFromName(ownerName) : userInitials(user),
-    email: owner?.email || user?.email || "",
-    phone: owner?.phone || user?.phone || "",
-    joinedAt: new Date().toISOString().slice(0, 10),
-    membershipNumber: "A creer",
-    completion: owner?.email || user?.email ? 40 : 0,
-    photoUrl: user?.profile?.avatar || ""
+    initials: member?.full_name ? initialsFromName(member.full_name) : userInitials(user),
+    email: member?.email || user?.email || "",
+    phone: `${member?.phone_country_code || ""}${member?.phone || user?.phone || ""}`,
+    joinedAt: member?.join_date || new Date().toISOString().slice(0, 10),
+    membershipNumber: member?.membership_number || "A creer",
+    function: member?.function || "Membre",
+    status: member?.status === "active" ? "Actif" : member?.status || "Actif",
+    occupation: member?.occupation || "",
+    city: member?.city || "",
+    completion: member?.profile_completion?.percentage ?? (user?.email ? 40 : 0),
+    photoUrl: member?.photo || user?.profile?.avatar || ""
   };
   const totalDue = useMemo(() => contributions.reduce((sum, item) => sum + item.due, 0), []);
   const totalPaid = useMemo(() => contributions.reduce((sum, item) => sum + item.paid, 0), []);
@@ -184,7 +222,7 @@ export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: str
                 <Button type="button" variant="outline" onClick={() => setIsEditing((value) => !value)}><Edit3 className="size-4" /> Modifier</Button>
               </div>
               <div className="mt-5 grid gap-4 md:grid-cols-2">
-                {["Nom: Mohamed", "Prenoms: Tangora", `Telephone: ${profile.phone}`, `Email: ${profile.email}`, `Ville: ${profile.city}`, `Profession: ${profile.occupation || "A completer"}`].map((item) => <p className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-600" key={item}>{item}</p>)}
+                {[`Nom: ${profile.lastName || "A completer"}`, `Prenoms: ${profile.firstName || "A completer"}`, `Telephone: ${profile.phone || "A completer"}`, `Email: ${profile.email || "A completer"}`, `Ville: ${profile.city || "A completer"}`, `Profession: ${profile.occupation || "A completer"}`].map((item) => <p className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-600" key={item}>{item}</p>)}
               </div>
               {isEditing ? (
                 <form className="mt-5 grid gap-3">

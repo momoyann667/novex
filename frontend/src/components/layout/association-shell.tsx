@@ -66,8 +66,10 @@ export function AssociationShell({ children, workspaceSlug }: Readonly<{ childre
   }
 
   const visibleNav = nav.filter(canSeeNavItem);
-  const primaryMobileNav = visibleNav.slice(0, 4);
-  const moreMobileNav = visibleNav.slice(4);
+  const mobilePrimaryPaths = role === "membre" ? ["dashboard", "payments", "communication", "events"] : ["dashboard", "members", "contributions", "communication"];
+  const mobilePrimarySet = new Set(mobilePrimaryPaths);
+  const primaryMobileNav = mobilePrimaryPaths.map((path) => visibleNav.find((item) => item.path === path)).filter((item): item is NavItem => Boolean(item));
+  const moreMobileNav = visibleNav.filter((item) => !mobilePrimarySet.has(item.path));
 
   function isActive(path: string) {
     if (hasInvalidWorkspace) {
@@ -81,15 +83,16 @@ export function AssociationShell({ children, workspaceSlug }: Readonly<{ childre
   const isForbiddenForMember =
     !userQuery.isLoading &&
     role === "membre" &&
-    ![
-      "dashboard",
-      "member",
-      "communication",
-      "events",
-      "documents",
-      "payments",
-      "settings/security"
-    ].some((path) => normalizedPath === path || normalizedPath.startsWith(`${path}/`));
+    (["events/new", "documents/upload"].some((path) => normalizedPath === path || normalizedPath.startsWith(`${path}/`)) ||
+      ![
+        "dashboard",
+        "member",
+        "communication",
+        "events",
+        "documents",
+        "payments",
+        "settings/security"
+      ].some((path) => normalizedPath === path || normalizedPath.startsWith(`${path}/`)));
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20 md:grid md:grid-cols-[272px_minmax(0,1fr)] md:pb-0">

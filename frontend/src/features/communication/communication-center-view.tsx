@@ -4,7 +4,9 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Bell, CalendarClock, CheckCircle2, Clock3, Copy, Eye, FileText, Mail, MessageSquare, Phone, Send, Smartphone, Users, X } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { getCurrentUser } from "@/features/auth/current-user";
 
 type CommunicationStatus = "Brouillon" | "Programmee" | "En cours" | "Envoyee" | "Partielle" | "Echec" | "Annulee";
 type CommunicationType = "Annonce" | "Message collectif" | "Notification directe";
@@ -67,15 +69,25 @@ export function CommunicationCenterView({ workspaceSlug }: Readonly<{ workspaceS
   const [scheduledAt, setScheduledAt] = useState("");
   const [notice, setNotice] = useState("");
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
+  const userQuery = useQuery({
+    queryKey: ["current-user", workspaceSlug],
+    queryFn: () => getCurrentUser(workspaceSlug),
+    retry: false
+  });
+  const permissions = new Set(userQuery.data?.workspace_access?.permissions ?? []);
+  const canCompose = permissions.has("*") || permissions.has("communication.create");
+  const memberMode = userQuery.data?.workspace_access?.role === "membre";
+  const visibleTabs = memberMode ? ["Messages", "Mes notifications"] : tabs;
+  const effectiveActiveTab = memberMode && !visibleTabs.includes(activeTab) ? "Messages" : activeTab;
 
   const filteredItems = useMemo(() => {
-    if (activeTab === "Annonces") return items.filter((item) => item.type === "Annonce");
-    if (activeTab === "Messages") return items.filter((item) => item.type === "Message collectif" || item.type === "Notification directe");
-    if (activeTab === "Brouillons") return items.filter((item) => item.status === "Brouillon");
-    if (activeTab === "Programmes") return items.filter((item) => item.status === "Programmee");
-    if (activeTab === "Historique") return items.filter((item) => item.status !== "Brouillon");
+    if (effectiveActiveTab === "Annonces") return items.filter((item) => item.type === "Annonce");
+    if (effectiveActiveTab === "Messages") return items.filter((item) => item.type === "Message collectif" || item.type === "Notification directe");
+    if (effectiveActiveTab === "Brouillons") return items.filter((item) => item.status === "Brouillon");
+    if (effectiveActiveTab === "Programmes") return items.filter((item) => item.status === "Programmee");
+    if (effectiveActiveTab === "Historique") return items.filter((item) => item.status !== "Brouillon");
     return items;
-  }, [activeTab, items]);
+  }, [effectiveActiveTab, items]);
 
   const stats = useMemo(() => {
     const sent = items.reduce((total, item) => total + (item.status === "Envoyee" || item.status === "Partielle" ? item.recipients : 0), 0);
@@ -144,15 +156,15 @@ export function CommunicationCenterView({ workspaceSlug }: Readonly<{ workspaceS
           <h1 className="mt-2 text-3xl font-black leading-tight tracking-normal">Centre de communication</h1>
           <p className="mt-2 text-sm font-medium leading-5 text-slate-600">Annonces, messages collectifs, notifications et historique centralises.</p>
         </div>
-        <Button className="min-h-12 px-5" type="button" onClick={() => setShowComposer(true)}>
+        {canCompose ? <Button className="min-h-12 px-5" type="button" onClick={() => setShowComposer(true)}>
           <Send className="size-4" />
           Composer
-        </Button>
+        </Button> : null}
       </section>
 
       {notice ? <p className="mt-4 rounded-md bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">{notice}</p> : null}
 
-      <section className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
+      {!memberMode ? <section className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
         {[
           ["Messages envoyes", stats.sent.toLocaleString("fr-FR"), Send],
           ["Messages delivres", stats.delivered.toLocaleString("fr-FR"), CheckCircle2],
@@ -168,9 +180,9 @@ export function CommunicationCenterView({ workspaceSlug }: Readonly<{ workspaceS
             <div className="mt-3 text-3xl font-black tracking-normal">{value as string}</div>
           </div>
         ))}
-      </section>
+      </section> : null}
 
-      <section className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
+      {!memberMode ? <section className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-black text-slate-500">Activite 30 jours</p>
           <div className="mt-3 flex h-14 items-end gap-1">
@@ -187,17 +199,17 @@ export function CommunicationCenterView({ workspaceSlug }: Readonly<{ workspaceS
           <p className="mt-2 text-2xl font-black text-amber-700">Email, SMS, WhatsApp</p>
           <p className="mt-1 text-xs font-bold text-slate-500">Providers non configures.</p>
         </div>
-      </section>
+      </section> : null}
 
       <nav className="mt-5 flex gap-2 overflow-x-auto pb-1" aria-label="Navigation communication">
-        {tabs.map((tab) => (
-          <button className={`min-w-fit rounded-full px-4 py-2 text-xs font-black shadow-sm ${activeTab === tab ? "bg-blue-700 text-white" : "border border-slate-200 bg-white text-slate-700"}`} type="button" key={tab} onClick={() => setActiveTab(tab)}>
+        {visibleTabs.map((tab) => (
+          <button className={`min-w-fit rounded-full px-4 py-2 text-xs font-black shadow-sm ${effectiveActiveTab === tab ? "bg-blue-700 text-white" : "border border-slate-200 bg-white text-slate-700"}`} type="button" key={tab} onClick={() => setActiveTab(tab)}>
             {tab}
           </button>
         ))}
       </nav>
 
-      {activeTab === "Modeles" ? (
+      {activeTab === "Modeles" && !memberMode ? (
         <section className="mt-5 grid gap-3 md:grid-cols-3">
           {["Rappel reunion mensuelle", "Convocation assemblee generale", "Message de bienvenue"].map((template) => (
             <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" key={template}>
@@ -211,7 +223,7 @@ export function CommunicationCenterView({ workspaceSlug }: Readonly<{ workspaceS
             </article>
           ))}
         </section>
-      ) : activeTab === "Mes notifications" ? (
+      ) : effectiveActiveTab === "Mes notifications" ? (
         <section className="mt-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-xl font-black">Mes notifications</h2>
@@ -274,7 +286,7 @@ export function CommunicationCenterView({ workspaceSlug }: Readonly<{ workspaceS
         </section>
       )}
 
-      {showComposer ? (
+      {showComposer && canCompose ? (
         <section className="fixed inset-0 z-40 grid place-items-end bg-slate-950/35 px-4 pb-4 md:place-items-center">
           <form className="max-h-[92vh] w-full overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl md:max-w-2xl" onSubmit={(event) => { event.preventDefault(); saveCommunication("Envoyee"); }}>
             <div className="mb-5 flex items-center justify-between">

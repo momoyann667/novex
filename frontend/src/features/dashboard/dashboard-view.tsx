@@ -41,6 +41,14 @@ type Metric = {
 
 type PeriodKey = "Ce mois" | "Trimestre" | "Annee" | "Tout";
 
+type SelfMemberProfile = {
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  email: string;
+  phone: string;
+};
+
 const periodData: Record<
   PeriodKey,
   {
@@ -211,6 +219,17 @@ function SectionTitle({ title, action }: Readonly<{ title: string; action?: stri
   );
 }
 
+function getSelfMemberProfile(workspaceSlug: string) {
+  return fetch(`/api/backend/me/member/`, {
+    credentials: "include",
+    headers: { "X-Workspace": workspaceSlug },
+    cache: "no-store"
+  }).then(async (response) => {
+    if (!response.ok) return null;
+    return (await response.json()) as SelfMemberProfile;
+  });
+}
+
 export function DashboardView({
   initialData = emptyDashboardOverview,
   workspaceSlug
@@ -226,8 +245,14 @@ export function DashboardView({
     retry: false
   });
   const userQuery = useQuery({
-    queryKey: ["current-user"],
-    queryFn: getCurrentUser,
+    queryKey: ["current-user", workspaceSlug],
+    queryFn: () => getCurrentUser(workspaceSlug),
+    retry: false
+  });
+  const selfMemberQuery = useQuery({
+    queryKey: ["self-member-profile", workspaceSlug],
+    queryFn: () => getSelfMemberProfile(workspaceSlug),
+    enabled: userQuery.data?.workspace_access?.role === "membre",
     retry: false
   });
   const settingsQuery = useQuery({
@@ -261,7 +286,7 @@ export function DashboardView({
   const currentProfile = displayProfile(profile, overview.workspace.name);
   const workspaceLogoUrl = backendMediaUrl(settingsQuery.data?.logo) || currentProfile.logoDataUrl;
   const workspaceOwnerName = settingsQuery.data?.owner?.full_name?.trim() || "";
-  const dashboardUserName = workspaceOwnerName || displayUserName(userQuery.data);
+  const dashboardUserName = selfMemberQuery.data?.full_name || (userQuery.data?.workspace_access?.role === "membre" ? displayUserName(userQuery.data) : workspaceOwnerName || displayUserName(userQuery.data));
   const dashboardAssociationName = settingsQuery.data?.workspace_name || currentProfile.associationName || initialData.workspace.name;
   const moneyFallback = `0 ${overview.workspace.currency === "XOF" ? "FCFA" : overview.workspace.currency}`;
   const current = {
