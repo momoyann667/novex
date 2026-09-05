@@ -115,6 +115,11 @@ function money(value: string | number | null | undefined) {
   return `${amount.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} ${currency}`;
 }
 
+function participantCount(value: string) {
+  const amount = Number(value.split("/")[0]?.trim() || 0);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
 function mapStatus(status: string, sourceType: CalendarItem["source_type"]): EventRow["status"] {
   if (["DEADLINE", "PROJECT", "TASK", "CONTRIBUTION", "FINANCE"].includes(sourceType)) return "Echeance";
   if (["REMINDER", "COMMUNICATION"].includes(sourceType)) return "Rappel";
@@ -186,6 +191,7 @@ export function EventsView({ workspaceSlug }: Readonly<{ workspaceSlug: string }
   const selectedEvents = useMemo(() => events.filter((event) => event.date === selectedDate), [events, selectedDate]);
   const upcomingEvents = overviewQuery.data ? overview.upcoming_events : events.filter((event) => event.date >= todayIso).length;
   const averageParticipation = overviewQuery.data ? Math.round(overview.average_attendance_rate) : Math.round(events.reduce((total, event) => total + event.participantPercent, 0) / Math.max(events.length, 1));
+  const plannedParticipants = overview.planned_participants || events.reduce((total, event) => total + participantCount(event.participants), 0);
   const selectedDay = getDisplayDay(selectedDate);
   const selectedMonth = getDisplayMonth(selectedDate);
 
@@ -219,7 +225,7 @@ export function EventsView({ workspaceSlug }: Readonly<{ workspaceSlug: string }
         </article>
         <article className="min-h-24 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-bold text-slate-500">Inscrits</p>
-          <p className="mt-2 text-3xl font-black">{overview.planned_participants || events.reduce((total, event) => total + Number(event.participants.split("/")[0] || 0), 0)}</p>
+          <p className="mt-2 text-3xl font-black">{plannedParticipants.toLocaleString("fr-FR")}</p>
         </article>
         <article className="min-h-24 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-bold text-slate-500">Budget total</p>

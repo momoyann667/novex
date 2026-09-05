@@ -122,6 +122,7 @@ export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: str
   const totalDue = useMemo(() => contributions.reduce((sum, item) => sum + item.due, 0), []);
   const totalPaid = useMemo(() => contributions.reduce((sum, item) => sum + item.paid, 0), []);
   const remaining = Math.max(totalDue - totalPaid, 0);
+  const contributionRate = totalDue ? Math.round((totalPaid / totalDue) * 100) : 0;
   const participationRate = participations.length ? Math.round((participations.filter((item) => item.status === "Present").length / participations.length) * 100) : 0;
 
   return (
@@ -250,8 +251,8 @@ export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: str
         {activeTab === "contributions" ? (
           <div className="grid gap-4">
             <div className="rounded-xl bg-white p-5 shadow-sm">
-              <div className="flex items-end justify-between"><h2 className="text-xl font-black">Cotisations</h2><strong>{Math.round((totalPaid / totalDue) * 100)} %</strong></div>
-              <div className="mt-4 h-4 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-600" style={{ width: `${Math.round((totalPaid / totalDue) * 100)}%` }} /></div>
+              <div className="flex items-end justify-between"><h2 className="text-xl font-black">Cotisations</h2><strong>{contributionRate} %</strong></div>
+              <div className="mt-4 h-4 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-600" style={{ width: `${contributionRate}%` }} /></div>
               <p className="mt-3 text-sm font-semibold text-slate-600">{formatMoney(totalPaid)} paye sur {formatMoney(totalDue)}. Reste : {formatMoney(remaining)}.</p>
             </div>
             {contributions.map((item) => <DataCard key={item.period} title={item.period} subtitle={item.label} value={formatMoney(item.due)} status={item.status} detail={`Echeance ${formatDate(item.dueDate)}`} />)}
