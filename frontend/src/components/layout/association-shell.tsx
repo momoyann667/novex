@@ -70,7 +70,7 @@ export function AssociationShell({ children, workspaceSlug }: Readonly<{ childre
   const mobilePrimarySet = new Set(mobilePrimaryPaths);
   const primaryMobileNav = mobilePrimaryPaths.map((path) => visibleNav.find((item) => item.path === path)).filter((item): item is NavItem => Boolean(item));
   const moreMobileNav = visibleNav.filter((item) => !mobilePrimarySet.has(item.path));
-  const mobileGridClass = role === "membre" ? "grid-cols-6" : "grid-cols-5";
+  const mobileColumnCount = primaryMobileNav.length + 1;
 
   function isActive(path: string) {
     if (hasInvalidWorkspace) {
@@ -180,7 +180,10 @@ export function AssociationShell({ children, workspaceSlug }: Readonly<{ childre
         </div>
       ) : null}
 
-      <nav className={`fixed inset-x-0 bottom-0 z-30 grid ${mobileGridClass} border-t border-border bg-white px-1 pb-[env(safe-area-inset-bottom)] shadow-[0_-10px_30px_rgba(15,23,42,0.08)] md:hidden`}>
+      <nav
+        className="fixed inset-x-0 bottom-0 z-30 grid border-t border-border bg-white px-1 pb-[env(safe-area-inset-bottom)] shadow-[0_-10px_30px_rgba(15,23,42,0.08)] md:hidden"
+        style={{ gridTemplateColumns: `repeat(${mobileColumnCount}, minmax(0, 1fr))` }}
+      >
         {primaryMobileNav.map(({ label, path, icon: Icon }) => (
           <Link className={`grid min-h-16 place-items-center rounded-md text-[10px] font-bold ${isActive(path) ? "text-blue-700" : "text-slate-600"}`} href={workspacePath(workspaceSlug, path)} key={path}>
             <span className={`grid size-8 place-items-center rounded-md ${isActive(path) ? "bg-blue-50" : ""}`}>
