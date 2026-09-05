@@ -170,7 +170,7 @@ def test_member_invitation_token_accept_decline_and_idempotence(django_user_mode
     workspace, owner = make_workspace(django_user_model, "invites", ONBOARDING_PERMISSIONS)
     MembershipSettings.objects.create(workspace=workspace, invitation_enabled=True)
 
-    invitation, token, created = create_member_invitation(
+    invitation, token, created, temporary_password = create_member_invitation(
         workspace=workspace,
         actor=owner,
         first_name="Grace",
@@ -178,7 +178,7 @@ def test_member_invitation_token_accept_decline_and_idempotence(django_user_mode
         email="grace@example.com",
         function="Membre",
     )
-    duplicate, duplicate_token, duplicate_created = create_member_invitation(
+    duplicate, duplicate_token, duplicate_created, duplicate_temporary_password = create_member_invitation(
         workspace=workspace,
         actor=owner,
         first_name="Grace",
@@ -190,14 +190,22 @@ def test_member_invitation_token_accept_decline_and_idempotence(django_user_mode
     accepted = accept_invitation(token=token)
 
     assert created is True
+    assert temporary_password
+    invited_user = django_user_model.objects.get(email="grace@example.com")
+    assert invited_user.check_password(temporary_password)
+    assert invited_user.password != temporary_password
+    assert invited_user.must_change_password is True
+    assert WorkspaceMembership.objects.get(user=invited_user, workspace=workspace).status == WorkspaceMembership.Status.ACTIVE
     assert duplicate.id == invitation.id
     assert duplicate_token == ""
     assert duplicate_created is False
+    assert duplicate_temporary_password == ""
     assert accepted.status == MemberInvitation.Status.ACCEPTED
     assert accepted.member.email == "grace@example.com"
 
-    second_invitation, second_token, _ = create_member_invitation(workspace=workspace, actor=owner, first_name="Paul", last_name="Ake", phone="+2250102030405")
+    second_invitation, second_token, _, second_temporary_password = create_member_invitation(workspace=workspace, actor=owner, first_name="Paul", last_name="Ake", phone="+2250102030405")
     declined = decline_invitation(token=second_token)
+    assert second_temporary_password == ""
     assert declined.id == second_invitation.id
     assert declined.status == MemberInvitation.Status.DECLINED
 

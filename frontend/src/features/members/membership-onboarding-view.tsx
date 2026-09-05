@@ -108,6 +108,7 @@ type InvitationResource = {
   status: "pending" | "accepted" | "declined" | "cancelled" | "expired";
   expires_at: string;
   accept_url: string | null;
+  temporary_password: string | null;
   created_at: string;
 };
 
@@ -184,10 +185,11 @@ function whatsappHref(phone: string, message: string) {
   return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
 }
 
-function invitationMessage(memberName: string, acceptUrl: string | null, workspaceSlug: string, customMessage = "") {
+function invitationMessage(memberName: string, acceptUrl: string | null, workspaceSlug: string, customMessage = "", email = "", temporaryPassword: string | null = null) {
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
   const link = acceptUrl ? `${baseUrl}${acceptUrl}` : `${baseUrl}${workspacePath(workspaceSlug, "members/invitations")}`;
-  return `Bonjour ${memberName}, vous etes invite(e) a rejoindre l'association sur NOVEX. Cliquez ici : ${link}${customMessage ? `\n\nMessage : ${customMessage}` : ""}`;
+  const credentials = temporaryPassword && email ? `\n\nVos acces temporaires :\nEmail : ${email}\nMot de passe temporaire : ${temporaryPassword}\nVous devrez changer ce mot de passe apres connexion.` : "";
+  return `Bonjour ${memberName}, vous etes invite(e) a rejoindre l'association sur NOVEX. Cliquez ici : ${link}${credentials}${customMessage ? `\n\nMessage : ${customMessage}` : ""}`;
 }
 
 export function MembershipApplicationsView() {
@@ -345,13 +347,13 @@ export function MemberInvitationsView({ workspaceSlug }: Readonly<{ workspaceSlu
     ]);
   };
 
-  function openWhatsapp(member: { full_name?: string; first_name?: string; last_name?: string; phone?: string }, acceptUrl: string | null, customMessage = "") {
+  function openWhatsapp(member: { full_name?: string; first_name?: string; last_name?: string; phone?: string; email?: string }, acceptUrl: string | null, customMessage = "", temporaryPassword: string | null = null) {
     const name = member.full_name || `${member.first_name || ""} ${member.last_name || ""}`.trim() || "Membre";
     if (!member.phone) {
       setError("Ce membre n'a pas de numero WhatsApp enregistre.");
       return;
     }
-    window.open(whatsappHref(member.phone, invitationMessage(name, acceptUrl, workspaceSlug, customMessage)), "_blank", "noopener,noreferrer");
+    window.open(whatsappHref(member.phone, invitationMessage(name, acceptUrl, workspaceSlug, customMessage, member.email, temporaryPassword)), "_blank", "noopener,noreferrer");
   }
 
   const inviteMutation = useMutation({
@@ -359,7 +361,7 @@ export function MemberInvitationsView({ workspaceSlug }: Readonly<{ workspaceSlu
     onSuccess: async (invitation, member) => {
       setError("");
       setNotice(`Invitation preparee pour ${member.full_name}.`);
-      openWhatsapp(member, invitation.accept_url, invitation.message);
+      openWhatsapp(member, invitation.accept_url, invitation.message, invitation.temporary_password);
       await refreshInvitations();
     },
     onError: (mutationError) => setError(mutationError instanceof ApiError ? mutationError.message : "Impossible de creer l'invitation.")
@@ -370,7 +372,7 @@ export function MemberInvitationsView({ workspaceSlug }: Readonly<{ workspaceSlu
     onSuccess: async (invitation) => {
       setError("");
       setNotice(`Invitation preparee pour ${invitation.invitee_name}.`);
-      openWhatsapp({ full_name: invitation.invitee_name, phone: invitation.phone }, invitation.accept_url, invitation.message);
+      openWhatsapp({ full_name: invitation.invitee_name, phone: invitation.phone, email: invitation.email }, invitation.accept_url, invitation.message, invitation.temporary_password);
       setManualOpen(false);
       await refreshInvitations();
     },
@@ -390,7 +392,7 @@ export function MemberInvitationsView({ workspaceSlug }: Readonly<{ workspaceSlu
     mutationFn: (invitation: InvitationResource) => resendInvitation(workspaceSlug, invitation.id),
     onSuccess: async (invitation) => {
       setNotice(`Invitation renvoyee a ${invitation.invitee_name}.`);
-      openWhatsapp({ full_name: invitation.invitee_name, phone: invitation.phone }, invitation.accept_url, invitation.message);
+      openWhatsapp({ full_name: invitation.invitee_name, phone: invitation.phone, email: invitation.email }, invitation.accept_url, invitation.message, invitation.temporary_password);
       await refreshInvitations();
     },
     onError: (mutationError) => setError(mutationError instanceof ApiError ? mutationError.message : "Impossible de renvoyer l'invitation.")

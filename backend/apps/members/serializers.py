@@ -340,6 +340,7 @@ class MemberInvitationSerializer(serializers.ModelSerializer):
     invitee_name = serializers.CharField(source="__str__", read_only=True)
     invited_by_name = serializers.CharField(source="invited_by.__str__", read_only=True)
     accept_url = serializers.SerializerMethodField()
+    temporary_password = serializers.SerializerMethodField()
     member_id = serializers.IntegerField(write_only=True, required=False)
 
     class Meta:
@@ -365,14 +366,18 @@ class MemberInvitationSerializer(serializers.ModelSerializer):
             "invited_by",
             "invited_by_name",
             "accept_url",
+            "temporary_password",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "workspace", "member", "status", "expires_at", "accepted_at", "declined_at", "cancelled_at", "last_sent_at", "invited_by", "invited_by_name", "accept_url", "created_at", "updated_at"]
+        read_only_fields = ["id", "workspace", "member", "status", "expires_at", "accepted_at", "declined_at", "cancelled_at", "last_sent_at", "invited_by", "invited_by_name", "accept_url", "temporary_password", "created_at", "updated_at"]
 
     def get_accept_url(self, obj):
         token = self.context.get("plain_token")
         return f"/accepter-invitation/{token}" if token else None
+
+    def get_temporary_password(self, obj):
+        return self.context.get("temporary_password") or None
 
     def validate_email(self, value):
         if not value:

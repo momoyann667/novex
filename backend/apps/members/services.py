@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Max, Q, Sum
 from django.utils import timezone
@@ -18,10 +19,12 @@ from apps.payments.models import Payment
 from apps.payments.statuses import PaymentStatus
 from apps.workspaces.models import Workspace, WorkspaceMembership
 from apps.workspaces.services import ensure_workspace_rbac
+from apps.users.models import Profile
 from .models import Member, MemberActivity, MemberInvitation, MembershipApplication, MembershipSettings
 
 
 ZERO = Decimal("0.00")
+TEMPORARY_PASSWORD_CHARS = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%&*"
 
 
 DIRECTORY_SORTS = {
@@ -290,6 +293,17 @@ def generate_invitation_token() -> str:
     return get_random_string(48)
 
 
+def generate_temporary_password(user=None) -> str:
+    for _attempt in range(20):
+        password = get_random_string(18, allowed_chars=TEMPORARY_PASSWORD_CHARS)
+        try:
+            validate_password(password, user=user)
+        except Exception:
+            continue
+        return password
+    return get_random_string(24, allowed_chars=TEMPORARY_PASSWORD_CHARS)
+
+
 def find_existing_member(*, workspace: Workspace, email: str = "", phone: str = "") -> Member | None:
     filters = Q()
     if email:
@@ -447,8 +461,61 @@ def active_member_invitation_filter(*, workspace: Workspace, member: Member | No
     return queryset.filter(identity) if identity else MemberInvitation.objects.none()
 
 
+def ensure_invited_user_account(*, workspace: Workspace, invitation: MemberInvitation, actor=None, rotate_temporary_password: bool = False):
+    email = (invitation.email or "").strip().lower()
+    if not email:
+        return None, ""
+
+    roles = ensure_workspace_rbac(workspace)
+    user_model = get_user_model()
+    user = user_model.objects.filter(email__iexact=email).first()
+    temporary_password = ""
+    created = False
+
+    if not user:
+        temporary_password = generate_temporary_password()
+        user = user_model.objects.create_user(
+            username=email,
+            email=email,
+            password=temporary_password,
+            phone=invitation.phone,
+            email_verified_at=timezone.now(),
+            must_change_password=True,
+        )
+        Profile.objects.get_or_create(user=user, defaults={"first_name": invitation.first_name, "last_name": invitation.last_name})
+        created = True
+    elif rotate_temporary_password and user.must_change_password:
+        temporary_password = generate_temporary_password(user=user)
+        user.set_password(temporary_password)
+        user.is_active = True
+        if not user.email_verified_at:
+            user.email_verified_at = timezone.now()
+        user.save(update_fields=["password", "is_active", "email_verified_at"])
+
+    if invitation.member_id and not invitation.member.linked_user_id:
+        invitation.member.linked_user = user
+        invitation.member.save(update_fields=["linked_user", "updated_at"])
+
+    WorkspaceMembership.objects.update_or_create(
+        user=user,
+        workspace=workspace,
+        defaults={"role": roles["MEMBER"], "status": WorkspaceMembership.Status.INVITED, "invited_at": timezone.now()},
+    )
+
+    if created:
+        log_membership_event(
+            workspace=workspace,
+            actor=actor,
+            action="member.invited_account_created",
+            resource="user",
+            resource_id=str(user.id),
+            metadata={"invitation_id": invitation.id, "member_id": invitation.member_id},
+        )
+    return user, temporary_password
+
+
 @transaction.atomic
-def create_member_invitation(*, workspace: Workspace, actor, **data) -> tuple[MemberInvitation, str, bool]:
+def create_member_invitation(*, workspace: Workspace, actor, **data) -> tuple[MemberInvitation, str, bool, str]:
     settings = get_membership_settings(workspace)
     if not settings.invitation_enabled:
         raise ValueError("Les invitations sont desactivees pour cette association.")
@@ -457,7 +524,7 @@ def create_member_invitation(*, workspace: Workspace, actor, **data) -> tuple[Me
     member = data.get("member")
     existing = active_member_invitation_filter(workspace=workspace, member=member, email=email, phone=phone).first()
     if existing:
-        return existing, "", False
+        return existing, "", False, ""
     token = generate_invitation_token()
     invitation = MemberInvitation.objects.create(
         workspace=workspace,
@@ -467,8 +534,9 @@ def create_member_invitation(*, workspace: Workspace, actor, **data) -> tuple[Me
         last_sent_at=timezone.now(),
         **{**data, "email": email},
     )
+    _user, temporary_password = ensure_invited_user_account(workspace=workspace, invitation=invitation, actor=actor)
     log_membership_event(workspace=workspace, actor=actor, action="invitation.created", resource="member_invitation", resource_id=str(invitation.id), metadata={"email": email, "phone": phone})
-    return invitation, token, True
+    return invitation, token, True, temporary_password
 
 
 def get_invitation_by_token(token: str) -> MemberInvitation | None:
@@ -515,8 +583,11 @@ def accept_invitation(*, token: str, user=None) -> MemberInvitation:
 
     if linked_user:
         role = ensure_workspace_rbac(invitation.workspace)["MEMBER"]
-        if role:
-            WorkspaceMembership.objects.get_or_create(user=linked_user, workspace=invitation.workspace, defaults={"role": role, "status": WorkspaceMembership.Status.ACTIVE, "joined_at": timezone.now()})
+        WorkspaceMembership.objects.update_or_create(
+            user=linked_user,
+            workspace=invitation.workspace,
+            defaults={"role": role, "status": WorkspaceMembership.Status.ACTIVE, "joined_at": timezone.now()},
+        )
 
     invitation.status = MemberInvitation.Status.ACCEPTED
     invitation.member = member
@@ -555,7 +626,7 @@ def cancel_invitation(*, invitation: MemberInvitation, actor) -> MemberInvitatio
 
 
 @transaction.atomic
-def resend_invitation(*, invitation: MemberInvitation, actor) -> tuple[MemberInvitation, str]:
+def resend_invitation(*, invitation: MemberInvitation, actor) -> tuple[MemberInvitation, str, str]:
     invitation = MemberInvitation.objects.select_for_update().get(id=invitation.id)
     if invitation.status not in [MemberInvitation.Status.PENDING, MemberInvitation.Status.EXPIRED]:
         raise ValueError("Cette invitation ne peut pas etre renvoyee.")
@@ -566,8 +637,9 @@ def resend_invitation(*, invitation: MemberInvitation, actor) -> tuple[MemberInv
     invitation.expires_at = timezone.now() + timedelta(days=settings.invitation_expiration_days)
     invitation.last_sent_at = timezone.now()
     invitation.save(update_fields=["token_hash", "status", "expires_at", "last_sent_at", "updated_at"])
+    _user, temporary_password = ensure_invited_user_account(workspace=invitation.workspace, invitation=invitation, actor=actor, rotate_temporary_password=True)
     log_membership_event(workspace=invitation.workspace, actor=actor, action="invitation.resent", resource="member_invitation", resource_id=str(invitation.id))
-    return invitation, token
+    return invitation, token, temporary_password
 
 
 def profile_completion(member: Member | MembershipApplication) -> dict:

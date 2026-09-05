@@ -517,10 +517,10 @@ class MemberInvitationViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
-            invitation, token, created = create_member_invitation(workspace=current_workspace(request), actor=request.user, **serializer.validated_data)
+            invitation, token, created, temporary_password = create_member_invitation(workspace=current_workspace(request), actor=request.user, **serializer.validated_data)
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        response_serializer = self.get_serializer(invitation, context={"plain_token": token})
+        response_serializer = self.get_serializer(invitation, context={"plain_token": token, "temporary_password": temporary_password})
         return Response(response_serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"])
@@ -534,10 +534,10 @@ class MemberInvitationViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def resend(self, request, pk=None):
         try:
-            invitation, token = resend_invitation(invitation=self.get_object(), actor=request.user)
+            invitation, token, temporary_password = resend_invitation(invitation=self.get_object(), actor=request.user)
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(self.get_serializer(invitation, context={"plain_token": token}).data)
+        return Response(self.get_serializer(invitation, context={"plain_token": token, "temporary_password": temporary_password}).data)
 
     @action(detail=False, methods=["post"], permission_classes=[AllowAny])
     def accept(self, request):
