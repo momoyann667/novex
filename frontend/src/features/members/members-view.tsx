@@ -30,6 +30,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { apiFetch, ApiError } from "@/lib/api/client";
 import { getWorkspaceSettings } from "@/features/workspace/api";
+import { workspacePath } from "@/lib/workspace/routing";
 
 type MemberStatus = "Actif" | "En attente" | "Inactif" | "Suspendu" | "Archive";
 type ContributionStatus = "A jour" | "En retard" | "Partiel" | "Aucune cotisation";
@@ -586,7 +587,7 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
             Ajouter
           </Button>
           <Button asChild className="min-h-11 px-3" variant="outline">
-            <Link href={`/app/${workspaceSlug}/members/invitations`}>
+            <Link href={workspacePath(workspaceSlug, "members/invitations")}>
               <UserPlus className="size-4" />
               Inviter
             </Link>
