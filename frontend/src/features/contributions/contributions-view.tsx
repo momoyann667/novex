@@ -14,12 +14,15 @@ import {
   listContributionCampaigns,
   listContributionCategories,
   listContributionGroups,
+  listContributionMembers,
   listContributions,
-  recordContributionPayment,
+  listDonationPayments,
+  recordCreatorManualPayment,
   requestContributionExport,
-  sendContributionReminder
+  uploadPaymentProof
 } from "./api";
-import type { ContributionFilters, ContributionPeriod, ContributionResource, ContributionStatus } from "./api";
+import { getProjectBoard, listMemberOptions } from "@/features/projects/api";
+import type { ContributionFilters, ContributionMemberSummary, ContributionPeriod, ContributionResource, ContributionStatus, PaymentResource } from "./api";
 import { CONTRIBUTION_STATUSES } from "./contribution-status";
 
 const periods: Array<{ value: ContributionPeriod; label: string }> = [
@@ -42,12 +45,12 @@ const statusStyles: Record<string, { label: string; badge: string; avatar: strin
 };
 
 const paymentMethods = [
-  { value: "cash", label: "Especes" },
-  { value: "external_mobile_money", label: "Mobile Money" },
-  { value: "bank_transfer", label: "Virement" },
-  { value: "check", label: "Cheque" },
-  { value: "manual", label: "Manuel" },
-  { value: "other", label: "Autre" }
+  { value: "CASH", label: "Especes" },
+  { value: "EXTERNAL_MOBILE_MONEY", label: "Mobile Money" },
+  { value: "BANK_TRANSFER", label: "Virement" },
+  { value: "CHECK", label: "Cheque" },
+  { value: "MANUAL", label: "Manuel" },
+  { value: "OTHER", label: "Autre" }
 ] as const;
 
 const monthOptions = [
@@ -117,6 +120,16 @@ function tableStatus(item: ContributionResource, selectedMonth: number, selected
 
 function queryStatus(status: string) {
   return status && status !== "all" ? status : undefined;
+}
+
+function dateLabel(value: string | null | undefined) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
+}
+
+function whatsappUrl(phone: string, message: string) {
+  const digits = phone.replace(/\D/g, "");
+  return digits ? `https://wa.me/${digits}?text=${encodeURIComponent(message)}` : "";
 }
 
 function KpiTile({ title, value, icon, tone, pill, progressValue }: Readonly<{ title: string; value: string; icon: React.ReactNode; tone: "blue" | "green" | "red" | "slate"; pill?: string; progressValue?: number }>) {
@@ -201,15 +214,41 @@ function ChartPanel({ period, onPeriodChange, collected, remaining, overdue, rat
   );
 }
 
-function PaymentDrawer({ contribution, onClose, onSubmit, isPending, error }: Readonly<{ contribution: ContributionResource | null; onClose: () => void; onSubmit: (payload: { amount: string; payment_method: string; document_reference: string; paid_at: string }) => void; isPending: boolean; error?: string }>) {
+function PaymentDrawer({
+  open,
+  contributions,
+  members,
+  projects,
+  onClose,
+  onSubmit,
+  isPending,
+  error
+}: Readonly<{
+  open: boolean;
+  contributions: ContributionResource[];
+  members: Array<{ id: number; full_name: string }>;
+  projects: Array<{ id: number; name: string }>;
+  onClose: () => void;
+  onSubmit: (payload: { payment_type: "CONTRIBUTION" | "DONATION"; contribution?: number | null; member: number; project?: number | null; amount: string; payment_method: string; document_reference: string; paid_at: string; proof: File | null }) => void;
+  isPending: boolean;
+  error?: string;
+}>) {
+  const [paymentType, setPaymentType] = useState<"CONTRIBUTION" | "DONATION">("CONTRIBUTION");
+  const [contributionId, setContributionId] = useState("");
+  const [memberId, setMemberId] = useState("");
+  const [projectId, setProjectId] = useState("");
   const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState("cash");
+  const [method, setMethod] = useState("CASH");
   const [reference, setReference] = useState("");
   const [paidAt, setPaidAt] = useState(() => new Date().toISOString().slice(0, 16));
-  if (!contribution) return null;
+  const [proof, setProof] = useState<File | null>(null);
+  if (!open) return null;
 
-  const isOverpayment = numberValue(amount) > numberValue(contribution.remaining_amount);
-  const remaining = Math.max(numberValue(contribution.remaining_amount) - numberValue(amount), 0);
+  const contribution = contributions.find((item) => item.id === Number(contributionId));
+  const effectiveMemberId = paymentType === "CONTRIBUTION" ? contribution?.member : Number(memberId);
+  const isOverpayment = paymentType === "CONTRIBUTION" && contribution ? numberValue(amount) > numberValue(contribution.remaining_amount) : false;
+  const remaining = contribution ? Math.max(numberValue(contribution.remaining_amount) - numberValue(amount), 0) : 0;
+  const canSubmit = Boolean(effectiveMemberId && amount && (paymentType === "DONATION" ? projectId : contributionId) && !isOverpayment);
 
   return (
     <div className="fixed inset-0 z-50 grid items-end bg-slate-950/40" role="dialog" aria-modal="true">
@@ -217,33 +256,120 @@ function PaymentDrawer({ contribution, onClose, onSubmit, isPending, error }: Re
         className="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl"
         onSubmit={(event) => {
           event.preventDefault();
-          onSubmit({ amount, payment_method: method, document_reference: reference, paid_at: new Date(paidAt).toISOString() });
+          if (!effectiveMemberId) return;
+          onSubmit({
+            payment_type: paymentType,
+            contribution: paymentType === "CONTRIBUTION" ? Number(contributionId) : null,
+            member: effectiveMemberId,
+            project: paymentType === "DONATION" ? Number(projectId) : null,
+            amount,
+            payment_method: method,
+            document_reference: reference,
+            paid_at: new Date(paidAt).toISOString(),
+            proof
+          });
         }}
       >
         <div className="mb-5 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm font-bold text-blue-700">Paiement manuel</p>
-            <h2 className="truncate text-2xl font-black tracking-normal">{contribution.member_name}</h2>
-            <p className="text-sm font-semibold text-slate-500">Reste: {formatMoney(contribution.remaining_amount, contribution.currency || "FCFA")}</p>
+            <h2 className="text-2xl font-black tracking-normal">Enregistrer un paiement</h2>
+            <p className="text-sm font-semibold text-slate-500">Cotisation, paiement partiel, paiement total ou don.</p>
           </div>
           <button className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black" type="button" onClick={onClose}>Fermer</button>
         </div>
         <div className="grid gap-4">
+          <label className="grid gap-2 text-sm font-black">Type<select className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" value={paymentType} onChange={(event) => { setPaymentType(event.target.value as "CONTRIBUTION" | "DONATION"); setAmount(""); }}>
+            <option value="CONTRIBUTION">Cotisation</option>
+            <option value="DONATION">Don</option>
+          </select></label>
+          {paymentType === "CONTRIBUTION" ? (
+            <label className="grid gap-2 text-sm font-black">Cotisation<select className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" required value={contributionId} onChange={(event) => {
+              const selected = contributions.find((item) => item.id === Number(event.target.value));
+              setContributionId(event.target.value);
+              setAmount(selected ? String(selected.remaining_amount) : "");
+            }}>
+              <option value="">Choisir une cotisation</option>
+              {contributions.map((item) => <option key={item.id} value={item.id}>{item.member_name} - {shortCampaignLabel(item)} - reste {formatMoney(item.remaining_amount, item.currency || "FCFA")}</option>)}
+            </select></label>
+          ) : (
+            <>
+              <label className="grid gap-2 text-sm font-black">Membre<select className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" required value={memberId} onChange={(event) => setMemberId(event.target.value)}>
+                <option value="">Choisir un membre</option>
+                {members.map((item) => <option key={item.id} value={item.id}>{item.full_name}</option>)}
+              </select></label>
+              <label className="grid gap-2 text-sm font-black">Projet<select className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" required value={projectId} onChange={(event) => setProjectId(event.target.value)}>
+                <option value="">Choisir un projet</option>
+                {projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select></label>
+            </>
+          )}
           <label className="grid gap-2 text-sm font-black">Montant<input className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" min="1" required type="number" value={amount} onChange={(event) => setAmount(event.target.value)} /></label>
           <label className="grid gap-2 text-sm font-black">Date<input className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" required type="datetime-local" value={paidAt} onChange={(event) => setPaidAt(event.target.value)} /></label>
           <label className="grid gap-2 text-sm font-black">Mode<select className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" value={method} onChange={(event) => setMethod(event.target.value)}>{paymentMethods.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
-          <label className="grid gap-2 text-sm font-black">Reference<input className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" value={reference} onChange={(event) => setReference(event.target.value)} /></label>
+          <label className="grid gap-2 text-sm font-black">Reference ou note<input className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" value={reference} onChange={(event) => setReference(event.target.value)} /></label>
+          <label className="grid gap-2 text-sm font-black">Justificatif photo ou PDF<input className="min-h-12 rounded-lg border border-dashed border-slate-300 p-3 text-sm font-semibold" accept="image/png,image/jpeg,image/webp,application/pdf" type="file" onChange={(event) => setProof(event.target.files?.[0] || null)} /></label>
         </div>
-        <div className={`mt-4 rounded-xl p-3 text-sm font-bold ${isOverpayment ? "bg-amber-50 text-amber-800" : "bg-blue-50 text-blue-800"}`}>
-          {isOverpayment ? "Le montant depasse le reste a payer. Verifie avant de confirmer." : `Reste apres paiement: ${formatMoney(remaining, contribution.currency || "FCFA")}`}
-        </div>
+        {paymentType === "CONTRIBUTION" && contribution ? (
+          <div className={`mt-4 rounded-xl p-3 text-sm font-bold ${isOverpayment ? "bg-amber-50 text-amber-800" : "bg-blue-50 text-blue-800"}`}>
+            {isOverpayment ? "Le montant depasse le reste a payer. Verifie avant de confirmer." : `Reste apres paiement: ${formatMoney(remaining, contribution.currency || "FCFA")}`}
+          </div>
+        ) : null}
         {error ? <p className="mt-3 text-sm font-bold text-red-600">{error}</p> : null}
         <div className="mt-5 grid grid-cols-2 gap-3">
           <Button className="min-h-12" type="button" variant="outline" onClick={onClose}>Annuler</Button>
-          <Button className="min-h-12" disabled={isPending || !amount || isOverpayment} type="submit">{isPending ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />} Enregistrer</Button>
+          <Button className="min-h-12" disabled={isPending || !canSubmit} type="submit">{isPending ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />} Enregistrer</Button>
         </div>
       </form>
     </div>
+  );
+}
+
+function reminderMessage(member: ContributionMemberSummary) {
+  return `Bonjour ${member.member_name}, merci de consulter votre espace NOVEX afin de regulariser vos cotisations en attente.`;
+}
+
+function RecoveryPanel({ members, currency }: Readonly<{ members: ContributionMemberSummary[]; currency: string }>) {
+  const visibleMembers = members.filter((member) => numberValue(member.remaining) > 0 && (member.items || []).length > 0);
+  return (
+    <section className="w-full rounded-xl border border-amber-200 bg-white p-4 shadow-sm">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-black tracking-normal">Membres a relancer</h2>
+          <p className="mt-1 text-sm font-semibold text-slate-500">Le detail reste visible ici; WhatsApp envoie un rappel simple.</p>
+        </div>
+        <span className="rounded-md bg-amber-100 px-2 py-1 text-xs font-black text-amber-800">{visibleMembers.length}</span>
+      </div>
+      <div className="grid gap-3">
+        {visibleMembers.map((member) => {
+          const href = whatsappUrl(member.phone, reminderMessage(member));
+          return (
+            <article className="rounded-lg border border-slate-200 p-3" key={member.member_id}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="truncate text-base font-black">{member.member_name}</h3>
+                  <p className="text-sm font-bold text-red-600">Total impaye: {formatMoney(member.remaining, currency)}</p>
+                </div>
+                {href ? (
+                  <a className="shrink-0 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white" href={href} target="_blank" rel="noreferrer">Relancer</a>
+                ) : (
+                  <span className="shrink-0 rounded-lg bg-slate-100 px-3 py-2 text-xs font-black text-slate-500">Sans numero</span>
+                )}
+              </div>
+              <div className="mt-3 grid gap-2">
+                {(member.items || []).map((item) => (
+                  <div className="rounded-md bg-slate-50 p-2 text-xs font-bold text-slate-600" key={item.id}>
+                    <span className="block text-slate-950">{item.campaign}</span>
+                    <span>Reste {formatMoney(item.remaining_amount, item.currency || currency)} sur {formatMoney(item.amount_due, item.currency || currency)}</span>
+                  </div>
+                ))}
+              </div>
+            </article>
+          );
+        })}
+        {!visibleMembers.length ? <div className="rounded-lg bg-slate-50 p-5 text-center text-sm font-bold text-slate-500">Aucun membre a relancer.</div> : null}
+      </div>
+    </section>
   );
 }
 
@@ -335,13 +461,16 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
   const [search, setSearch] = useState("");
   const [ordering, setOrdering] = useState("due_date");
   const [page, setPage] = useState(1);
-  const [selectedContribution, setSelectedContribution] = useState<ContributionResource | null>(null);
+  const [paymentDrawerOpen, setPaymentDrawerOpen] = useState(false);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [notice, setNotice] = useState("");
   const today = useMemo(() => new Date(), []);
   const [tableMonth, setTableMonth] = useState(today.getMonth());
   const [tableYear, setTableYear] = useState(today.getFullYear());
+  const [donationMonth, setDonationMonth] = useState(today.getMonth());
+  const [donationYear, setDonationYear] = useState(today.getFullYear());
   const tableBounds = useMemo(() => {
     const start = new Date(tableYear, tableMonth, 1);
     const end = new Date(tableYear, tableMonth + 1, 0);
@@ -350,9 +479,17 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
       dueBefore: end.toISOString().slice(0, 10)
     };
   }, [tableMonth, tableYear]);
+  const donationBounds = useMemo(() => {
+    const start = new Date(donationYear, donationMonth, 1);
+    const end = new Date(donationYear, donationMonth + 1, 0);
+    return {
+      dateFrom: start.toISOString().slice(0, 10),
+      dateTo: end.toISOString().slice(0, 10)
+    };
+  }, [donationMonth, donationYear]);
 
   const filters: ContributionFilters = useMemo(
-    () => ({ period, campaign, category, group, paymentMethod, status: queryStatus(status), search, ordering, page, pageSize: 8, dueAfter: tableBounds.dueAfter, dueBefore: tableBounds.dueBefore }),
+    () => ({ period, campaign, category, group, paymentMethod, status: queryStatus(status), search, ordering, page, pageSize: 100, dueAfter: tableBounds.dueAfter, dueBefore: tableBounds.dueBefore }),
     [campaign, category, group, ordering, page, paymentMethod, period, search, status, tableBounds]
   );
 
@@ -362,6 +499,14 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
   const categoriesQuery = useQuery({ queryKey: ["contribution-categories", workspaceSlug], queryFn: () => listContributionCategories(workspaceSlug) });
   const groupsQuery = useQuery({ queryKey: ["contribution-groups", workspaceSlug], queryFn: () => listContributionGroups(workspaceSlug) });
   const contributionsQuery = useQuery({ queryKey: ["contributions", workspaceSlug, filters], queryFn: () => listContributions(workspaceSlug, filters) });
+  const allPayableContributionsQuery = useQuery({
+    queryKey: ["contributions-payable-creator", workspaceSlug],
+    queryFn: () => listContributions(workspaceSlug, { period: "all", ordering: "due_date", page: 1, pageSize: 250 })
+  });
+  const membersQuery = useQuery({ queryKey: ["member-options", workspaceSlug], queryFn: () => listMemberOptions(workspaceSlug) });
+  const projectsQuery = useQuery({ queryKey: ["project-board-options", workspaceSlug], queryFn: () => getProjectBoard(workspaceSlug) });
+  const donationsQuery = useQuery({ queryKey: ["donation-payments", workspaceSlug, donationBounds], queryFn: () => listDonationPayments(workspaceSlug, donationBounds) });
+  const recoveryQuery = useQuery({ queryKey: ["contribution-members-recovery", workspaceSlug], queryFn: () => listContributionMembers(workspaceSlug), enabled: recoveryOpen });
   const latestContributionsQuery = useQuery({
     queryKey: ["contributions-latest", workspaceSlug],
     queryFn: () => listContributions(workspaceSlug, { period: "all", ordering: "-created_at", page: 1, pageSize: 5 })
@@ -370,9 +515,13 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
   const dashboard = dashboardQuery.data;
   const analytics = analyticsQuery.data;
   const contributions = contributionsQuery.data?.results || [];
+  const payableContributions = (allPayableContributionsQuery.data?.results || []).filter((item) => numberValue(item.remaining_amount) > 0);
   const latestContributions = latestContributionsQuery.data?.results || [];
+  const donations = donationsQuery.data || [];
+  const memberOptions = membersQuery.data || [];
+  const projectOptions = projectsQuery.data?.projects || [];
   const currency = contributions[0]?.currency || campaignsQuery.data?.[0]?.currency || "FCFA";
-  const totalPages = Math.max(Math.ceil((contributionsQuery.data?.count || 0) / 8), 1);
+  const totalPages = Math.max(Math.ceil((contributionsQuery.data?.count || 0) / 100), 1);
   const error = dashboardQuery.error || analyticsQuery.error || contributionsQuery.error;
   const paidCount = numberValue(dashboard?.members_paid);
   const partialCount = numberValue(dashboard?.members_partial);
@@ -388,25 +537,35 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
       queryClient.invalidateQueries({ queryKey: ["contributions-dashboard", workspaceSlug] }),
       queryClient.invalidateQueries({ queryKey: ["contributions-analytics", workspaceSlug] }),
       queryClient.invalidateQueries({ queryKey: ["contributions", workspaceSlug] }),
+      queryClient.invalidateQueries({ queryKey: ["contributions-payable-creator", workspaceSlug] }),
       queryClient.invalidateQueries({ queryKey: ["contributions-latest", workspaceSlug] })
     ]);
   };
 
   const paymentMutation = useMutation({
-    mutationFn: (payload: { amount: string; payment_method: string; document_reference: string; paid_at: string }) => {
-      if (!selectedContribution) throw new Error("Selectionne une cotisation.");
-      return recordContributionPayment(workspaceSlug, selectedContribution.id, payload);
+    mutationFn: async (payload: { payment_type: "CONTRIBUTION" | "DONATION"; contribution?: number | null; member: number; project?: number | null; amount: string; payment_method: string; document_reference: string; paid_at: string; proof: File | null }) => {
+      const payment = await recordCreatorManualPayment(workspaceSlug, {
+        payment_type: payload.payment_type,
+        contribution: payload.contribution,
+        member: payload.member,
+        project: payload.project,
+        amount: payload.amount,
+        payment_method: payload.payment_method,
+        document_reference: payload.document_reference,
+        paid_at: payload.paid_at
+      });
+      if (payload.proof) {
+        await uploadPaymentProof(workspaceSlug, payment.id, payload.proof);
+      }
+      return payment;
     },
     onSuccess: async () => {
-      setSelectedContribution(null);
+      setPaymentDrawerOpen(false);
       setNotice("Paiement enregistre.");
       await refreshAll();
+      await queryClient.invalidateQueries({ queryKey: ["donation-payments", workspaceSlug] });
+      await queryClient.invalidateQueries({ queryKey: ["contribution-members-recovery", workspaceSlug] });
     }
-  });
-
-  const reminderMutation = useMutation({
-    mutationFn: (contributionId: number) => sendContributionReminder(workspaceSlug, contributionId),
-    onSuccess: () => setNotice("Relance envoyee.")
   });
 
   const exportMutation = useMutation({
@@ -557,9 +716,43 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
         </div>
       </section>
 
+      <section className="w-full rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-4 grid gap-3">
+          <div>
+            <h2 className="text-xl font-black tracking-normal">Tous les dons</h2>
+            <p className="mt-1 text-sm font-semibold text-slate-500">Dons enregistres manuellement pour le mois choisi.</p>
+          </div>
+          <div className="grid grid-cols-[1fr_104px] gap-2">
+            <select className="min-h-11 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-black" value={donationMonth} onChange={(event) => setDonationMonth(Number(event.target.value))}>
+              {monthOptions.map((month, index) => <option key={month} value={index}>{month}</option>)}
+            </select>
+            <input className="min-h-11 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-black" max="2100" min="2000" type="number" value={donationYear} onChange={(event) => setDonationYear(Number(event.target.value))} />
+          </div>
+        </div>
+        <div className="grid min-w-0 overflow-hidden rounded-lg border border-slate-200">
+          <div className="grid grid-cols-[1fr_1fr_82px_76px] gap-2 bg-slate-50 px-3 py-3 text-[10px] font-black uppercase text-slate-500">
+            <span>Nom</span>
+            <span>Projet</span>
+            <span className="text-right">Montant</span>
+            <span className="text-right">Date</span>
+          </div>
+          {donations.map((payment: PaymentResource) => (
+            <div className="grid min-w-0 grid-cols-[1fr_1fr_82px_76px] items-center gap-2 border-t border-slate-100 px-3 py-3 text-xs" key={payment.id}>
+              <span className="min-w-0 truncate font-black text-slate-950">{payment.member_name || "Membre"}</span>
+              <span className="min-w-0 truncate font-bold text-slate-500">{payment.metadata?.project_name || "-"}</span>
+              <span className="text-right font-black">{formatMoney(payment.amount, payment.currency || currency)}</span>
+              <span className="text-right font-bold text-slate-500">{dateLabel(payment.paid_at || payment.created_at)}</span>
+            </div>
+          ))}
+          {!donations.length ? <div className="border-t border-slate-100 p-5 text-center text-sm font-bold text-slate-500">Aucun don pour ce mois.</div> : null}
+        </div>
+      </section>
+
+      {recoveryOpen ? <RecoveryPanel currency={currency} members={recoveryQuery.data || []} /> : null}
+
       <section className="grid w-full gap-3">
         <div className="grid grid-cols-2 gap-3">
-          <Button className="min-h-12 w-full" type="button" onClick={() => setSelectedContribution(contributions.find((item) => numberValue(item.remaining_amount) > 0) || contributions[0] || null)}>
+          <Button className="min-h-12 w-full" type="button" onClick={() => setPaymentDrawerOpen(true)}>
             <Plus className="size-4" />
             Paiement
           </Button>
@@ -568,8 +761,8 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
             Export
           </Button>
         </div>
-        <Button className="min-h-12 w-full" type="button" variant="outline" onClick={() => reminderMutation.mutate(contributions.find((item) => item.status === "OVERDUE")?.id || contributions[0]?.id)} disabled={reminderMutation.isPending || !contributions.length}>
-          {reminderMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+        <Button className="min-h-12 w-full" type="button" variant="outline" onClick={() => setRecoveryOpen((value) => !value)}>
+          {recoveryQuery.isFetching ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
           Relancer les impayes visibles
         </Button>
       </section>
@@ -608,11 +801,14 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
       </section>
 
       <PaymentDrawer
-        contribution={selectedContribution}
+        contributions={payableContributions}
         error={paymentMutation.error instanceof Error ? paymentMutation.error.message : undefined}
         isPending={paymentMutation.isPending}
-        onClose={() => setSelectedContribution(null)}
+        members={memberOptions}
+        onClose={() => setPaymentDrawerOpen(false)}
         onSubmit={(payload) => paymentMutation.mutate(payload)}
+        open={paymentDrawerOpen}
+        projects={projectOptions}
       />
       <CreateContributionDrawer
         error={createCampaignMutation.error instanceof Error ? createCampaignMutation.error.message : undefined}

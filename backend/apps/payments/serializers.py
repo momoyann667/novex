@@ -161,10 +161,28 @@ class PaymentRefundSerializer(serializers.Serializer):
 class ManualPaymentSerializer(serializers.Serializer):
     member = serializers.PrimaryKeyRelatedField(queryset=Member.objects.all())
     contribution = serializers.PrimaryKeyRelatedField(queryset=Contribution.objects.all(), required=False, allow_null=True)
+    project = serializers.PrimaryKeyRelatedField(queryset=Project.objects.all(), required=False, allow_null=True)
+    payment_type = serializers.ChoiceField(choices=["CONTRIBUTION", "DONATION"], default="CONTRIBUTION")
     amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0.01"))
     paid_at = serializers.DateTimeField(required=False)
     idempotency_key = serializers.CharField(max_length=160)
     payment_method = serializers.ChoiceField(choices=PaymentMethod.choices, default=PaymentMethod.MANUAL)
+    document_reference = serializers.CharField(max_length=180, required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        workspace = self.context.get("workspace")
+        if workspace:
+            for field in ["member", "contribution", "project"]:
+                item = attrs.get(field)
+                if item and item.workspace_id != workspace.id:
+                    raise serializers.ValidationError({field: "Cette ressource appartient a un autre workspace."})
+        if attrs["payment_type"] == "CONTRIBUTION" and not attrs.get("contribution"):
+            raise serializers.ValidationError({"contribution": "Choisissez la cotisation a regler."})
+        if attrs["payment_type"] == "CONTRIBUTION" and attrs.get("contribution") and attrs["contribution"].member_id != attrs["member"].id:
+            raise serializers.ValidationError({"member": "Le membre ne correspond pas a cette cotisation."})
+        if attrs["payment_type"] == "DONATION" and not attrs.get("project"):
+            raise serializers.ValidationError({"project": "Choisissez le projet associe au don."})
+        return attrs
 
 
 class ReceiptSerializer(serializers.ModelSerializer):

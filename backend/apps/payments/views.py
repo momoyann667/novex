@@ -99,6 +99,8 @@ class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(amount__gte=self.request.query_params["amount_min"])
         if self.request.query_params.get("amount_max"):
             queryset = queryset.filter(amount__lte=self.request.query_params["amount_max"])
+        if self.request.query_params.get("payment_type"):
+            queryset = queryset.filter(metadata__payment_type=self.request.query_params["payment_type"])
         membership = current_membership(self.request)
         if membership.role.code.upper() == "MEMBER":
             member = Member.objects.filter(workspace=membership.workspace, linked_user=self.request.user).first()
@@ -107,11 +109,26 @@ class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
 
     @decorators.action(detail=False, methods=["post"], url_path="manual")
     def manual(self, request):
-        serializer = ManualPaymentSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
         workspace = current_workspace(request)
+        serializer = ManualPaymentSerializer(data=request.data, context={"workspace": workspace})
+        serializer.is_valid(raise_exception=True)
+        data = dict(serializer.validated_data)
+        payment_type = data.pop("payment_type")
+        project = data.pop("project", None)
+        document_reference = data.pop("document_reference", "")
+        if payment_type == "DONATION":
+            data["contribution"] = None
+            data["metadata"] = {
+                "payment_type": "DONATION",
+                "project_id": project.id if project else None,
+                "project_name": project.name if project else "",
+                "document_reference": document_reference,
+                "recorded_by": request.user.id,
+            }
+        else:
+            data["metadata"] = {"payment_type": "CONTRIBUTION", "document_reference": document_reference, "recorded_by": request.user.id}
         try:
-            payment = record_manual_payment(workspace=workspace, actor=request.user, **serializer.validated_data)
+            payment = record_manual_payment(workspace=workspace, actor=request.user, **data)
         except ValueError as exc:
             return response.Response({"message": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return response.Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)

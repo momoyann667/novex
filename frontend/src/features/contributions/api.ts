@@ -97,6 +97,16 @@ export type ContributionMemberSummary = {
   remaining: string | number;
   collection_rate: number;
   next_due: string | null;
+  items?: Array<{
+    id: number;
+    campaign: string;
+    amount_due: string | number;
+    amount_paid: string | number;
+    remaining_amount: string | number;
+    currency: string;
+    due_date: string | null;
+    status: ContributionStatus;
+  }>;
 };
 
 type Paginated<T> = {
@@ -126,6 +136,31 @@ export type ManualPaymentPayload = {
   paid_at?: string;
   payment_method: string;
   document_reference?: string;
+};
+
+export type CreatorManualPaymentPayload = {
+  payment_type: "CONTRIBUTION" | "DONATION";
+  member: number;
+  contribution?: number | null;
+  project?: number | null;
+  amount: string;
+  paid_at?: string;
+  payment_method: string;
+  document_reference?: string;
+};
+
+export type PaymentResource = {
+  id: number;
+  member: number | null;
+  contribution: number | null;
+  amount: string | number;
+  currency: string;
+  status: string;
+  payment_method: string;
+  paid_at: string | null;
+  created_at: string;
+  member_name: string;
+  metadata: Record<string, string | number | null | undefined>;
 };
 
 export type ContributionCampaignPayload = {
@@ -258,6 +293,37 @@ export async function recordContributionPayment(workspaceSlug: string, contribut
       idempotency_key: `manual-${contributionId}-${Date.now()}`
     })
   });
+}
+
+export async function recordCreatorManualPayment(workspaceSlug: string, payload: CreatorManualPaymentPayload) {
+  return apiFetch<PaymentResource>("/payments/manual/", {
+    method: "POST",
+    headers: workspaceHeaders(workspaceSlug),
+    body: JSON.stringify({
+      ...payload,
+      idempotency_key: `creator-manual-${payload.payment_type.toLowerCase()}-${Date.now()}`
+    })
+  });
+}
+
+export async function uploadPaymentProof(workspaceSlug: string, paymentId: number, file: File) {
+  const body = new FormData();
+  body.set("title", file.name);
+  body.set("document_type", "PROOF_OF_PAYMENT");
+  body.set("file", file);
+  return apiFetch(`/payments/${paymentId}/documents/`, {
+    method: "POST",
+    headers: workspaceHeaders(workspaceSlug),
+    body
+  });
+}
+
+export async function listDonationPayments(workspaceSlug: string, filters: { dateFrom: string; dateTo: string }) {
+  const payload = await apiFetch<PaymentResource[] | Paginated<PaymentResource>>(
+    `/payments/${buildQuery({ payment_type: "DONATION", date_from: filters.dateFrom, date_to: filters.dateTo, ordering: "-paid_at", page_size: 100 })}`,
+    { headers: workspaceHeaders(workspaceSlug), cache: "no-store" }
+  );
+  return unwrapPaginated(payload);
 }
 
 export async function sendContributionReminder(workspaceSlug: string, contributionId: number) {

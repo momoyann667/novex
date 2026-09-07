@@ -372,12 +372,26 @@ def member_recovery_summary(workspace: Workspace) -> list[dict]:
     member_ids = Contribution.objects.filter(workspace=workspace).values_list("member_id", flat=True).distinct()
     members = Member.objects.filter(workspace=workspace, id__in=member_ids)
     for member in members:
-        qs = Contribution.objects.filter(workspace=workspace, member=member)
+        qs = Contribution.objects.select_related("campaign").filter(workspace=workspace, member=member)
         totals = totals_for_queryset(qs)
         has_overdue = qs.filter(status=ContributionStatus.OVERDUE).exists()
         status = "EN_RETARD" if has_overdue else "A_JOUR" if totals["remaining"] == Decimal("0.00") else "PARTIEL" if totals["collected"] else "NON_PAYE"
         next_due = qs.filter(due_date__gte=timezone.localdate()).order_by("due_date").values_list("due_date", flat=True).first()
-        rows.append({**totals, "member_id": member.id, "member_name": str(member), "phone": member.phone, "status": status, "next_due": next_due})
+        unpaid_items = [
+            {
+                "id": item.id,
+                "campaign": item.campaign.name,
+                "amount_due": item.amount_due,
+                "amount_paid": item.amount_paid,
+                "remaining_amount": item.remaining_amount,
+                "currency": item.currency,
+                "due_date": item.due_date,
+                "status": item.status,
+            }
+            for item in qs.exclude(status__in=[ContributionStatus.PAID, ContributionStatus.WAIVED, ContributionStatus.CANCELLED])
+            if item.remaining_amount > Decimal("0.00")
+        ]
+        rows.append({**totals, "member_id": member.id, "member_name": str(member), "phone": member.phone, "status": status, "next_due": next_due, "items": unpaid_items})
     return rows
 
 
