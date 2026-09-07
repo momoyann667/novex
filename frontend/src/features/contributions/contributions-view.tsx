@@ -325,8 +325,19 @@ function PaymentDrawer({
   );
 }
 
-function reminderMessage(member: ContributionMemberSummary) {
-  return `Bonjour ${member.member_name}, merci de consulter votre espace NOVEX afin de regulariser vos cotisations en attente.`;
+function reminderMessage(member: ContributionMemberSummary, currency: string) {
+  const lines = (member.items || []).map((item) => {
+    const paid = numberValue(item.amount_paid);
+    const state = paid > 0 ? "paiement partiel" : "non payee";
+    return `- ${item.campaign}: reste ${formatMoney(item.remaining_amount, item.currency || currency)} sur ${formatMoney(item.amount_due, item.currency || currency)} (${state}, echeance ${item.due_date || "non definie"})`;
+  });
+  return [
+    `Bonjour ${member.member_name},`,
+    "Voici le detail de vos cotisations restant a regler :",
+    ...lines,
+    `Total restant a payer : ${formatMoney(member.remaining, currency)}.`,
+    "Merci de regulariser votre situation."
+  ].join("\n");
 }
 
 function RecoveryPanel({ members, currency }: Readonly<{ members: ContributionMemberSummary[]; currency: string }>) {
@@ -342,7 +353,7 @@ function RecoveryPanel({ members, currency }: Readonly<{ members: ContributionMe
       </div>
       <div className="grid gap-3">
         {visibleMembers.map((member) => {
-          const href = whatsappUrl(member.phone, reminderMessage(member));
+          const href = whatsappUrl(member.phone, reminderMessage(member, currency));
           return (
             <article className="rounded-lg border border-slate-200 p-3" key={member.member_id}>
               <div className="flex items-start justify-between gap-3">
