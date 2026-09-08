@@ -7,10 +7,12 @@ import { ArrowLeft, Bell, CalendarClock, CheckCircle2, Clock3, Copy, Eye, FileTe
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/features/auth/current-user";
+import { listCommunicationMembers, listContributionRecoveryMembers, type CommunicationMember } from "./api";
 
 type CommunicationStatus = "Brouillon" | "Programmee" | "En cours" | "Envoyee" | "Partielle" | "Echec" | "Annulee";
 type CommunicationType = "Annonce" | "Message collectif" | "Notification directe";
 type Channel = "In-app" | "Push" | "Email" | "SMS" | "WhatsApp";
+type Audience = "Tous les membres" | "Membre actif" | "Bureau" | "Cotisations en retard";
 
 type Communication = {
   id: string;
@@ -55,6 +57,12 @@ function channelIcon(channel: Channel) {
   return Bell;
 }
 
+function isBoardMember(member: CommunicationMember) {
+  const functionLabel = member.function.toLowerCase();
+  const groupLabels = (member.groups_detail || []).map((group) => group.name.toLowerCase());
+  return functionLabel.includes("president") || functionLabel.includes("bureau") || groupLabels.some((group) => group.includes("bureau"));
+}
+
 export function CommunicationCenterView({ workspaceSlug }: Readonly<{ workspaceSlug: string }>) {
   const router = useRouter();
   const [items, setItems] = useState(seedCommunications);
@@ -63,9 +71,10 @@ export function CommunicationCenterView({ workspaceSlug }: Readonly<{ workspaceS
   const [detail, setDetail] = useState<Communication | null>(null);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [audience, setAudience] = useState("Membres actifs");
+  const [audience, setAudience] = useState<Audience>("Tous les membres");
   const [type, setType] = useState<CommunicationType>("Message collectif");
   const [selectedChannels, setSelectedChannels] = useState<Channel[]>(["In-app"]);
+  const [isScheduled, setIsScheduled] = useState(false);
   const [scheduledAt, setScheduledAt] = useState("");
   const [notice, setNotice] = useState("");
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
@@ -79,6 +88,18 @@ export function CommunicationCenterView({ workspaceSlug }: Readonly<{ workspaceS
   const memberMode = userQuery.data?.workspace_access?.role === "membre";
   const visibleTabs = memberMode ? ["Messages", "Mes notifications"] : tabs;
   const effectiveActiveTab = memberMode && !visibleTabs.includes(activeTab) ? "Messages" : activeTab;
+  const membersQuery = useQuery({
+    queryKey: ["communication-members", workspaceSlug],
+    queryFn: () => listCommunicationMembers(workspaceSlug),
+    enabled: !memberMode,
+    retry: false
+  });
+  const recoveryQuery = useQuery({
+    queryKey: ["communication-contribution-recovery", workspaceSlug],
+    queryFn: () => listContributionRecoveryMembers(workspaceSlug),
+    enabled: !memberMode,
+    retry: false
+  });
 
   const filteredItems = useMemo(() => {
     if (effectiveActiveTab === "Annonces") return items.filter((item) => item.type === "Annonce");
@@ -106,7 +127,15 @@ export function CommunicationCenterView({ workspaceSlug }: Readonly<{ workspaceS
     };
   }, [items]);
 
-  const audienceCount = 0;
+  const audienceMembers = useMemo(() => {
+    const members = membersQuery.data || [];
+    if (audience === "Tous les membres") return members;
+    if (audience === "Membre actif") return members.filter((member) => member.status === "active");
+    if (audience === "Bureau") return members.filter(isBoardMember);
+    const lateIds = new Set((recoveryQuery.data || []).filter((member) => Number(member.remaining || 0) > 0 && (member.items || []).length > 0).map((member) => member.member_id));
+    return members.filter((member) => lateIds.has(member.id));
+  }, [audience, membersQuery.data, recoveryQuery.data]);
+  const audienceCount = audienceMembers.length;
   const externalChannels = selectedChannels.filter((channel) => channel !== "In-app");
 
   function toggleChannel(channel: Channel) {
@@ -119,7 +148,8 @@ export function CommunicationCenterView({ workspaceSlug }: Readonly<{ workspaceS
       const confirmed = window.confirm(`Vous etes sur le point d'envoyer ce message a ${audienceCount.toLocaleString("fr-FR")} membre(s). Confirmer ?`);
       if (!confirmed) return;
     }
-    const failed = nextStatus === "Envoyee" ? externalChannels.length * audienceCount : 0;
+    const scheduled = isScheduled && scheduledAt;
+    const failed = nextStatus === "Envoyee" && !scheduled ? externalChannels.length * audienceCount : 0;
     const nextItem: Communication = {
       id: `COM-${String(items.length + 1).padStart(3, "0")}`,
       title,
@@ -127,18 +157,19 @@ export function CommunicationCenterView({ workspaceSlug }: Readonly<{ workspaceS
       type,
       audience,
       channels: selectedChannels,
-      status: scheduledAt ? "Programmee" : nextStatus === "Brouillon" ? "Brouillon" : failed ? "Partielle" : "Envoyee",
+      status: scheduled ? "Programmee" : nextStatus === "Brouillon" ? "Brouillon" : failed ? "Partielle" : "Envoyee",
       recipients: audienceCount,
-      delivered: selectedChannels.includes("In-app") && nextStatus !== "Brouillon" ? audienceCount : 0,
+      delivered: selectedChannels.includes("In-app") && nextStatus !== "Brouillon" && !scheduled ? audienceCount : 0,
       read: 0,
       failed,
-      date: scheduledAt ? new Intl.DateTimeFormat("fr-FR").format(new Date(scheduledAt)) : new Intl.DateTimeFormat("fr-FR").format(new Date())
+      date: scheduled ? new Intl.DateTimeFormat("fr-FR").format(new Date(scheduledAt)) : new Intl.DateTimeFormat("fr-FR").format(new Date())
     };
     setItems((current) => [nextItem, ...current]);
     setNotice(nextItem.status === "Programmee" ? `Communication programmee pour ${nextItem.date}.` : nextItem.status === "Partielle" ? "Communication traitee. Certains canaux externes sont non configures." : nextItem.status === "Brouillon" ? "Brouillon enregistre." : `Communication envoyee a ${audienceCount.toLocaleString("fr-FR")} membre(s).`);
     setTitle("");
     setContent("");
     setScheduledAt("");
+    setIsScheduled(false);
     setSelectedChannels(["In-app"]);
     setShowComposer(false);
   }
@@ -288,7 +319,7 @@ export function CommunicationCenterView({ workspaceSlug }: Readonly<{ workspaceS
 
       {showComposer && canCompose ? (
         <section className="fixed inset-0 z-40 grid place-items-end bg-slate-950/35 px-4 pb-4 md:place-items-center">
-          <form className="max-h-[92vh] w-full overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl md:max-w-2xl" onSubmit={(event) => { event.preventDefault(); saveCommunication("Envoyee"); }}>
+          <form className="max-h-[92vh] w-full overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl md:max-w-2xl" onSubmit={(event) => { event.preventDefault(); saveCommunication(isScheduled ? "Programmee" : "Envoyee"); }}>
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-2xl font-black tracking-normal">Composer</h2>
               <button className="grid size-9 place-items-center rounded-full bg-slate-100" type="button" aria-label="Fermer" onClick={() => setShowComposer(false)}>
@@ -315,19 +346,27 @@ export function CommunicationCenterView({ workspaceSlug }: Readonly<{ workspaceS
                 </label>
                 <label className="grid gap-2 text-sm font-bold">
                   Audience
-                  <select className="min-h-12 rounded-md border border-slate-300 bg-white px-3 text-base outline-none" value={audience} onChange={(event) => setAudience(event.target.value)}>
+                  <select className="min-h-12 rounded-md border border-slate-300 bg-white px-3 text-base outline-none" value={audience} onChange={(event) => setAudience(event.target.value as Audience)}>
                     <option>Tous les membres</option>
-                    <option>Membres actifs</option>
+                    <option>Membre actif</option>
                     <option>Bureau</option>
                     <option>Cotisations en retard</option>
-                    <option>Membres selectionnes</option>
                   </select>
                 </label>
+                <div className="grid gap-2 text-sm font-bold">
+                  <span>Mode d'envoi</span>
+                  <label className="flex min-h-12 items-center gap-3 rounded-md border border-slate-300 px-3 text-base">
+                    <input className="size-5 accent-blue-700" type="checkbox" checked={isScheduled} onChange={(event) => { setIsScheduled(event.target.checked); if (!event.target.checked) setScheduledAt(""); }} />
+                    Programmer l'envoi
+                  </label>
+                </div>
+              </div>
+              {isScheduled ? (
                 <label className="grid gap-2 text-sm font-bold">
-                  Programmer
+                  Date et heure de programmation
                   <input className="min-h-12 rounded-md border border-slate-300 px-3 text-base outline-none" type="datetime-local" value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} />
                 </label>
-              </div>
+              ) : null}
               <div>
                 <p className="text-sm font-bold">Canaux</p>
                 <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-5">
@@ -350,15 +389,11 @@ export function CommunicationCenterView({ workspaceSlug }: Readonly<{ workspaceS
                 <p className="mt-1 text-xs font-bold text-blue-900">In-app : {audienceCount.toLocaleString("fr-FR")} {externalChannels.length ? "- Canaux externes non configures" : ""}</p>
               </div>
             </div>
-            <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3">
+            <div className="mt-6 grid grid-cols-2 gap-3">
               <Button className="min-h-12" type="button" variant="outline" onClick={() => saveCommunication("Brouillon")}>Brouillon</Button>
-              <Button className="min-h-12" type="button" variant="outline" onClick={() => saveCommunication("Programmee")} disabled={!scheduledAt}>
-                <CalendarClock className="size-4" />
-                Programmer
-              </Button>
-              <Button className="col-span-2 min-h-12 md:col-span-1" type="submit" disabled={!title.trim() || !content.trim() || !selectedChannels.length}>
-                <Send className="size-4" />
-                Envoyer
+              <Button className="min-h-12" type="submit" disabled={!title.trim() || !content.trim() || !selectedChannels.length || (isScheduled && !scheduledAt)}>
+                {isScheduled ? <CalendarClock className="size-4" /> : <Send className="size-4" />}
+                {isScheduled ? "Programmer" : "Envoyer"}
               </Button>
             </div>
           </form>
