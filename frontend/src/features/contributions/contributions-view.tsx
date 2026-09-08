@@ -448,18 +448,21 @@ function CreateContributionDrawer({
   open,
   onClose,
   onSubmit,
+  categories,
   isPending,
   error
 }: Readonly<{
   open: boolean;
   onClose: () => void;
-  onSubmit: (payload: { name: string; amount: string; periodicity: string; due_date: string }) => void;
+  onSubmit: (payload: { name: string; amount: string; periodicity: string; due_date: string; target_category: number | null }) => void;
+  categories: Array<{ id: number; name: string }>;
   isPending: boolean;
   error?: string;
 }>) {
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const [periodicity, setPeriodicity] = useState("MONTHLY");
+  const [targetCategory, setTargetCategory] = useState("all");
   const [dueDate, setDueDate] = useState(defaultDueDate);
 
   if (!open) return null;
@@ -470,7 +473,7 @@ function CreateContributionDrawer({
         className="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl"
         onSubmit={(event) => {
           event.preventDefault();
-          onSubmit({ name, amount, periodicity, due_date: dueDate });
+          onSubmit({ name, amount, periodicity, due_date: dueDate, target_category: targetCategory === "all" ? null : Number(targetCategory) });
         }}
       >
         <div className="mb-5 flex items-start justify-between gap-3">
@@ -485,6 +488,7 @@ function CreateContributionDrawer({
         <div className="grid gap-4">
           <label className="grid gap-2 text-sm font-black">Nom de la cotisation<input className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" required value={name} onChange={(event) => setName(event.target.value)} placeholder="Ex: Cotisation Septembre" /></label>
           <label className="grid gap-2 text-sm font-black">Frequence<select className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" value={periodicity} onChange={(event) => setPeriodicity(event.target.value)}><option value="MONTHLY">Mensuelle</option><option value="QUARTERLY">Trimestrielle</option><option value="YEARLY">Annuelle</option><option value="ONE_TIME">Ponctuelle</option><option value="CUSTOM">Personnalisee</option></select></label>
+          <label className="grid gap-2 text-sm font-black">Cible<select className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" value={targetCategory} onChange={(event) => setTargetCategory(event.target.value)}><option value="all">Tous les membres actifs</option>{categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           <label className="grid gap-2 text-sm font-black">Montant<input className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" min="1" required type="number" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="10000" /></label>
           <label className="grid gap-2 text-sm font-black">Date limite<input className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" required type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></label>
         </div>
@@ -625,7 +629,7 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
   });
 
   const createCampaignMutation = useMutation({
-    mutationFn: async (payload: { name: string; amount: string; periodicity: string; due_date: string }) => {
+    mutationFn: async (payload: { name: string; amount: string; periodicity: string; due_date: string; target_category: number | null }) => {
       const campaign = await createContributionCampaign(workspaceSlug, {
         name: payload.name,
         amount: payload.amount,
@@ -633,6 +637,8 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
         contribution_type: contributionTypeForPeriodicity(payload.periodicity),
         period_label: contributionPeriodLabel(payload.periodicity),
         due_date: payload.due_date,
+        target_mode: payload.target_category ? "CATEGORY" : "ALL_ACTIVE",
+        target_category: payload.target_category,
         status: "DRAFT"
       });
       await activateContributionCampaign(workspaceSlug, campaign.id);
@@ -640,7 +646,7 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
     },
     onSuccess: async () => {
       setCreateDrawerOpen(false);
-      setNotice("Cotisation creee et generee pour les membres actifs.");
+      setNotice("Cotisation creee et generee pour les membres concernes.");
       await refreshAll();
       await queryClient.invalidateQueries({ queryKey: ["contribution-campaigns", workspaceSlug] });
     }
@@ -810,6 +816,7 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
               <div className="min-w-0">
                 <h3 className="truncate text-base font-black text-slate-950">{item.name}</h3>
                 <p className="text-xs font-bold text-slate-500">{campaignFrequencyLabel(item)}{item.due_date ? ` - Echeance ${dateLabel(item.due_date)}` : ""}</p>
+                <p className="mt-1 text-xs font-bold text-blue-700">Cible: {item.target_category ? (categoriesQuery.data || []).find((categoryItem) => categoryItem.id === item.target_category)?.name || "Type de membre" : "Tous les membres actifs"}</p>
               </div>
               <div className="flex min-w-0 items-center justify-between gap-3">
                 <strong className="text-lg font-black text-blue-700">{formatMoney(item.amount, item.currency || currency)}</strong>
@@ -885,6 +892,7 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
         projects={projectOptions}
       />
       <CreateContributionDrawer
+        categories={categoriesQuery.data || []}
         error={createCampaignMutation.error instanceof Error ? createCampaignMutation.error.message : undefined}
         isPending={createCampaignMutation.isPending}
         onClose={() => setCreateDrawerOpen(false)}

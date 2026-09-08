@@ -10,6 +10,7 @@ from django.utils.crypto import constant_time_compare, get_random_string, salted
 
 from apps.audit_logs.models import AuditLog
 from apps.contributions.models import Contribution
+from apps.contributions.services import ensure_contributions_for_member
 from apps.contributions.statuses import ContributionStatus
 from apps.documents.models import Document
 from apps.documents.statuses import DocumentStatus, DocumentVisibility, ShareSubjectType
@@ -234,6 +235,7 @@ def create_member(*, workspace: Workspace, actor, tags=None, groups=None, **data
     member = Member.objects.create(workspace=workspace, **data)
     sync_member_relations(member, tags=tags, groups=groups)
     log_member_action(member=member, actor=actor, action="member.created", metadata={"status": member.status, "function": member.function})
+    ensure_contributions_for_member(workspace=workspace, member=member, actor=actor)
     return member
 
 

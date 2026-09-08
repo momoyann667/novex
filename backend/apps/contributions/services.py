@@ -84,6 +84,44 @@ def generate_contributions_for_campaign(*, campaign: ContributionCampaign, actor
     return created
 
 
+def campaign_targets_member(*, campaign: ContributionCampaign, member: Member) -> bool:
+    if member.status != Member.Status.ACTIVE:
+        return False
+    if campaign.target_mode == CampaignTargetMode.SELECTED:
+        return campaign.target_members.filter(id=member.id).exists()
+    if campaign.target_category_id:
+        return member.category_id == campaign.target_category_id
+    return True
+
+
+@transaction.atomic
+def ensure_contributions_for_member(*, workspace: Workspace, member: Member, actor=None) -> int:
+    created = 0
+    campaigns = ContributionCampaign.objects.filter(workspace=workspace, status=CampaignStatus.ACTIVE).prefetch_related("target_members")
+    for campaign in campaigns.iterator():
+        if not campaign_targets_member(campaign=campaign, member=member):
+            continue
+        category_amount = campaign.category_amounts.filter(category=member.category).first()
+        amount = category_amount.amount if category_amount else campaign.amount
+        _, was_created = Contribution.objects.get_or_create(
+            workspace=workspace,
+            campaign=campaign,
+            member=member,
+            defaults={"amount_due": amount, "currency": campaign.currency, "due_date": campaign.due_date, "status": ContributionStatus.PENDING},
+        )
+        created += int(was_created)
+    if created:
+        AuditLog.objects.create(
+            workspace=workspace,
+            actor=actor,
+            action="contributions.member_synced",
+            resource="member",
+            resource_id=str(member.id),
+            metadata={"created": created},
+        )
+    return created
+
+
 @transaction.atomic
 def activate_campaign(*, campaign: ContributionCampaign, actor) -> int:
     previous_status = campaign.status

@@ -12,6 +12,8 @@ export type ContributionCampaign = {
   currency: string;
   period_label: string;
   due_date: string | null;
+  target_mode?: string;
+  target_category?: number | null;
   status: string;
 };
 
@@ -170,6 +172,8 @@ export type ContributionCampaignPayload = {
   contribution_type?: string;
   period_label?: string;
   due_date?: string;
+  target_mode?: "ALL_ACTIVE" | "CATEGORY" | "SELECTED" | "SEGMENT";
+  target_category?: number | null;
   status?: string;
 };
 

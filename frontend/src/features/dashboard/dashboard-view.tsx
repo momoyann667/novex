@@ -49,6 +49,40 @@ type SelfMemberProfile = {
   phone: string;
 };
 
+type MoneyAmount = {
+  value: string | number;
+  currency: string;
+};
+
+type SelfMemberDashboard = {
+  profile: {
+    full_name: string;
+    first_name: string;
+    last_name: string;
+  };
+  contribution_summary: {
+    total_due: MoneyAmount;
+    total_paid: MoneyAmount;
+    remaining_to_pay: MoneyAmount;
+    payment_rate: string | number;
+    overdue_count: number;
+    next_due_date: string | null;
+  };
+  contributions: Array<{ id: number; campaign: string; remaining_amount: string | number; currency: string; status: string }>;
+  payment_summary: {
+    total_paid: MoneyAmount;
+    successful_count: number;
+    pending_count: number;
+    failed_count: number;
+  };
+  events: {
+    upcoming: Array<{ id: number; title: string }>;
+  };
+  documents: Array<{ id: number; name: string }>;
+  history: Array<{ date: string; title: string; detail: string }>;
+  alerts: Array<{ type: string; message: string; amount?: string | number; currency?: string; date?: string }>;
+};
+
 const periodData: Record<
   PeriodKey,
   {
@@ -173,7 +207,7 @@ const periodCodes: Record<PeriodKey, PeriodCode> = {
   "Ce mois": "month",
   Trimestre: "quarter",
   Annee: "year",
-  Tout: "year"
+  Tout: "all"
 };
 
 function displayProfile(profile: WorkspaceProfile | null, workspaceName: string): WorkspaceProfile {
@@ -230,6 +264,27 @@ function getSelfMemberProfile(workspaceSlug: string) {
   });
 }
 
+function getSelfMemberDashboard(workspaceSlug: string) {
+  return fetch(`/api/backend/me/member/dashboard/`, {
+    credentials: "include",
+    headers: { "X-Workspace": workspaceSlug },
+    cache: "no-store"
+  }).then(async (response) => {
+    if (!response.ok) return null;
+    return (await response.json()) as SelfMemberDashboard;
+  });
+}
+
+function numberValue(value: unknown) {
+  const numeric = Number(value ?? 0);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function moneyAmount(amount: MoneyAmount | undefined, fallbackCurrency: string) {
+  const currency = amount?.currency || fallbackCurrency;
+  return `${numberValue(amount?.value).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} ${currency}`;
+}
+
 export function DashboardView({
   initialData = emptyDashboardOverview,
   workspaceSlug
@@ -249,10 +304,17 @@ export function DashboardView({
     queryFn: () => getCurrentUser(workspaceSlug),
     retry: false
   });
+  const isMemberRole = userQuery.data?.workspace_access?.role === "membre";
   const selfMemberQuery = useQuery({
     queryKey: ["self-member-profile", workspaceSlug],
     queryFn: () => getSelfMemberProfile(workspaceSlug),
-    enabled: userQuery.data?.workspace_access?.role === "membre",
+    enabled: isMemberRole,
+    retry: false
+  });
+  const selfMemberDashboardQuery = useQuery({
+    queryKey: ["self-member-dashboard", workspaceSlug],
+    queryFn: () => getSelfMemberDashboard(workspaceSlug),
+    enabled: isMemberRole,
     retry: false
   });
   const settingsQuery = useQuery({
@@ -286,10 +348,29 @@ export function DashboardView({
   const currentProfile = displayProfile(profile, overview.workspace.name);
   const workspaceLogoUrl = backendMediaUrl(settingsQuery.data?.logo) || currentProfile.logoDataUrl;
   const workspaceOwnerName = settingsQuery.data?.owner?.full_name?.trim() || "";
-  const dashboardUserName = selfMemberQuery.data?.full_name || (userQuery.data?.workspace_access?.role === "membre" ? displayUserName(userQuery.data) : workspaceOwnerName || displayUserName(userQuery.data));
+  const memberDashboard = selfMemberDashboardQuery.data;
+  const dashboardUserName = memberDashboard?.profile.full_name || selfMemberQuery.data?.full_name || (isMemberRole ? displayUserName(userQuery.data) : workspaceOwnerName || displayUserName(userQuery.data));
   const dashboardAssociationName = settingsQuery.data?.workspace_name || currentProfile.associationName || initialData.workspace.name;
   const moneyFallback = `0 ${overview.workspace.currency === "XOF" ? "FCFA" : overview.workspace.currency}`;
-  const current = {
+  const current = memberDashboard ? {
+    balance: numberValue(memberDashboard.contribution_summary.remaining_to_pay.value) > 0 ? moneyAmount(memberDashboard.contribution_summary.remaining_to_pay, overview.workspace.currency) : "A jour",
+    balanceTrend: numberValue(memberDashboard.contribution_summary.remaining_to_pay.value) > 0 ? "Reste a payer" : "Toutes les cotisations sont a jour",
+    revenues: moneyAmount(memberDashboard.contribution_summary.total_paid, overview.workspace.currency),
+    expenses: moneyAmount(memberDashboard.contribution_summary.remaining_to_pay, overview.workspace.currency),
+    totalContributions: moneyAmount(memberDashboard.contribution_summary.total_due, overview.workspace.currency),
+    paidContributions: moneyAmount(memberDashboard.contribution_summary.total_paid, overview.workspace.currency),
+    lateContributions: `${memberDashboard.contribution_summary.overdue_count.toLocaleString("fr-FR")} retard(s)`,
+    upcomingContributions: moneyAmount(memberDashboard.contribution_summary.remaining_to_pay, overview.workspace.currency),
+    recoveryRate: Math.round(numberValue(memberDashboard.contribution_summary.payment_rate)),
+    metrics: [
+      { label: "Cotisations dues", value: moneyAmount(memberDashboard.contribution_summary.total_due, overview.workspace.currency), detail: `${memberDashboard.contributions.length} ligne(s)`, tone: "blue" as const },
+      { label: "Cotisations payees", value: moneyAmount(memberDashboard.contribution_summary.total_paid, overview.workspace.currency), detail: `${Math.round(numberValue(memberDashboard.contribution_summary.payment_rate))}% paye`, tone: "green" as const },
+      { label: "Reste a payer", value: moneyAmount(memberDashboard.contribution_summary.remaining_to_pay, overview.workspace.currency), detail: memberDashboard.contribution_summary.next_due_date ? "Prochaine echeance connue" : "Aucune echeance", tone: numberValue(memberDashboard.contribution_summary.remaining_to_pay.value) > 0 ? "red" as const : "green" as const },
+      { label: "Paiements", value: memberDashboard.payment_summary.successful_count.toLocaleString("fr-FR"), detail: `${memberDashboard.payment_summary.pending_count} en attente`, tone: "slate" as const },
+      { label: "Evenements", value: memberDashboard.events.upcoming.length.toLocaleString("fr-FR"), detail: "A venir", tone: "blue" as const },
+      { label: "Documents", value: memberDashboard.documents.length.toLocaleString("fr-FR"), detail: "Accessibles", tone: "green" as const }
+    ]
+  } : {
     balance: overview.kpis.finance.current_balance || moneyFallback,
     balanceTrend: overview.empty_state ? "Aucune donnee enregistree" : `Periode: ${overview.period.label}`,
     revenues: overview.kpis.finance.revenues || moneyFallback,
@@ -308,15 +389,28 @@ export function DashboardView({
       { label: "Documents", value: overview.kpis.documents.recent.toLocaleString("fr-FR"), detail: "Recents", tone: "green" as const }
     ]
   };
-  const notificationItems = overview.alerts;
-  const activityItems = overview.activity;
-  const steeringMetrics: ReadonlyArray<readonly [string, string, string, LucideIcon]> = [
+  const notificationItems = memberDashboard
+    ? memberDashboard.alerts.map((alert) => ({ title: alert.type === "contribution" ? "Cotisations" : alert.type === "event" ? "Evenements" : "Profil", description: alert.message, level: alert.type === "contribution" ? "warning" as const : "info" as const }))
+    : overview.alerts;
+  const activityItems = memberDashboard
+    ? memberDashboard.history.map((item) => ({ title: item.title, description: item.detail, occurred_at: item.date }))
+    : overview.activity;
+  const steeringMetrics: ReadonlyArray<readonly [string, string, string, LucideIcon]> = memberDashboard ? [
+    ["Mes cotisations", moneyAmount(memberDashboard.contribution_summary.total_paid, overview.workspace.currency), `${Math.round(numberValue(memberDashboard.contribution_summary.payment_rate))}%`, Target],
+    ["Reste a payer", moneyAmount(memberDashboard.contribution_summary.remaining_to_pay, overview.workspace.currency), numberValue(memberDashboard.contribution_summary.remaining_to_pay.value) > 0 ? "A regler" : "OK", CreditCard],
+    ["Evenements", `${memberDashboard.events.upcoming.length.toLocaleString("fr-FR")} a venir`, "A suivre", CalendarDays],
+    ["Documents", `${memberDashboard.documents.length.toLocaleString("fr-FR")} disponibles`, "GED", FileText]
+  ] : [
     ["Budget annuel", overview.kpis.finance.expenses || moneyFallback, "0%", Landmark],
     ["Objectifs membres", `${overview.kpis.members.active.toLocaleString("fr-FR")} actifs`, `${Math.round(overview.kpis.members.active_rate)}%`, Target],
     ["Evenements", `${overview.kpis.events.upcoming.toLocaleString("fr-FR")} a venir`, "0%", CalendarDays],
     ["Documents", `${overview.kpis.documents.recent.toLocaleString("fr-FR")} recents`, "0%", FileText]
   ];
-  const treasuryMetrics: ReadonlyArray<readonly [string, string, string, LucideIcon]> = [
+  const treasuryMetrics: ReadonlyArray<readonly [string, string, string, LucideIcon]> = memberDashboard ? [
+    ["Total paye", moneyAmount(memberDashboard.payment_summary.total_paid, overview.workspace.currency), "Paiements valides", CreditCard],
+    ["Reste cotisations", moneyAmount(memberDashboard.contribution_summary.remaining_to_pay, overview.workspace.currency), "A payer", WalletCards],
+    ["Paiements en attente", memberDashboard.payment_summary.pending_count.toLocaleString("fr-FR"), "En cours de validation", Clock3]
+  ] : [
     ["Solde", overview.kpis.finance.current_balance || moneyFallback, "Disponible selon transactions validees", CreditCard],
     ["Recettes", overview.kpis.finance.revenues || moneyFallback, overview.period.label, WalletCards],
     ["Cotisations restantes", overview.kpis.contributions.remaining || moneyFallback, "A recouvrer", Clock3]

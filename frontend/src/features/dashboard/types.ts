@@ -1,4 +1,4 @@
-export type PeriodCode = "today" | "week" | "month" | "quarter" | "year" | "previous_year" | "custom";
+export type PeriodCode = "today" | "week" | "month" | "quarter" | "year" | "previous_year" | "custom" | "all";
 
 export interface DashboardOverview {
   workspace: {
