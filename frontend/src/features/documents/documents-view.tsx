@@ -38,9 +38,10 @@ function shortDate(value: string) {
   return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short" }).format(new Date(value));
 }
 
-export function DocumentsView({ workspaceSlug }: Readonly<{ workspaceSlug: string }>) {
+export function DocumentsView({ workspaceSlug, initialFolderId = "" }: Readonly<{ workspaceSlug: string; initialFolderId?: string }>) {
   const [search, setSearch] = useState("");
   const [activeChip, setActiveChip] = useState<(typeof chips)[number]>(chips[0]);
+  const [activeFolderId, setActiveFolderId] = useState(initialFolderId);
   const [showFolderForm, setShowFolderForm] = useState(false);
   const [folderName, setFolderName] = useState("");
   const queryClient = useQueryClient();
@@ -54,12 +55,13 @@ export function DocumentsView({ workspaceSlug }: Readonly<{ workspaceSlug: strin
     queryFn: () => listFolders(workspaceSlug)
   });
   const documentsQuery = useQuery({
-    queryKey: ["documents", workspaceSlug, search, activeChip.label],
+    queryKey: ["documents", workspaceSlug, search, activeChip.label, activeFolderId],
     queryFn: () =>
       listDocuments(workspaceSlug, {
         search,
         category: activeChip.category,
-        status: activeChip.status
+        status: activeChip.status,
+        folder: activeFolderId
       })
   });
   const userQuery = useQuery({
@@ -72,6 +74,8 @@ export function DocumentsView({ workspaceSlug }: Readonly<{ workspaceSlug: strin
 
   const folders = foldersQuery.data || [];
   const documents = documentsQuery.data || [];
+  const activeFolder = folders.find((item) => String(item.id) === activeFolderId);
+  const uploadHref = `${workspacePath(workspaceSlug, "documents/upload")}${activeFolderId ? `?folder=${encodeURIComponent(activeFolderId)}` : ""}`;
   const featured = documents[0];
   const recentDocuments = featured ? documents.slice(1, 6) : documents.slice(0, 6);
   const createFolderMutation = useMutation({
@@ -152,21 +156,28 @@ export function DocumentsView({ workspaceSlug }: Readonly<{ workspaceSlug: strin
         <div className="flex gap-3 overflow-x-auto pb-1">
           {folders.slice(0, 6).map((folder, index) => {
             const Icon = folderIcon(index);
+            const isActiveFolder = activeFolderId === String(folder.id);
             return (
-              <button className="grid h-32 w-32 shrink-0 content-between rounded-lg bg-white p-4 text-left shadow-sm ring-1 ring-slate-200" key={folder.id} type="button">
-                <span className="grid size-9 place-items-center rounded-md bg-slate-100">
-                  <Icon className="size-5 text-black" />
+              <button className={`grid h-32 w-32 shrink-0 content-between rounded-lg p-4 text-left shadow-sm ring-1 ${isActiveFolder ? "bg-blue-700 text-white ring-blue-700" : "bg-white ring-slate-200"}`} key={folder.id} type="button" onClick={() => setActiveFolderId(isActiveFolder ? "" : String(folder.id))}>
+                <span className={`grid size-9 place-items-center rounded-md ${isActiveFolder ? "bg-white/15" : "bg-slate-100"}`}>
+                  <Icon className={`size-5 ${isActiveFolder ? "text-white" : "text-black"}`} />
                 </span>
                 <span>
                   <strong className="block truncate text-sm">{folder.name}</strong>
-                  <span className="mt-1 block text-xs font-semibold text-slate-500">{analyticsQuery.data?.documents_by_category.find((item) => item.category === "administrative")?.count || 0} fichiers</span>
+                  <span className={`mt-1 block text-xs font-semibold ${isActiveFolder ? "text-white/75" : "text-slate-500"}`}>{documents.filter((item) => item.folder === folder.id).length} fichiers</span>
                 </span>
               </button>
             );
           })}
           {!folders.length ? <div className="w-full rounded-lg bg-white p-4 text-sm text-slate-500 shadow-sm ring-1 ring-slate-200">{foldersQuery.isLoading ? "Chargement des dossiers..." : "Aucun dossier."}</div> : null}
         </div>
-        {canCreateDocument ? <Link className="mt-4 flex min-h-14 items-center justify-center gap-3 rounded-xl bg-blue-700 px-4 text-sm font-black text-white shadow-lg shadow-blue-700/20" href={workspacePath(workspaceSlug, "documents/upload")}>
+        {activeFolder ? (
+          <div className="mt-3 flex items-center justify-between rounded-xl bg-blue-50 px-3 py-2 text-sm font-bold text-blue-800">
+            <span className="min-w-0 truncate">Dossier selectionne : {activeFolder.name}</span>
+            <button className="shrink-0 text-xs font-black" type="button" onClick={() => setActiveFolderId("")}>Tout afficher</button>
+          </div>
+        ) : null}
+        {canCreateDocument ? <Link className="mt-4 flex min-h-14 items-center justify-center gap-3 rounded-xl bg-blue-700 px-4 text-sm font-black text-white shadow-lg shadow-blue-700/20" href={uploadHref}>
           <span className="grid size-8 place-items-center rounded-full bg-white/15">
             <Plus className="size-5" />
           </span>

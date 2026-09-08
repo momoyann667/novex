@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ChangeEvent, DragEvent, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Camera, CheckCircle2, FileUp, Image, RotateCcw, ShieldCheck, UploadCloud, XCircle } from "lucide-react";
@@ -26,14 +27,16 @@ const visibilityOptions = [
   ["shared", "Partage"],
 ] as const;
 
-export function DocumentUploadView({ workspaceSlug }: Readonly<{ workspaceSlug: string }>) {
+export function DocumentUploadView({ workspaceSlug, initialFolderId = "" }: Readonly<{ workspaceSlug: string; initialFolderId?: string }>) {
+  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [category, setCategory] = useState("administrative");
-  const [folder, setFolder] = useState("");
+  const [folder, setFolder] = useState(initialFolderId);
   const [visibility, setVisibility] = useState("private");
   const [sensitive, setSensitive] = useState(false);
+  const documentsHref = `${workspacePath(workspaceSlug, "documents")}${folder ? `?folder=${encodeURIComponent(folder)}` : ""}`;
 
   const foldersQuery = useQuery({
     queryKey: ["document-folders", workspaceSlug],
@@ -42,6 +45,7 @@ export function DocumentUploadView({ workspaceSlug }: Readonly<{ workspaceSlug: 
 
   const mutation = useMutation({
     mutationFn: async (items: QueueItem[]) => {
+      let failedCount = 0;
       for (const item of items) {
         setQueue((current) => current.map((entry) => (entry.id === item.id ? { ...entry, state: "upload", progress: 45, error: undefined } : entry)));
         try {
@@ -54,13 +58,22 @@ export function DocumentUploadView({ workspaceSlug }: Readonly<{ workspaceSlug: 
           });
           setQueue((current) => current.map((entry) => (entry.id === item.id ? { ...entry, state: "done", progress: 100 } : entry)));
         } catch (error) {
+          failedCount += 1;
           setQueue((current) =>
             current.map((entry) => (entry.id === item.id ? { ...entry, state: "failed", progress: 0, error: error instanceof Error ? error.message : "Upload impossible" } : entry))
           );
         }
       }
+      if (failedCount) {
+        throw new Error(failedCount === items.length ? "Aucun document n'a pu etre ajoute." : `${failedCount} document(s) n'ont pas pu etre ajoutes.`);
+      }
     },
-    onSettled: async () => {
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["documents", workspaceSlug] });
+      await queryClient.invalidateQueries({ queryKey: ["document-analytics", workspaceSlug] });
+      router.push(documentsHref);
+    },
+    onError: async () => {
       await queryClient.invalidateQueries({ queryKey: ["documents", workspaceSlug] });
       await queryClient.invalidateQueries({ queryKey: ["document-analytics", workspaceSlug] });
     }
@@ -104,7 +117,7 @@ export function DocumentUploadView({ workspaceSlug }: Readonly<{ workspaceSlug: 
         actions={
           <>
             <Button asChild className="rounded-xl" type="button" variant="outline">
-              <Link href={workspacePath(workspaceSlug, "documents")}><ArrowLeft className="size-4" /> Retour</Link>
+              <Link href={documentsHref}><ArrowLeft className="size-4" /> Retour</Link>
             </Button>
             <Button className="rounded-xl bg-blue-700 px-5 text-white hover:bg-blue-800" type="button" disabled={!pendingItems.length || mutation.isPending} onClick={sendQueue}><UploadCloud className="size-4" /> Envoyer</Button>
           </>
@@ -151,6 +164,7 @@ export function DocumentUploadView({ workspaceSlug }: Readonly<{ workspaceSlug: 
       <Card className="mt-4 rounded-2xl border-slate-200 shadow-sm">
         <CardHeader><CardTitle className="text-lg font-black tracking-normal text-slate-900">File d'attente</CardTitle></CardHeader>
         <CardContent className="grid gap-3">
+          {mutation.isError ? <p className="rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">{mutation.error instanceof Error ? mutation.error.message : "Impossible d'ajouter le document."}</p> : null}
           {queue.length ? queue.map((item, index) => (
             <div className="rounded-xl border border-slate-200 bg-white p-4" key={item.id}>
               <div className="flex items-center justify-between gap-3 text-sm">

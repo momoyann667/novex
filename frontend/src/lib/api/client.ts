@@ -50,7 +50,12 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   }
 
   if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as { code?: string } | null;
+    const contentType = response.headers.get("content-type") || "";
+    const payload = (contentType.includes("application/json") ? await response.json().catch(() => null) : null) as { code?: string } | null;
+    if (!payload) {
+      const text = await response.text().catch(() => "");
+      throw new ApiError(text.trim().slice(0, 220) || "Le serveur a refuse la requete.", response.status);
+    }
     throw new ApiError(errorMessageFromPayload(payload), response.status, payload?.code);
   }
 
