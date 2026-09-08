@@ -114,31 +114,37 @@ export function DocumentDetailView({ documentId, workspaceSlug }: Readonly<{ doc
   }
 
   return (
-    <main className="grid min-h-screen w-full max-w-full gap-4 overflow-x-hidden bg-[#f5f7f8] px-4 pb-28 pt-4 text-slate-950 md:rounded-[28px] md:px-6">
+    <main className="grid min-h-screen w-full max-w-full gap-4 overflow-x-hidden bg-[#f5f7f8] px-3 pb-32 pt-4 text-slate-950 md:rounded-[28px] md:px-6">
       <button className="inline-flex min-h-10 w-fit items-center gap-2 rounded-md bg-white px-3 text-sm font-black text-slate-700 shadow-sm" type="button" onClick={() => router.back()}>
         <ArrowLeft className="size-4" />
         Retour
       </button>
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="min-w-0">
           <p className="text-xs font-black uppercase text-blue-700">{document?.folder_name || "Racine Documents"}</p>
           <h1 className="mt-2 break-words text-2xl font-black tracking-normal text-slate-950">{document?.name || "Document"}</h1>
           <p className="mt-1 text-sm font-semibold text-slate-500">Document {documentId} - version {document?.current_version || 0}</p>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <Button className="min-h-11 rounded-xl" type="button" variant="outline"><Share2 className="size-4" /> Partager</Button>
-          <Button className="min-h-11 rounded-xl" type="button" onClick={handleDownload} disabled={!document}><Download className="size-4" /> Telecharger</Button>
+        <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+          <Button className="min-w-0 min-h-12 rounded-xl bg-blue-700 text-sm text-white hover:bg-blue-800" type="button" onClick={handleDownload} disabled={!document}>
+            <Download className="size-4 shrink-0" />
+            <span className="truncate">Telecharger</span>
+          </Button>
+          <Button className="min-w-0 min-h-12 rounded-xl text-sm" type="button" variant="outline">
+            <Share2 className="size-4 shrink-0" />
+            <span className="truncate">Partager</span>
+          </Button>
         </div>
       </section>
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <section className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="min-w-0 overflow-hidden rounded-2xl border-slate-200 shadow-sm">
-          <CardHeader><CardTitle className="flex items-center gap-2 text-base text-slate-900"><Eye className="size-4" /> Apercu securise</CardTitle></CardHeader>
-          <CardContent>
-            <div className="grid min-h-[420px] w-full max-w-full place-items-center overflow-hidden rounded-xl border border-dashed border-border bg-slate-50 text-center md:min-h-[520px]">
+          <CardHeader className="p-4"><CardTitle className="flex items-center gap-2 text-base text-slate-900"><Eye className="size-4" /> Apercu securise</CardTitle></CardHeader>
+          <CardContent className="p-3 pt-0">
+            <div className="grid min-h-[430px] w-full max-w-full place-items-center overflow-hidden rounded-xl border border-dashed border-border bg-slate-50 text-center md:min-h-[520px]">
               {preview?.contentType.startsWith("image/") ? (
                 <img alt={document?.name || "Document"} className="max-h-[420px] w-full max-w-full rounded-md object-contain md:max-h-[520px]" src={preview.url} />
               ) : preview?.contentType.includes("pdf") || preview?.contentType.startsWith("text/") ? (
-                <iframe className="h-[420px] w-full max-w-full rounded-md bg-white md:h-[520px]" src={preview.url} title={document?.name || "Apercu document"} />
+                <iframe className="block h-[430px] w-full max-w-full overflow-hidden rounded-md border-0 bg-white md:h-[520px]" src={preview.url} title={document?.name || "Apercu document"} />
               ) : (
               <div>
                 <FileText className="mx-auto size-14 text-blue-700" />

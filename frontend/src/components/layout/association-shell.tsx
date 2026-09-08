@@ -96,7 +96,7 @@ export function AssociationShell({ children, workspaceSlug }: Readonly<{ childre
       ].some((path) => normalizedPath === path || normalizedPath.startsWith(`${path}/`)));
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-20 md:grid md:grid-cols-[272px_minmax(0,1fr)] md:pb-0">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50 pb-20 md:grid md:grid-cols-[272px_minmax(0,1fr)] md:pb-0">
       <aside className="hidden border-r border-border bg-white p-5 md:block">
         <div className="mb-6 flex items-center gap-3">
           <img className="h-12 w-40 object-contain object-left" src="/brand/novex-logo.jpg" alt="NOVEX" />
@@ -117,7 +117,7 @@ export function AssociationShell({ children, workspaceSlug }: Readonly<{ childre
           ))}
         </nav>
       </aside>
-      <section>
+      <section className="min-w-0 overflow-x-hidden">
         <header className="sticky top-0 z-20 hidden min-h-16 items-center justify-between border-b border-border bg-white/90 px-4 backdrop-blur md:flex md:px-6">
           <div className="flex items-center gap-3">
             <Button className="md:hidden" variant="ghost" aria-label="Menu">
@@ -137,7 +137,7 @@ export function AssociationShell({ children, workspaceSlug }: Readonly<{ childre
             <Bell className="size-4" />
           </Button>
         </header>
-        <main className="p-0 md:p-6">
+        <main className="min-w-0 overflow-x-hidden p-0 md:p-6">
           {isForbiddenForMember ? (
             <div className="mx-auto flex min-h-[70vh] max-w-md flex-col items-center justify-center px-6 text-center">
               <div className="mb-4 grid size-14 place-items-center rounded-full bg-red-50 text-red-600">
@@ -181,7 +181,7 @@ export function AssociationShell({ children, workspaceSlug }: Readonly<{ childre
       ) : null}
 
       <nav
-        className="fixed inset-x-0 bottom-0 z-30 grid border-t border-border bg-white px-1 pb-[env(safe-area-inset-bottom)] shadow-[0_-10px_30px_rgba(15,23,42,0.08)] md:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 grid w-full max-w-full border-t border-border bg-white px-1 pb-[env(safe-area-inset-bottom)] shadow-[0_-10px_30px_rgba(15,23,42,0.08)] md:hidden"
         style={{ gridTemplateColumns: `repeat(${mobileColumnCount}, minmax(0, 1fr))` }}
       >
         {primaryMobileNav.map(({ label, path, icon: Icon }) => (

@@ -561,7 +561,7 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
   );
 
   return (
-    <main className="min-h-screen bg-[#f5f7f8] px-4 pb-28 pt-4 text-slate-950 md:rounded-[28px] md:px-6">
+    <main className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#f5f7f8] px-4 pb-32 pt-4 text-slate-950 md:rounded-[28px] md:px-6">
       <button className="mb-4 inline-flex min-h-10 items-center gap-2 rounded-md bg-white px-3 text-sm font-black text-slate-700 shadow-sm" type="button" onClick={() => router.back()}>
         <ArrowLeft className="size-4" />
         Retour
@@ -576,30 +576,30 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
         </button>
       </header>
 
-      <section className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div>
+      <section className="flex min-w-0 flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div className="min-w-0">
           <h1 className="text-3xl font-black leading-tight tracking-normal">Membres</h1>
           <p className="mt-2 text-sm font-medium leading-5 text-slate-600">Annuaire de votre association.</p>
         </div>
-        <div className="grid grid-cols-3 gap-2">
-          <Button className="min-h-11 px-3" type="button" onClick={() => setShowForm(true)}>
+        <div className="grid w-full min-w-0 grid-cols-3 gap-2 md:w-auto">
+          <Button className="min-w-0 min-h-11 px-2 text-xs sm:px-3 sm:text-sm" type="button" onClick={() => setShowForm(true)}>
             <Plus className="size-4" />
-            Ajouter
+            <span className="truncate">Ajouter</span>
           </Button>
-          <Button asChild className="min-h-11 px-3" variant="outline">
+          <Button asChild className="min-w-0 min-h-11 px-2 text-xs sm:px-3 sm:text-sm" variant="outline">
             <Link href={workspacePath(workspaceSlug, "members/invitations")}>
               <UserPlus className="size-4" />
-              Inviter
+              <span className="truncate">Inviter</span>
             </Link>
           </Button>
-          <Button className="min-h-11 px-3" type="button" variant="outline" onClick={exportMembers}>
+          <Button className="min-w-0 min-h-11 px-2 text-xs sm:px-3 sm:text-sm" type="button" variant="outline" onClick={exportMembers}>
             <Download className="size-4" />
-            Exporter
+            <span className="truncate">Exporter</span>
           </Button>
         </div>
       </section>
 
-      <section className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-6">
+      <section className="mt-5 grid min-w-0 grid-cols-2 gap-3 lg:grid-cols-6">
         {[
           ["Total membres", summary.total.toLocaleString("fr-FR"), Users, "text-slate-950"],
           ["Membres actifs", summary.active.toLocaleString("fr-FR"), Users, "text-emerald-600"],
@@ -608,7 +608,7 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
           ["Inactifs", summary.inactive.toLocaleString("fr-FR"), Users, "text-slate-600"],
           ["Archives", summary.archived.toLocaleString("fr-FR"), Archive, "text-red-600"]
         ].map(([label, value, Icon, color]) => (
-          <div className="min-h-28 rounded-lg border border-slate-200 bg-white p-4 shadow-sm" key={label as string}>
+          <div className="min-w-0 min-h-28 rounded-lg border border-slate-200 bg-white p-4 shadow-sm" key={label as string}>
             <div className="flex items-start justify-between">
               <span className="text-xs font-bold text-slate-600">{label as string}</span>
               <Icon className="size-7 text-slate-200" />
@@ -618,8 +618,8 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
         ))}
       </section>
 
-      <section className="mt-3 grid grid-cols-2 gap-3">
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="mt-3 grid min-w-0 grid-cols-2 gap-3">
+        <div className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-black text-slate-500">Taux de croissance</p>
           <p className="mt-2 text-2xl font-black text-slate-950">+{summary.growthRate}%</p>
           {summary.total ? (
@@ -628,7 +628,7 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
             </div>
           ) : <p className="mt-3 text-xs font-bold text-slate-500">Aucune evolution a afficher.</p>}
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-black text-slate-500">Taux de cotisation</p>
           <p className="mt-2 text-2xl font-black text-emerald-600">{summary.contributionRate}%</p>
           <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-100">
@@ -672,26 +672,26 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
         ))}
       </section>
 
-      <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <label className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold shadow-sm transition-colors hover:bg-slate-50">
+      <div className="mt-3 grid min-w-0 grid-cols-2 gap-3 md:grid-cols-4">
+        <label className="inline-flex min-w-0 min-h-11 cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-bold shadow-sm transition-colors hover:bg-slate-50">
           <Upload className="size-4" />
           Importer
           <input className="sr-only" type="file" accept=".csv,text/csv" onChange={importMembers} />
         </label>
-        <Button className="min-h-11 px-4" type="button" variant="outline" onClick={exportMembers}>
+        <Button className="min-w-0 min-h-11 px-3 text-sm" type="button" variant="outline" onClick={exportMembers}>
           <Download className="size-4" />
-          Exporter {visibleMembers.length}
+          <span className="truncate">Exporter {visibleMembers.length}</span>
         </Button>
-        <Button asChild className="min-h-11 px-4" variant="outline">
+        <Button asChild className="min-w-0 min-h-11 px-3 text-sm" variant="outline">
           <Link href={`/app/${workspaceSlug}/members/applications`}>
             <UserPlus className="size-4" />
-            Demandes
+            <span className="truncate">Demandes</span>
           </Link>
         </Button>
-        <Button asChild className="min-h-11 px-4" variant="outline">
+        <Button asChild className="min-w-0 min-h-11 px-3 text-sm" variant="outline">
           <Link href={`/app/${workspaceSlug}/communication`}>
             <Mail className="size-4" />
-            Notifier
+            <span className="truncate">Notifier</span>
           </Link>
         </Button>
       </div>
@@ -927,7 +927,7 @@ export function MembersView({ workspaceSlug }: Readonly<{ workspaceSlug: string 
         </section>
       ) : null}
 
-      <button className="fixed bottom-24 right-5 z-20 grid size-14 place-items-center rounded-full bg-blue-700 text-white shadow-xl shadow-blue-900/25 md:hidden" type="button" aria-label="Ajouter un membre" onClick={() => setShowForm(true)}>
+      <button className="fixed bottom-[calc(env(safe-area-inset-bottom)+5rem)] right-5 z-20 grid size-14 place-items-center rounded-full bg-blue-700 text-white shadow-xl shadow-blue-900/25 md:hidden" type="button" aria-label="Ajouter un membre" onClick={() => setShowForm(true)}>
         <Plus className="size-7" />
       </button>
 
