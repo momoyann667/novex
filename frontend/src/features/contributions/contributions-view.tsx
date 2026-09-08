@@ -22,7 +22,7 @@ import {
   uploadPaymentProof
 } from "./api";
 import { getProjectBoard, listMemberOptions } from "@/features/projects/api";
-import type { ContributionFilters, ContributionMemberSummary, ContributionPeriod, ContributionResource, ContributionStatus, PaymentResource } from "./api";
+import type { ContributionCampaign, ContributionFilters, ContributionMemberSummary, ContributionPeriod, ContributionResource, ContributionStatus, PaymentResource } from "./api";
 import { CONTRIBUTION_STATUSES } from "./contribution-status";
 
 const periods: Array<{ value: ContributionPeriod; label: string }> = [
@@ -46,11 +46,10 @@ const statusStyles: Record<string, { label: string; badge: string; avatar: strin
 
 const paymentMethods = [
   { value: "CASH", label: "Especes" },
-  { value: "EXTERNAL_MOBILE_MONEY", label: "Mobile Money" },
+  { value: "MOBILE_MONEY", label: "Mobile Money" },
+  { value: "WAVE", label: "Wave" },
   { value: "BANK_TRANSFER", label: "Virement" },
-  { value: "CHECK", label: "Cheque" },
-  { value: "MANUAL", label: "Manuel" },
-  { value: "OTHER", label: "Autre" }
+  { value: "CHECK", label: "Cheque" }
 ] as const;
 
 const monthOptions = [
@@ -109,6 +108,15 @@ function shortCampaignLabel(item: ContributionResource) {
 
 function contributionName(item: ContributionResource, campaigns: Array<{ id: number; name: string }>) {
   return campaigns.find((campaign) => campaign.id === item.campaign)?.name || shortCampaignLabel(item);
+}
+
+function campaignFrequencyLabel(campaign: ContributionCampaign) {
+  const value = (campaign.period_label || campaign.contribution_type || "").toLowerCase();
+  if (value.includes("month") || value.includes("mens")) return "Mensuelle";
+  if (value.includes("year") || value.includes("ann")) return "Annuelle";
+  if (value.includes("week") || value.includes("hebdo")) return "Hebdomadaire";
+  if (value.includes("quarter") || value.includes("trimestre")) return "Trimestrielle";
+  return campaign.period_label || "Frequence libre";
 }
 
 function tableStatus(item: ContributionResource, selectedMonth: number, selectedYear: number, today: Date) {
@@ -217,6 +225,7 @@ function ChartPanel({ period, onPeriodChange, collected, remaining, overdue, rat
 function PaymentDrawer({
   open,
   contributions,
+  campaigns,
   members,
   projects,
   onClose,
@@ -226,6 +235,7 @@ function PaymentDrawer({
 }: Readonly<{
   open: boolean;
   contributions: ContributionResource[];
+  campaigns: ContributionCampaign[];
   members: Array<{ id: number; full_name: string }>;
   projects: Array<{ id: number; name: string }>;
   onClose: () => void;
@@ -234,7 +244,7 @@ function PaymentDrawer({
   error?: string;
 }>) {
   const [paymentType, setPaymentType] = useState<"CONTRIBUTION" | "DONATION">("CONTRIBUTION");
-  const [contributionId, setContributionId] = useState("");
+  const [campaignId, setCampaignId] = useState("");
   const [memberId, setMemberId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [amount, setAmount] = useState("");
@@ -244,29 +254,38 @@ function PaymentDrawer({
   const [proof, setProof] = useState<File | null>(null);
   if (!open) return null;
 
-  const contribution = contributions.find((item) => item.id === Number(contributionId));
-  const effectiveMemberId = paymentType === "CONTRIBUTION" ? contribution?.member : Number(memberId);
+  const requiresProof = method !== "CASH";
+  const contribution = contributions.find((item) => item.campaign === Number(campaignId) && item.member === Number(memberId));
+  const effectiveMemberId = Number(memberId);
+  const selectedCampaign = campaigns.find((item) => item.id === Number(campaignId));
   const isOverpayment = paymentType === "CONTRIBUTION" && contribution ? numberValue(amount) > numberValue(contribution.remaining_amount) : false;
   const remaining = contribution ? Math.max(numberValue(contribution.remaining_amount) - numberValue(amount), 0) : 0;
-  const canSubmit = Boolean(effectiveMemberId && amount && (paymentType === "DONATION" ? projectId : contributionId) && !isOverpayment);
+  const missingContribution = paymentType === "CONTRIBUTION" && Boolean(campaignId && memberId && !contribution);
+  const canSubmit = Boolean(
+    effectiveMemberId &&
+    amount &&
+    (paymentType === "DONATION" ? projectId : contribution) &&
+    !isOverpayment &&
+    (!requiresProof || (reference.trim() && proof))
+  );
 
   return (
-    <div className="fixed inset-0 z-50 grid items-end bg-slate-950/40" role="dialog" aria-modal="true">
+    <div className="fixed inset-x-0 bottom-0 top-0 z-50 flex w-screen max-w-full items-end overflow-x-hidden bg-slate-950/40 px-0" role="dialog" aria-modal="true">
       <form
-        className="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl"
+        className="max-h-[92vh] w-full min-w-0 max-w-full overflow-y-auto overflow-x-hidden rounded-t-2xl bg-white p-4 shadow-2xl"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!effectiveMemberId) return;
+          if (!effectiveMemberId || !canSubmit) return;
           onSubmit({
             payment_type: paymentType,
-            contribution: paymentType === "CONTRIBUTION" ? Number(contributionId) : null,
+            contribution: paymentType === "CONTRIBUTION" ? contribution?.id : null,
             member: effectiveMemberId,
             project: paymentType === "DONATION" ? Number(projectId) : null,
             amount,
             payment_method: method,
-            document_reference: reference,
+            document_reference: requiresProof ? reference.trim() : "",
             paid_at: new Date(paidAt).toISOString(),
-            proof
+            proof: requiresProof ? proof : null
           });
         }}
       >
@@ -278,41 +297,62 @@ function PaymentDrawer({
           </div>
           <button className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black" type="button" onClick={onClose}>Fermer</button>
         </div>
-        <div className="grid gap-4">
-          <label className="grid gap-2 text-sm font-black">Type<select className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" value={paymentType} onChange={(event) => { setPaymentType(event.target.value as "CONTRIBUTION" | "DONATION"); setAmount(""); }}>
+        <div className="grid min-w-0 gap-4">
+          <label className="grid min-w-0 gap-2 text-sm font-black">Type<select className="min-h-12 w-full min-w-0 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" value={paymentType} onChange={(event) => { setPaymentType(event.target.value as "CONTRIBUTION" | "DONATION"); setCampaignId(""); setMemberId(""); setProjectId(""); setAmount(""); }}>
             <option value="CONTRIBUTION">Cotisation</option>
             <option value="DONATION">Don</option>
           </select></label>
           {paymentType === "CONTRIBUTION" ? (
-            <label className="grid gap-2 text-sm font-black">Cotisation<select className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" required value={contributionId} onChange={(event) => {
-              const selected = contributions.find((item) => item.id === Number(event.target.value));
-              setContributionId(event.target.value);
-              setAmount(selected ? String(selected.remaining_amount) : "");
-            }}>
-              <option value="">Choisir une cotisation</option>
-              {contributions.map((item) => <option key={item.id} value={item.id}>{item.member_name} - {shortCampaignLabel(item)} - reste {formatMoney(item.remaining_amount, item.currency || "FCFA")}</option>)}
-            </select></label>
-          ) : (
             <>
-              <label className="grid gap-2 text-sm font-black">Membre<select className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" required value={memberId} onChange={(event) => setMemberId(event.target.value)}>
+              <label className="grid min-w-0 gap-2 text-sm font-black">Cotisation creee<select className="min-h-12 w-full min-w-0 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" required value={campaignId} onChange={(event) => {
+                const selectedCampaignId = event.target.value;
+                setCampaignId(selectedCampaignId);
+                const selected = contributions.find((item) => item.campaign === Number(selectedCampaignId) && item.member === Number(memberId));
+                setAmount(selected ? String(selected.remaining_amount) : "");
+              }}>
+                <option value="">Choisir une cotisation</option>
+                {campaigns.map((item) => <option key={item.id} value={item.id}>{item.name} - {formatMoney(item.amount, item.currency || "FCFA")}</option>)}
+              </select></label>
+              <label className="grid min-w-0 gap-2 text-sm font-black">Membre<select className="min-h-12 w-full min-w-0 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" required value={memberId} onChange={(event) => {
+                const selectedMemberId = event.target.value;
+                setMemberId(selectedMemberId);
+                const selected = contributions.find((item) => item.campaign === Number(campaignId) && item.member === Number(selectedMemberId));
+                setAmount(selected ? String(selected.remaining_amount) : "");
+              }}>
                 <option value="">Choisir un membre</option>
                 {members.map((item) => <option key={item.id} value={item.id}>{item.full_name}</option>)}
               </select></label>
-              <label className="grid gap-2 text-sm font-black">Projet<select className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" required value={projectId} onChange={(event) => setProjectId(event.target.value)}>
+            </>
+          ) : (
+            <>
+              <label className="grid min-w-0 gap-2 text-sm font-black">Membre<select className="min-h-12 w-full min-w-0 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" required value={memberId} onChange={(event) => setMemberId(event.target.value)}>
+                <option value="">Choisir un membre</option>
+                {members.map((item) => <option key={item.id} value={item.id}>{item.full_name}</option>)}
+              </select></label>
+              <label className="grid min-w-0 gap-2 text-sm font-black">Projet<select className="min-h-12 w-full min-w-0 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" required value={projectId} onChange={(event) => setProjectId(event.target.value)}>
                 <option value="">Choisir un projet</option>
                 {projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select></label>
             </>
           )}
-          <label className="grid gap-2 text-sm font-black">Montant<input className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" min="1" required type="number" value={amount} onChange={(event) => setAmount(event.target.value)} /></label>
-          <label className="grid gap-2 text-sm font-black">Date<input className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" required type="datetime-local" value={paidAt} onChange={(event) => setPaidAt(event.target.value)} /></label>
-          <label className="grid gap-2 text-sm font-black">Mode<select className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" value={method} onChange={(event) => setMethod(event.target.value)}>{paymentMethods.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
-          <label className="grid gap-2 text-sm font-black">Reference ou note<input className="min-h-12 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" value={reference} onChange={(event) => setReference(event.target.value)} /></label>
-          <label className="grid gap-2 text-sm font-black">Justificatif photo ou PDF<input className="min-h-12 rounded-lg border border-dashed border-slate-300 p-3 text-sm font-semibold" accept="image/png,image/jpeg,image/webp,application/pdf" type="file" onChange={(event) => setProof(event.target.files?.[0] || null)} /></label>
+          <label className="grid min-w-0 gap-2 text-sm font-black">Montant<input className="min-h-12 w-full min-w-0 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" min="1" required type="number" value={amount} onChange={(event) => setAmount(event.target.value)} /></label>
+          <label className="grid min-w-0 gap-2 text-sm font-black">Date<input className="min-h-12 w-full min-w-0 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" required type="datetime-local" value={paidAt} onChange={(event) => setPaidAt(event.target.value)} /></label>
+          <label className="grid min-w-0 gap-2 text-sm font-black">Mode<select className="min-h-12 w-full min-w-0 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" value={method} onChange={(event) => { setMethod(event.target.value); setReference(""); setProof(null); }}>{paymentMethods.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+          {requiresProof ? (
+            <>
+              <label className="grid min-w-0 gap-2 text-sm font-black">Reference<input className="min-h-12 w-full min-w-0 rounded-lg border border-slate-200 px-3 text-base font-semibold outline-none focus:border-blue-600" required value={reference} onChange={(event) => setReference(event.target.value)} /></label>
+              <label className="grid min-w-0 gap-2 text-sm font-black">Justificatif photo ou PDF<input className="min-h-12 w-full min-w-0 rounded-lg border border-dashed border-slate-300 p-3 text-sm font-semibold" required accept="image/png,image/jpeg,image/webp,application/pdf" type="file" onChange={(event) => setProof(event.target.files?.[0] || null)} /></label>
+            </>
+          ) : null}
         </div>
         {paymentType === "CONTRIBUTION" && contribution ? (
           <div className={`mt-4 rounded-xl p-3 text-sm font-bold ${isOverpayment ? "bg-amber-50 text-amber-800" : "bg-blue-50 text-blue-800"}`}>
             {isOverpayment ? "Le montant depasse le reste a payer. Verifie avant de confirmer." : `Reste apres paiement: ${formatMoney(remaining, contribution.currency || "FCFA")}`}
+          </div>
+        ) : null}
+        {paymentType === "CONTRIBUTION" && selectedCampaign && missingContribution ? (
+          <div className="mt-4 rounded-xl bg-amber-50 p-3 text-sm font-bold text-amber-800">
+            Aucune ligne ouverte pour ce membre sur {selectedCampaign.name}. Verifie que la cotisation a bien ete generee pour ce membre.
           </div>
         ) : null}
         {error ? <p className="mt-3 text-sm font-bold text-red-600">{error}</p> : null}
@@ -759,6 +799,28 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
         </div>
       </section>
 
+      <section className="w-full rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-4">
+          <h2 className="text-xl font-black tracking-normal">Cotisations creees</h2>
+          <p className="mt-1 text-sm font-semibold text-slate-500">Les cotisations disponibles pour les paiements manuels.</p>
+        </div>
+        <div className="grid gap-3">
+          {(campaignsQuery.data || []).map((item) => (
+            <article className="grid min-w-0 gap-3 rounded-lg border border-slate-200 p-3" key={item.id}>
+              <div className="min-w-0">
+                <h3 className="truncate text-base font-black text-slate-950">{item.name}</h3>
+                <p className="text-xs font-bold text-slate-500">{campaignFrequencyLabel(item)}{item.due_date ? ` - Echeance ${dateLabel(item.due_date)}` : ""}</p>
+              </div>
+              <div className="flex min-w-0 items-center justify-between gap-3">
+                <strong className="text-lg font-black text-blue-700">{formatMoney(item.amount, item.currency || currency)}</strong>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-black text-slate-600">{item.status}</span>
+              </div>
+            </article>
+          ))}
+          {!campaignsQuery.data?.length ? <div className="rounded-lg bg-slate-50 p-5 text-center text-sm font-bold text-slate-500">Aucune cotisation creee pour le moment.</div> : null}
+        </div>
+      </section>
+
       {recoveryOpen ? <RecoveryPanel currency={currency} members={recoveryQuery.data || []} /> : null}
 
       <section className="grid w-full gap-3">
@@ -812,6 +874,7 @@ export function ContributionsView({ workspaceSlug }: Readonly<{ workspaceSlug: s
       </section>
 
       <PaymentDrawer
+        campaigns={campaignsQuery.data || []}
         contributions={payableContributions}
         error={paymentMutation.error instanceof Error ? paymentMutation.error.message : undefined}
         isPending={paymentMutation.isPending}

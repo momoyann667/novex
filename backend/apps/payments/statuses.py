@@ -19,6 +19,7 @@ class PaymentMethod(models.TextChoices):
     OTHER = "OTHER", "Autre"
     EXTERNAL_MOBILE_MONEY = "EXTERNAL_MOBILE_MONEY", "Mobile Money externe"
     MOBILE_MONEY = "MOBILE_MONEY", "Mobile Money"
+    WAVE = "WAVE", "Wave"
     CARD = "CARD", "Carte bancaire"
     AGGREGATOR = "AGGREGATOR", "Agregateur"
     BANK_TRANSFER = "BANK_TRANSFER", "Virement"
