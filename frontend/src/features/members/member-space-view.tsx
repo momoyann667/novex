@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -8,11 +8,12 @@ import { ArrowLeft, CalendarDays, CheckCircle2, CreditCard, Download, Edit3, Fil
 import { Button } from "@/components/ui/button";
 import { displayUserName, getCurrentUser, userInitials } from "@/features/auth/current-user";
 import { getWorkspaceSettings } from "@/features/workspace/api";
-import { currentMemberProfile } from "./current-member-profile";
 
 type Tab = "profile" | "contributions" | "payments" | "attendance" | "events" | "documents" | "history";
 
 type SelfMemberProfile = {
+  workspace_name: string;
+  workspace_currency: string;
   first_name: string;
   last_name: string;
   full_name: string;
@@ -31,20 +32,77 @@ type SelfMemberProfile = {
   };
 };
 
-const association = {
-  name: "Association",
-  logoInitial: "A"
+type MoneyAmount = {
+  value: string | number;
+  currency: string;
 };
 
-const contributions: Array<{ period: string; label: string; due: number; paid: number; remaining: number; status: string; dueDate: string }> = [];
-
-const payments: Array<{ reference: string; reason: string; amount: number; method: string; status: string; date: string; receipt: string }> = [];
-
-const participations: Array<{ title: string; date: string; status: string }> = [];
-
-const events: Array<{ title: string; date: string; time: string; location: string; participation: string; past: boolean }> = [];
-
-const documents: Array<{ name: string; type: string; size: string; category: string }> = [];
+type SelfMemberDashboard = {
+  profile: {
+    id: number;
+    full_name: string;
+    first_name: string;
+    last_name: string;
+    function: string;
+    status: string;
+    membership_number: string;
+    join_date: string;
+    photo: string;
+    profile_completion?: { percentage?: number };
+  };
+  contribution_summary: {
+    total_due: MoneyAmount;
+    total_paid: MoneyAmount;
+    remaining_to_pay: MoneyAmount;
+    payment_rate: string | number;
+    overdue_count: number;
+    next_due_date: string | null;
+  };
+  contributions: Array<{
+    id: number;
+    campaign: string;
+    period_label: string;
+    amount_due: string | number;
+    amount_paid: string | number;
+    remaining_amount: string | number;
+    currency: string;
+    due_date: string | null;
+    status: string;
+    paid_at: string | null;
+  }>;
+  payment_summary: {
+    total_paid: MoneyAmount;
+    successful_count: number;
+    pending_count: number;
+    failed_count: number;
+  };
+  payments: Array<{
+    id: number;
+    reference: string;
+    amount: string | number;
+    currency: string;
+    method: string;
+    provider: string;
+    status: string;
+    reason: string;
+    paid_at: string | null;
+    created_at: string;
+    receipt_number: string;
+    receipt_url: string;
+  }>;
+  attendance_summary: {
+    participated: number;
+    missed: number;
+    participation_rate: string | number;
+  };
+  events: {
+    upcoming: Array<{ id: number; title: string; start_at: string; location: string; participation_status: string; attendance_status: string }>;
+    past: Array<{ id: number; title: string; start_at: string; location: string; participation_status: string; attendance_status: string }>;
+  };
+  documents: Array<{ id: number; name: string; file_type: string; size: number; category: string; download_url: string }>;
+  history: Array<{ date: string; type: string; title: string; detail: string }>;
+  alerts: Array<{ type: string; message: string; amount?: string | number; currency?: string; date?: string }>;
+};
 
 const tabs: Array<{ id: Tab; label: string }> = [
   { id: "profile", label: "Profil" },
@@ -56,12 +114,46 @@ const tabs: Array<{ id: Tab; label: string }> = [
   { id: "history", label: "Historique" }
 ];
 
-function formatMoney(value: number) {
-  return `${value.toLocaleString("fr-FR")} FCFA`;
+function numberValue(value: unknown) {
+  const numeric = Number(value ?? 0);
+  return Number.isFinite(numeric) ? numeric : 0;
 }
 
-function formatDate(value: string) {
+function formatMoney(value: unknown, currency = "FCFA") {
+  return `${numberValue(value).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} ${currency}`;
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) return "Non definie";
   return new Intl.DateTimeFormat("fr-FR", { dateStyle: "long" }).format(new Date(value));
+}
+
+function statusLabel(status: string) {
+  return {
+    PAID: "Payee",
+    PARTIALLY_PAID: "Partielle",
+    PENDING: "En attente",
+    OVERDUE: "En retard",
+    WAIVED: "Exoneree",
+    CANCELLED: "Annulee",
+    SUCCESS: "Reussi",
+    PROCESSING: "En cours",
+    FAILED: "Echoue",
+    CANCELLED_PAYMENT: "Annule"
+  }[status] || status || "En attente";
+}
+
+function paymentMethodLabel(method: string) {
+  return {
+    CASH: "Especes",
+    MOBILE_MONEY: "Mobile Money",
+    WAVE: "Wave",
+    BANK_TRANSFER: "Virement",
+    CHECK: "Cheque",
+    MANUAL: "Manuel",
+    AGGREGATOR: "Agregateur",
+    CARD: "Carte bancaire"
+  }[method] || method || "Paiement";
 }
 
 function initialsFromName(name: string) {
@@ -81,6 +173,17 @@ function getSelfMemberProfile(workspaceSlug: string) {
   });
 }
 
+function getSelfMemberDashboard(workspaceSlug: string) {
+  return fetch(`/api/backend/me/member/dashboard/`, {
+    credentials: "include",
+    headers: { "X-Workspace": workspaceSlug },
+    cache: "no-store"
+  }).then(async (response) => {
+    if (!response.ok) return null;
+    return (await response.json()) as SelfMemberDashboard;
+  });
+}
+
 export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: string }>) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("profile");
@@ -91,6 +194,11 @@ export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: str
     queryFn: () => getSelfMemberProfile(workspaceSlug),
     retry: false
   });
+  const memberDashboardQuery = useQuery({
+    queryKey: ["self-member-dashboard", workspaceSlug],
+    queryFn: () => getSelfMemberDashboard(workspaceSlug),
+    retry: false
+  });
   const settingsQuery = useQuery({
     queryKey: ["workspace-settings", workspaceSlug],
     queryFn: () => getWorkspaceSettings(workspaceSlug),
@@ -98,32 +206,43 @@ export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: str
   });
   const user = userQuery.data;
   const member = selfMemberQuery.data;
+  const dashboard = memberDashboardQuery.data;
+  const dashboardProfile = dashboard?.profile;
   const fullName = member?.full_name || displayUserName(user);
   const firstName = member?.first_name || user?.profile?.first_name || fullName.split(" ")[0] || "Utilisateur";
   const lastName = member?.last_name || user?.profile?.last_name || "";
-  const workspaceName = settingsQuery.data?.workspace_name || association.name;
+  const workspaceName = settingsQuery.data?.workspace_name || member?.workspace_name || "Association";
+  const contributions = dashboard?.contributions || [];
+  const payments = dashboard?.payments || [];
+  const documents = dashboard?.documents || [];
+  const upcomingEvents = dashboard?.events?.upcoming || [];
+  const pastEvents = dashboard?.events?.past || [];
+  const alerts = dashboard?.alerts || [];
+  const contributionSummary = dashboard?.contribution_summary;
+  const paymentSummary = dashboard?.payment_summary;
+  const attendanceSummary = dashboard?.attendance_summary;
+  const currency = contributionSummary?.total_due?.currency || member?.workspace_currency || "FCFA";
   const profile = {
-    ...currentMemberProfile,
-    firstName,
-    lastName,
-    fullName,
-    initials: member?.full_name ? initialsFromName(member.full_name) : userInitials(user),
+    firstName: dashboardProfile?.first_name || firstName,
+    lastName: dashboardProfile?.last_name || lastName,
+    fullName: dashboardProfile?.full_name || fullName,
+    initials: dashboardProfile?.full_name ? initialsFromName(dashboardProfile.full_name) : member?.full_name ? initialsFromName(member.full_name) : userInitials(user),
     email: member?.email || user?.email || "",
     phone: `${member?.phone_country_code || ""}${member?.phone || user?.phone || ""}`,
-    joinedAt: member?.join_date || new Date().toISOString().slice(0, 10),
-    membershipNumber: member?.membership_number || "A creer",
-    function: member?.function || "Membre",
-    status: member?.status === "active" ? "Actif" : member?.status || "Actif",
+    joinedAt: dashboardProfile?.join_date || member?.join_date || new Date().toISOString().slice(0, 10),
+    membershipNumber: dashboardProfile?.membership_number || member?.membership_number || "A creer",
+    function: dashboardProfile?.function || member?.function || "Membre",
+    status: dashboardProfile?.status === "active" || member?.status === "active" ? "Actif" : dashboardProfile?.status || member?.status || "Actif",
     occupation: member?.occupation || "",
     city: member?.city || "",
-    completion: member?.profile_completion?.percentage ?? (user?.email ? 40 : 0),
-    photoUrl: member?.photo || user?.profile?.avatar || ""
+    completion: dashboardProfile?.profile_completion?.percentage ?? member?.profile_completion?.percentage ?? (user?.email ? 40 : 0),
+    photoUrl: dashboardProfile?.photo || member?.photo || user?.profile?.avatar || ""
   };
-  const totalDue = useMemo(() => contributions.reduce((sum, item) => sum + item.due, 0), []);
-  const totalPaid = useMemo(() => contributions.reduce((sum, item) => sum + item.paid, 0), []);
-  const remaining = Math.max(totalDue - totalPaid, 0);
-  const contributionRate = totalDue ? Math.round((totalPaid / totalDue) * 100) : 0;
-  const participationRate = participations.length ? Math.round((participations.filter((item) => item.status === "Present").length / participations.length) * 100) : 0;
+  const totalDue = numberValue(contributionSummary?.total_due?.value);
+  const totalPaid = numberValue(contributionSummary?.total_paid?.value);
+  const remaining = numberValue(contributionSummary?.remaining_to_pay?.value);
+  const contributionRate = Math.round(numberValue(contributionSummary?.payment_rate));
+  const participationRate = Math.round(numberValue(attendanceSummary?.participation_rate));
 
   return (
     <main className="min-h-screen bg-[#f5f7f8] px-4 pb-28 pt-4 text-slate-950 md:px-8">
@@ -146,7 +265,7 @@ export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: str
       <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between px-5 pt-5">
           <div className="flex items-center gap-3">
-            <div className="grid size-10 place-items-center rounded-full bg-[#0f2347] text-sm font-black text-white">{workspaceName[0]?.toUpperCase() || association.logoInitial}</div>
+            <div className="grid size-10 place-items-center rounded-full bg-[#0f2347] text-sm font-black text-white">{workspaceName[0]?.toUpperCase() || "A"}</div>
             <strong className="text-sm tracking-normal text-slate-700">{workspaceName}</strong>
           </div>
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
@@ -182,10 +301,10 @@ export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: str
 
       <section className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
-          ["Cotisations", remaining === 0 ? "A jour" : formatMoney(remaining), CreditCard],
+          ["Cotisations", remaining === 0 ? "A jour" : formatMoney(remaining, currency), CreditCard],
+          ["Paiements", formatMoney(paymentSummary?.total_paid?.value, paymentSummary?.total_paid?.currency || currency), CreditCard],
           ["Participation", `${participationRate} %`, CalendarDays],
-          ["Documents", documents.length.toString(), FileText],
-          ["Anciennete", "0.6 an", IdCard]
+          ["Documents", documents.length.toString(), FileText]
         ].map(([label, value, Icon]) => (
           <div className="min-h-28 rounded-lg border border-slate-200 bg-white p-4 shadow-sm" key={label as string}>
             <div className="flex items-start justify-between">
@@ -200,9 +319,12 @@ export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: str
       <section className="mt-5 rounded-xl bg-white p-4 shadow-sm">
         <p className="text-sm font-black">A retenir</p>
         <div className="mt-3 grid gap-2 text-sm font-semibold text-slate-600">
-          {remaining ? <p>Votre prochaine cotisation affiche un reste de {formatMoney(remaining)}.</p> : <p>Vos cotisations sont a jour.</p>}
-          {events.length ? <p>Prochain evenement prevu le {formatDate(events[0].date)}.</p> : <p>Aucun evenement lie a votre profil pour le moment.</p>}
+          {remaining ? <p>Vos cotisations affichent un reste total de {formatMoney(remaining, currency)}.</p> : <p>Vos cotisations sont a jour.</p>}
+          {contributionSummary?.overdue_count ? <p>{contributionSummary.overdue_count} cotisation(s) en retard.</p> : null}
+          {contributionSummary?.next_due_date ? <p>Prochaine echeance le {formatDate(contributionSummary.next_due_date)}.</p> : null}
+          {upcomingEvents.length ? <p>Prochain evenement prevu le {formatDate(upcomingEvents[0].start_at)}.</p> : <p>Aucun evenement lie a votre profil pour le moment.</p>}
           {profile.completion < 100 ? <p>Votre profil est complete a {profile.completion} %.</p> : null}
+          {alerts.map((alert, index) => <p key={`${alert.type}-${index}`}>{alert.message}</p>)}
         </div>
       </section>
 
@@ -253,9 +375,18 @@ export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: str
             <div className="rounded-xl bg-white p-5 shadow-sm">
               <div className="flex items-end justify-between"><h2 className="text-xl font-black">Cotisations</h2><strong>{contributionRate} %</strong></div>
               <div className="mt-4 h-4 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-600" style={{ width: `${contributionRate}%` }} /></div>
-              <p className="mt-3 text-sm font-semibold text-slate-600">{formatMoney(totalPaid)} paye sur {formatMoney(totalDue)}. Reste : {formatMoney(remaining)}.</p>
+              <p className="mt-3 text-sm font-semibold text-slate-600">{formatMoney(totalPaid, currency)} paye sur {formatMoney(totalDue, currency)}. Reste : {formatMoney(remaining, currency)}.</p>
             </div>
-            {contributions.map((item) => <DataCard key={item.period} title={item.period} subtitle={item.label} value={formatMoney(item.due)} status={item.status} detail={`Echeance ${formatDate(item.dueDate)}`} />)}
+            {contributions.map((item) => (
+              <DataCard
+                key={item.id}
+                title={item.campaign}
+                subtitle={`${item.period_label || "Cotisation"} - paye ${formatMoney(item.amount_paid, item.currency || currency)}`}
+                value={formatMoney(item.remaining_amount, item.currency || currency)}
+                status={statusLabel(item.status)}
+                detail={`Echeance ${formatDate(item.due_date)}`}
+              />
+            ))}
             {!contributions.length ? <EmptyTab label="Aucune cotisation rattachee a votre profil." /> : null}
             <Button asChild className="min-h-12 bg-blue-700 text-white hover:bg-blue-800"><Link href={`/app/${workspaceSlug}/payments`}>Payer ma cotisation</Link></Button>
           </div>
@@ -263,29 +394,30 @@ export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: str
 
         {activeTab === "payments" ? (
           <div className="grid gap-3">
-            {payments.map((item) => <DataCard key={item.reference} title={item.reason} subtitle={`${item.method} - ${formatDate(item.date)}`} value={formatMoney(item.amount)} status={item.status} detail={`Reference ${item.reference}`} action="Voir le recu" />)}
+            {payments.map((item) => <DataCard key={item.id} title={item.reason} subtitle={`${paymentMethodLabel(item.method)} - ${formatDate(item.paid_at || item.created_at)}`} value={formatMoney(item.amount, item.currency || currency)} status={statusLabel(item.status)} detail={`Reference ${item.reference}`} action={item.receipt_url ? "Voir le recu" : undefined} href={item.receipt_url || undefined} />)}
             {!payments.length ? <EmptyTab label="Aucun paiement enregistre." /> : null}
           </div>
         ) : null}
 
         {activeTab === "attendance" ? (
           <div className="grid gap-3">
-            <div className="rounded-xl bg-white p-5 shadow-sm"><h2 className="text-xl font-black">Presences</h2><p className="mt-2 text-3xl font-black">{participationRate} %</p><p className="text-sm font-semibold text-slate-500">{participations.filter((item) => item.status === "Present").length} presents, {participations.filter((item) => item.status === "Absent").length} absence.</p></div>
-            {participations.map((item) => <DataCard key={item.title} title={item.title} subtitle={formatDate(item.date)} value={item.status} status={item.status} detail="Historique de presence" />)}
-            {!participations.length ? <EmptyTab label="Aucune presence enregistree." /> : null}
+            <div className="rounded-xl bg-white p-5 shadow-sm"><h2 className="text-xl font-black">Presences</h2><p className="mt-2 text-3xl font-black">{participationRate} %</p><p className="text-sm font-semibold text-slate-500">{attendanceSummary?.participated || 0} presence(s), {attendanceSummary?.missed || 0} absence(s).</p></div>
+            {[...upcomingEvents, ...pastEvents].map((item) => <DataCard key={item.id} title={item.title} subtitle={formatDate(item.start_at)} value={statusLabel(item.attendance_status)} status={statusLabel(item.participation_status)} detail={item.location || "Lieu non renseigne"} />)}
+            {!upcomingEvents.length && !pastEvents.length ? <EmptyTab label="Aucune presence enregistree." /> : null}
           </div>
         ) : null}
 
         {activeTab === "events" ? (
           <div className="grid gap-3">
-            {events.map((item) => <DataCard key={`${item.title}-${item.date}`} title={item.title} subtitle={`${formatDate(item.date)} - ${item.time} - ${item.location}`} value={item.participation} status={item.past ? "Passe" : "A venir"} detail={item.past ? "Evenement passe" : "Inscription ouverte"} />)}
-            {!events.length ? <EmptyTab label="Aucun evenement rattache a votre profil." /> : null}
+            {upcomingEvents.map((item) => <DataCard key={`upcoming-${item.id}`} title={item.title} subtitle={`${formatDate(item.start_at)} - ${item.location || "Lieu non renseigne"}`} value={statusLabel(item.participation_status)} status="A venir" detail="Evenement a venir" />)}
+            {pastEvents.map((item) => <DataCard key={`past-${item.id}`} title={item.title} subtitle={`${formatDate(item.start_at)} - ${item.location || "Lieu non renseigne"}`} value={statusLabel(item.participation_status)} status="Passe" detail="Evenement passe" />)}
+            {!upcomingEvents.length && !pastEvents.length ? <EmptyTab label="Aucun evenement rattache a votre profil." /> : null}
           </div>
         ) : null}
 
         {activeTab === "documents" ? (
           <div className="grid gap-3">
-            {documents.map((item) => <DataCard key={item.name} title={item.name} subtitle={`${item.type} - ${item.size}`} value={item.category} status="Disponible" detail="Apercu et telechargement autorises" action="Telecharger" />)}
+            {documents.map((item) => <DataCard key={item.id} title={item.name} subtitle={`${item.file_type} - ${item.size || 0} octets`} value={item.category || "Document"} status="Disponible" detail="Apercu et telechargement autorises" action={item.download_url ? "Telecharger" : undefined} href={item.download_url || undefined} />)}
             {!documents.length ? <EmptyTab label="Aucun document disponible." /> : null}
           </div>
         ) : null}
@@ -294,7 +426,8 @@ export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: str
           <div className="rounded-xl bg-white p-5 shadow-sm">
             <h2 className="text-xl font-black">Mon historique</h2>
             <div className="mt-5 grid gap-5">
-              <EmptyTab label="Aucun historique disponible." />
+              {dashboard?.history.map((item, index) => <DataCard key={`${item.type}-${index}`} title={item.title} subtitle={formatDate(item.date)} value={item.type} status="Historique" detail={item.detail} />)}
+              {!dashboard?.history.length ? <EmptyTab label="Aucun historique disponible." /> : null}
             </div>
           </div>
         ) : null}
@@ -303,7 +436,7 @@ export function MemberSpaceView({ workspaceSlug }: Readonly<{ workspaceSlug: str
   );
 }
 
-function DataCard({ title, subtitle, value, status, detail, action }: Readonly<{ title: string; subtitle: string; value: string; status: string; detail: string; action?: string }>) {
+function DataCard({ title, subtitle, value, status, detail, action, href }: Readonly<{ title: string; subtitle: string; value: string; status: string; detail: string; action?: string; href?: string }>) {
   return (
     <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-4">
@@ -315,7 +448,7 @@ function DataCard({ title, subtitle, value, status, detail, action }: Readonly<{
       </div>
       <div className="mt-4 flex items-center justify-between gap-3">
         <strong className="text-xl font-black">{value}</strong>
-        {action ? <Button type="button" variant="outline"><Download className="size-4" /> {action}</Button> : null}
+        {action && href ? <Button asChild type="button" variant="outline"><a href={href}><Download className="size-4" /> {action}</a></Button> : null}
       </div>
       <p className="mt-3 text-sm font-semibold text-slate-500">{detail}</p>
     </article>

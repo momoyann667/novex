@@ -696,6 +696,15 @@ def contribution_projection(contribution: Contribution) -> dict:
 
 def payment_projection(payment: Payment) -> dict:
     receipt = getattr(payment, "receipt", None)
+    is_donation = payment.metadata.get("payment_type") == "DONATION"
+    if payment.contribution_id:
+        reason = payment.contribution.campaign.name
+    elif is_donation and payment.metadata.get("project_name"):
+        reason = f"Don - {payment.metadata.get('project_name')}"
+    elif is_donation:
+        reason = "Don"
+    else:
+        reason = "Paiement"
     return {
         "id": payment.id,
         "reference": payment.reference,
@@ -704,7 +713,7 @@ def payment_projection(payment: Payment) -> dict:
         "method": payment.payment_method,
         "provider": payment.provider,
         "status": payment.status,
-        "reason": payment.contribution.campaign.name if payment.contribution_id else "Paiement",
+        "reason": reason,
         "paid_at": payment.paid_at,
         "created_at": payment.created_at,
         "receipt_number": receipt.receipt_number if receipt else "",
