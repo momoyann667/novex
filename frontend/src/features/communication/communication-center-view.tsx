@@ -4,10 +4,10 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Bell, CalendarClock, CheckCircle2, Clock3, Copy, Eye, FileText, Mail, MessageSquare, Phone, Send, Smartphone, Users, X } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/features/auth/current-user";
-import { listCommunicationMembers, listContributionRecoveryMembers, type CommunicationMember } from "./api";
+import { createCommunication, listCommunicationMembers, listCommunications, listContributionRecoveryMembers, scheduleCommunication, sendCommunication, type BackendCommunication, type CommunicationMember } from "./api";
 
 type CommunicationStatus = "Brouillon" | "Programmee" | "En cours" | "Envoyee" | "Partielle" | "Echec" | "Annulee";
 type CommunicationType = "Annonce" | "Message collectif" | "Notification directe";
@@ -16,6 +16,7 @@ type Audience = "Tous les membres" | "Membre actif" | "Bureau" | "Cotisations en
 
 type Communication = {
   id: string;
+  numericId: number;
   title: string;
   content: string;
   type: CommunicationType;
@@ -29,10 +30,35 @@ type Communication = {
   date: string;
 };
 
-const seedCommunications: Communication[] = [];
-
 const tabs = ["Vue d'ensemble", "Annonces", "Messages", "Brouillons", "Programmes", "Historique", "Modeles", "Mes notifications"];
 const channels: Channel[] = ["In-app", "Push", "Email", "SMS", "WhatsApp"];
+const typeToBackend: Record<CommunicationType, BackendCommunication["communication_type"]> = {
+  Annonce: "ANNOUNCEMENT",
+  "Message collectif": "BROADCAST",
+  "Notification directe": "DIRECT_NOTIFICATION"
+};
+const typeFromBackend: Record<BackendCommunication["communication_type"], CommunicationType> = {
+  ANNOUNCEMENT: "Annonce",
+  BROADCAST: "Message collectif",
+  DIRECT_NOTIFICATION: "Notification directe",
+  SYSTEM_NOTIFICATION: "Notification directe"
+};
+const statusFromBackend: Record<BackendCommunication["status"], CommunicationStatus> = {
+  DRAFT: "Brouillon",
+  SCHEDULED: "Programmee",
+  PROCESSING: "En cours",
+  SENT: "Envoyee",
+  PARTIALLY_SENT: "Partielle",
+  FAILED: "Echec",
+  CANCELLED: "Annulee"
+};
+const channelFromBackend: Record<BackendCommunication["channels"][number], Channel> = {
+  IN_APP: "In-app",
+  PUSH: "Push",
+  EMAIL: "Email",
+  SMS: "SMS",
+  WHATSAPP: "WhatsApp"
+};
 
 function statusClass(status: CommunicationStatus) {
   return {
@@ -63,9 +89,40 @@ function isBoardMember(member: CommunicationMember) {
   return functionLabel.includes("president") || functionLabel.includes("bureau") || groupLabels.some((group) => group.includes("bureau"));
 }
 
+function audienceLabel(item: BackendCommunication) {
+  if (item.audience_type === "ALL_MEMBERS") return "Tous les membres";
+  if (item.audience_type === "ACTIVE_MEMBERS") return "Membre actif";
+  if (item.audience_type === "SELECTED_MEMBERS") return String(item.audience_filters?.label || "Membres selectionnes");
+  return item.audience_type;
+}
+
+function communicationDate(item: BackendCommunication) {
+  const value = item.sent_at || item.scheduled_at || item.created_at;
+  return value ? new Intl.DateTimeFormat("fr-FR").format(new Date(value)) : "";
+}
+
+function toCommunication(item: BackendCommunication): Communication {
+  const recipients = Number(item.audience_snapshot?.total ?? item.recipients_count ?? 0);
+  return {
+    id: `COM-${String(item.id).padStart(3, "0")}`,
+    numericId: item.id,
+    title: item.title,
+    content: item.content,
+    type: typeFromBackend[item.communication_type] || "Message collectif",
+    audience: audienceLabel(item),
+    channels: (item.channels?.length ? item.channels : (["IN_APP"] as BackendCommunication["channels"])).map((channel) => channelFromBackend[channel] || "In-app"),
+    status: statusFromBackend[item.status] || "Brouillon",
+    recipients,
+    delivered: item.status === "SENT" || item.status === "PARTIALLY_SENT" ? recipients : 0,
+    read: 0,
+    failed: item.status === "FAILED" ? recipients : 0,
+    date: communicationDate(item)
+  };
+}
+
 export function CommunicationCenterView({ workspaceSlug }: Readonly<{ workspaceSlug: string }>) {
   const router = useRouter();
-  const [items, setItems] = useState(seedCommunications);
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState(tabs[0]);
   const [showComposer, setShowComposer] = useState(false);
   const [detail, setDetail] = useState<Communication | null>(null);
@@ -77,6 +134,7 @@ export function CommunicationCenterView({ workspaceSlug }: Readonly<{ workspaceS
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduledAt, setScheduledAt] = useState("");
   const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
   const userQuery = useQuery({
     queryKey: ["current-user", workspaceSlug],
@@ -100,6 +158,46 @@ export function CommunicationCenterView({ workspaceSlug }: Readonly<{ workspaceS
     enabled: !memberMode,
     retry: false
   });
+  const communicationsQuery = useQuery({
+    queryKey: ["communications", workspaceSlug],
+    queryFn: () => listCommunications(workspaceSlug),
+    retry: false
+  });
+  const sendMutation = useMutation({
+    mutationFn: async (nextStatus: CommunicationStatus) => {
+      const selectedMemberIds = audience === "Bureau" || audience === "Cotisations en retard" ? audienceMembers.map((member) => member.id) : [];
+      const communication = await createCommunication(workspaceSlug, {
+        communication_type: typeToBackend[type],
+        title: title.trim(),
+        content: content.trim(),
+        audience_type: audience === "Tous les membres" ? "ALL_MEMBERS" : audience === "Membre actif" ? "ACTIVE_MEMBERS" : "SELECTED_MEMBERS",
+        audience_filters: selectedMemberIds.length ? { member_ids: selectedMemberIds, label: audience } : {},
+        channels: ["IN_APP"],
+        category: "GENERAL",
+        priority: "NORMAL",
+        scheduled_at: isScheduled && scheduledAt ? new Date(scheduledAt).toISOString() : null
+      });
+      if (nextStatus === "Brouillon") return communication;
+      if (isScheduled && scheduledAt) return scheduleCommunication(workspaceSlug, communication.id, new Date(scheduledAt).toISOString());
+      return sendCommunication(workspaceSlug, communication.id);
+    },
+    onSuccess: (communication, nextStatus) => {
+      queryClient.invalidateQueries({ queryKey: ["communications", workspaceSlug] });
+      const total = Number(communication.audience_snapshot?.total ?? communication.recipients_count ?? audienceCount);
+      setNotice(nextStatus === "Programmee" ? "Communication programmee." : nextStatus === "Brouillon" ? "Brouillon enregistre." : `Communication envoyee dans NOVEX a ${total.toLocaleString("fr-FR")} membre(s).`);
+      setError("");
+      setTitle("");
+      setContent("");
+      setScheduledAt("");
+      setIsScheduled(false);
+      setSelectedChannels(["In-app"]);
+      setShowComposer(false);
+    },
+    onError: (mutationError) => {
+      setError(mutationError instanceof Error ? mutationError.message : "Impossible d'enregistrer la communication.");
+    }
+  });
+  const items = useMemo(() => (communicationsQuery.data || []).map(toCommunication), [communicationsQuery.data]);
 
   const filteredItems = useMemo(() => {
     if (effectiveActiveTab === "Annonces") return items.filter((item) => item.type === "Annonce");
@@ -148,30 +246,7 @@ export function CommunicationCenterView({ workspaceSlug }: Readonly<{ workspaceS
       const confirmed = window.confirm(`Vous etes sur le point d'envoyer ce message a ${audienceCount.toLocaleString("fr-FR")} membre(s). Confirmer ?`);
       if (!confirmed) return;
     }
-    const scheduled = isScheduled && scheduledAt;
-    const failed = nextStatus === "Envoyee" && !scheduled ? externalChannels.length * audienceCount : 0;
-    const nextItem: Communication = {
-      id: `COM-${String(items.length + 1).padStart(3, "0")}`,
-      title,
-      content,
-      type,
-      audience,
-      channels: selectedChannels,
-      status: scheduled ? "Programmee" : nextStatus === "Brouillon" ? "Brouillon" : failed ? "Partielle" : "Envoyee",
-      recipients: audienceCount,
-      delivered: selectedChannels.includes("In-app") && nextStatus !== "Brouillon" && !scheduled ? audienceCount : 0,
-      read: 0,
-      failed,
-      date: scheduled ? new Intl.DateTimeFormat("fr-FR").format(new Date(scheduledAt)) : new Intl.DateTimeFormat("fr-FR").format(new Date())
-    };
-    setItems((current) => [nextItem, ...current]);
-    setNotice(nextItem.status === "Programmee" ? `Communication programmee pour ${nextItem.date}.` : nextItem.status === "Partielle" ? "Communication traitee. Certains canaux externes sont non configures." : nextItem.status === "Brouillon" ? "Brouillon enregistre." : `Communication envoyee a ${audienceCount.toLocaleString("fr-FR")} membre(s).`);
-    setTitle("");
-    setContent("");
-    setScheduledAt("");
-    setIsScheduled(false);
-    setSelectedChannels(["In-app"]);
-    setShowComposer(false);
+    sendMutation.mutate(nextStatus);
   }
 
   return (
@@ -194,6 +269,7 @@ export function CommunicationCenterView({ workspaceSlug }: Readonly<{ workspaceS
       </section>
 
       {notice ? <p className="mt-4 rounded-md bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">{notice}</p> : null}
+      {error ? <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-xs font-bold text-red-700">{error}</p> : null}
 
       {!memberMode ? <section className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
         {[
@@ -311,7 +387,7 @@ export function CommunicationCenterView({ workspaceSlug }: Readonly<{ workspaceS
           )) : (
             <div className="p-8 text-center">
               <h2 className="text-xl font-black">Aucune communication</h2>
-              <p className="mt-2 text-sm font-semibold text-slate-500">Composez une annonce ou ajustez l'onglet actif.</p>
+                <p className="mt-2 text-sm font-semibold text-slate-500">{communicationsQuery.isLoading ? "Chargement des communications..." : "Composez une annonce ou ajustez l'onglet actif."}</p>
             </div>
           )}
         </section>
@@ -374,7 +450,7 @@ export function CommunicationCenterView({ workspaceSlug }: Readonly<{ workspaceS
                     const Icon = channelIcon(channel);
                     const disabled = channel !== "In-app";
                     return (
-                      <button className={`min-h-12 rounded-md border px-2 text-xs font-black ${selectedChannels.includes(channel) ? "border-blue-700 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-700"} ${disabled ? "opacity-75" : ""}`} type="button" key={channel} onClick={() => toggleChannel(channel)}>
+                      <button className={`min-h-12 rounded-md border px-2 text-xs font-black ${selectedChannels.includes(channel) ? "border-blue-700 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-700"} ${disabled ? "opacity-75" : ""}`} type="button" key={channel} onClick={() => { if (!disabled) toggleChannel(channel); }}>
                         <Icon className="mx-auto mb-1 size-4" />
                         {channel}
                         {disabled ? <span className="block text-[10px] text-amber-700">Non configure</span> : null}
@@ -390,10 +466,10 @@ export function CommunicationCenterView({ workspaceSlug }: Readonly<{ workspaceS
               </div>
             </div>
             <div className="mt-6 grid grid-cols-2 gap-3">
-              <Button className="min-h-12" type="button" variant="outline" onClick={() => saveCommunication("Brouillon")}>Brouillon</Button>
-              <Button className="min-h-12" type="submit" disabled={!title.trim() || !content.trim() || !selectedChannels.length || (isScheduled && !scheduledAt)}>
+              <Button className="min-h-12" type="button" variant="outline" disabled={sendMutation.isPending} onClick={() => saveCommunication("Brouillon")}>Brouillon</Button>
+              <Button className="min-h-12" type="submit" disabled={sendMutation.isPending || !title.trim() || !content.trim() || !selectedChannels.length || (isScheduled && !scheduledAt)}>
                 {isScheduled ? <CalendarClock className="size-4" /> : <Send className="size-4" />}
-                {isScheduled ? "Programmer" : "Envoyer"}
+                {sendMutation.isPending ? "Traitement..." : isScheduled ? "Programmer" : "Envoyer"}
               </Button>
             </div>
           </form>
