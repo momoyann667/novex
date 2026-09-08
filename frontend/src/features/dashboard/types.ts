@@ -18,6 +18,7 @@ export interface DashboardOverview {
       revenues: string | null;
       expenses: string | null;
       net_flow: string | null;
+      payments_total?: string | null;
       masked: boolean;
     };
     members: {
@@ -32,6 +33,7 @@ export interface DashboardOverview {
       objective: string | null;
       collected: string | null;
       remaining: string | null;
+      remaining_all?: string | null;
       recovery_rate: number;
       late_members: number;
     };

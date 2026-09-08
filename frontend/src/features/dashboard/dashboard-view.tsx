@@ -353,10 +353,10 @@ export function DashboardView({
   const dashboardAssociationName = settingsQuery.data?.workspace_name || currentProfile.associationName || initialData.workspace.name;
   const moneyFallback = `0 ${overview.workspace.currency === "XOF" ? "FCFA" : overview.workspace.currency}`;
   const current = memberDashboard ? {
-    balance: numberValue(memberDashboard.contribution_summary.remaining_to_pay.value) > 0 ? moneyAmount(memberDashboard.contribution_summary.remaining_to_pay, overview.workspace.currency) : "A jour",
-    balanceTrend: numberValue(memberDashboard.contribution_summary.remaining_to_pay.value) > 0 ? "Reste a payer" : "Toutes les cotisations sont a jour",
-    revenues: moneyAmount(memberDashboard.contribution_summary.total_paid, overview.workspace.currency),
-    expenses: moneyAmount(memberDashboard.contribution_summary.remaining_to_pay, overview.workspace.currency),
+    balance: overview.kpis.finance.payments_total || moneyFallback,
+    balanceTrend: "Paiements de l'association",
+    revenues: "",
+    expenses: "",
     totalContributions: moneyAmount(memberDashboard.contribution_summary.total_due, overview.workspace.currency),
     paidContributions: moneyAmount(memberDashboard.contribution_summary.total_paid, overview.workspace.currency),
     lateContributions: `${memberDashboard.contribution_summary.overdue_count.toLocaleString("fr-FR")} retard(s)`,
@@ -366,9 +366,7 @@ export function DashboardView({
       { label: "Cotisations dues", value: moneyAmount(memberDashboard.contribution_summary.total_due, overview.workspace.currency), detail: `${memberDashboard.contributions.length} ligne(s)`, tone: "blue" as const },
       { label: "Cotisations payees", value: moneyAmount(memberDashboard.contribution_summary.total_paid, overview.workspace.currency), detail: `${Math.round(numberValue(memberDashboard.contribution_summary.payment_rate))}% paye`, tone: "green" as const },
       { label: "Reste a payer", value: moneyAmount(memberDashboard.contribution_summary.remaining_to_pay, overview.workspace.currency), detail: memberDashboard.contribution_summary.next_due_date ? "Prochaine echeance connue" : "Aucune echeance", tone: numberValue(memberDashboard.contribution_summary.remaining_to_pay.value) > 0 ? "red" as const : "green" as const },
-      { label: "Paiements", value: memberDashboard.payment_summary.successful_count.toLocaleString("fr-FR"), detail: `${memberDashboard.payment_summary.pending_count} en attente`, tone: "slate" as const },
-      { label: "Evenements", value: memberDashboard.events.upcoming.length.toLocaleString("fr-FR"), detail: "A venir", tone: "blue" as const },
-      { label: "Documents", value: memberDashboard.documents.length.toLocaleString("fr-FR"), detail: "Accessibles", tone: "green" as const }
+      { label: "Paiements", value: memberDashboard.payment_summary.successful_count.toLocaleString("fr-FR"), detail: `${memberDashboard.payment_summary.pending_count} en attente`, tone: "slate" as const }
     ]
   } : {
     balance: overview.kpis.finance.current_balance || moneyFallback,
@@ -413,7 +411,7 @@ export function DashboardView({
   ] : [
     ["Solde", overview.kpis.finance.current_balance || moneyFallback, "Disponible selon transactions validees", CreditCard],
     ["Recettes", overview.kpis.finance.revenues || moneyFallback, overview.period.label, WalletCards],
-    ["Cotisations restantes", overview.kpis.contributions.remaining || moneyFallback, "A recouvrer", Clock3]
+    ["Cotisations restantes", overview.kpis.contributions.remaining_all || overview.kpis.contributions.remaining || moneyFallback, "Reste a payer global", Clock3]
   ];
 
   return (
@@ -491,7 +489,7 @@ export function DashboardView({
         </div>
         <div className="mt-6 text-4xl font-black tracking-normal">{current.balance}</div>
         <p className="mt-2 text-sm font-bold text-emerald-600">{current.balanceTrend}</p>
-        <div className="mt-5 grid grid-cols-2 gap-3">
+        {!memberDashboard ? <div className="mt-5 grid grid-cols-2 gap-3">
           <div className="rounded-lg bg-emerald-50 p-3">
             <TrendingUp className="mb-2 size-5 text-emerald-700" />
             <p className="text-xs font-bold text-slate-500">Recettes</p>
@@ -502,7 +500,7 @@ export function DashboardView({
             <p className="text-xs font-bold text-slate-500">Sorties</p>
             <strong className="mt-1 block text-lg">{current.expenses}</strong>
           </div>
-        </div>
+        </div> : null}
       </section>
 
       <section className="mt-5 grid grid-cols-2 gap-4">
@@ -515,7 +513,7 @@ export function DashboardView({
         ))}
       </section>
 
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      {!memberDashboard ? <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <SectionTitle title="Etat des Cotisations" action="Voir tout" />
         <div className="mb-4 flex justify-end">
           <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">{current.totalContributions} Total</span>
@@ -550,7 +548,7 @@ export function DashboardView({
         <div className="mt-5 h-3 overflow-hidden rounded-full bg-slate-100">
           <div className="h-full rounded-full bg-blue-700" style={{ width: `${current.recoveryRate}%` }} />
         </div>
-      </section>
+      </section> : null}
 
       {notificationItems.length ? <section className="mt-6 rounded-xl border border-red-100 bg-red-50 p-5">
         <h2 className="flex items-center gap-2 text-xl font-black text-red-700">
@@ -573,7 +571,7 @@ export function DashboardView({
         </div>
       </section> : null}
 
-      <section className="mt-6 grid gap-4">
+      {!memberDashboard ? <section className="mt-6 grid gap-4">
         <SectionTitle title="Pilotage association" />
         {steeringMetrics.map(([title, detail, progress, Icon]) => (
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" key={String(title)}>
@@ -592,9 +590,9 @@ export function DashboardView({
             </div>
           </div>
         ))}
-      </section>
+      </section> : null}
 
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      {!memberDashboard ? <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <SectionTitle title="Tresorerie" action="Details" />
         <div className="grid gap-4">
           {treasuryMetrics.map(([title, value, detail, Icon]) => (
@@ -610,9 +608,9 @@ export function DashboardView({
             </div>
           ))}
         </div>
-      </section>
+      </section> : null}
 
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      {!memberDashboard ? <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <SectionTitle title="Activite recente" />
         <div className="grid gap-4">
           {activityItems.length ? activityItems.map(({ title, description, occurred_at }) => (
@@ -628,9 +626,9 @@ export function DashboardView({
             </div>
           )) : <p className="rounded-lg bg-slate-50 p-4 text-sm font-semibold text-slate-500">Aucune activite recente.</p>}
         </div>
-      </section>
+      </section> : null}
 
-      <section className="mt-6 rounded-xl bg-[#0f2347] p-5 text-white shadow-lg shadow-slate-900/15">
+      {!memberDashboard ? <section className="mt-6 rounded-xl bg-[#0f2347] p-5 text-white shadow-lg shadow-slate-900/15">
         <div className="flex items-start gap-4">
           <div className="grid size-12 place-items-center rounded-full bg-white/15">
             <Bot className="size-6" />
@@ -647,7 +645,7 @@ export function DashboardView({
             <Plus className="size-6" />
           </button>
         </div>
-      </section>
+      </section> : null}
 
       <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <SectionTitle title="Synthese rapide" />
