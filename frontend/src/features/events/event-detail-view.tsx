@@ -1,125 +1,201 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, Banknote, CalendarClock, CheckCircle2, CheckSquare, FileText, FolderKanban, Megaphone, QrCode, ScrollText, Ticket, Users } from "lucide-react";
+import { ArrowLeft, Banknote, CalendarClock, CheckCircle2, Clock3, FileText, LinkIcon, Loader2, MapPin, Ticket, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PageHeader } from "@/components/layout/page-header";
-import { getEvent, type EventResource } from "./api";
-
-const tabs = [
-  ["Resume", FolderKanban],
-  ["Participants", Users],
-  ["Budget", Banknote],
-  ["Depenses", Banknote],
-  ["Recettes", Banknote],
-  ["Documents", FileText],
-  ["Presences", CheckSquare],
-  ["Activite", Activity],
-  ["Rapport", ScrollText],
-] as const;
-
-const quickCards = [["QR event", "NOVEX EVENT EVT-2026-001", QrCode], ["Billetterie", "3 types de tickets", Ticket], ["Programme", "8 sessions planifiees", CalendarClock], ["Communication", "Rappel J-7 pret", Megaphone]] as const;
+import { backendMediaUrl } from "@/lib/api/media";
+import { getEvent, listMemberOptions, listProjectOptions, type EventResource } from "./api";
 
 function money(value: string | number | null | undefined) {
   const amount = Number(value || 0);
   return `${amount.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} FCFA`;
 }
 
-function eventKpis(event?: EventResource) {
-  if (!event) {
-    return [["0", "Participants"], ["0", "Confirmes"], ["0", "Presents"], ["0%", "Presence"], ["0", "Capacite"], ["0%", "Remplissage"], ["0 FCFA", "Recettes"], ["0 FCFA", "Resultat"]] as const;
-  }
-  return [
-    [String(event.stats.participants || 0), "Participants"],
-    [String(event.stats.confirmed || 0), "Confirmes"],
-    [String(event.stats.attended || 0), "Presents"],
-    [`${event.stats.attendance_rate || 0}%`, "Presence"],
-    [String(event.capacity || event.stats.capacity || 0), "Capacite"],
-    [`${event.stats.occupancy_rate || 0}%`, "Remplissage"],
-    [money(event.stats.revenues), "Recettes"],
-    [money(event.stats.balance), "Resultat"],
-  ] as const;
+function dateTime(value: string | null | undefined) {
+  if (!value) return "Non renseigné";
+  return new Intl.DateTimeFormat("fr-FR", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Africa/Abidjan"
+  }).format(new Date(value));
+}
+
+function locationLabel(event: EventResource) {
+  if (event.location_type === "ONLINE") return event.online_url || "Lien en ligne non renseigné";
+  return [event.location, event.address, event.city].filter(Boolean).join(", ") || "Lieu non renseigné";
+}
+
+function projectName(event: EventResource, projects: Array<{ id: number; name: string }>) {
+  if (!event.project) return "Aucun projet associé";
+  return projects.find((project) => project.id === event.project)?.name || `Projet #${event.project}`;
+}
+
+function responsibleName(event: EventResource, members: Array<{ id: number; full_name: string; first_name: string; last_name: string }>) {
+  if (!event.responsible_member) return "Aucun responsable";
+  const member = members.find((item) => item.id === event.responsible_member);
+  return member?.full_name || `${member?.first_name || ""} ${member?.last_name || ""}`.trim() || `Membre #${event.responsible_member}`;
+}
+
+function StatCard({ label, value, tone = "slate" }: Readonly<{ label: string; value: string; tone?: "blue" | "green" | "red" | "slate" }>) {
+  const toneClass = {
+    blue: "text-blue-700 bg-blue-50",
+    green: "text-emerald-700 bg-emerald-50",
+    red: "text-red-700 bg-red-50",
+    slate: "text-slate-700 bg-slate-100"
+  }[tone];
+  return (
+    <article className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <span className={`rounded-md px-2 py-1 text-[11px] font-black ${toneClass}`}>{label}</span>
+      <strong className="mt-4 block break-words text-2xl font-black tracking-normal text-slate-950">{value}</strong>
+    </article>
+  );
 }
 
 export function EventDetailView({ eventId, workspaceSlug }: Readonly<{ eventId: string; workspaceSlug: string }>) {
+  const router = useRouter();
   const eventQuery = useQuery({
     queryKey: ["event", workspaceSlug, eventId],
     queryFn: () => getEvent(workspaceSlug, eventId)
   });
+  const projectsQuery = useQuery({
+    queryKey: ["project-options", workspaceSlug],
+    queryFn: () => listProjectOptions(workspaceSlug)
+  });
+  const membersQuery = useQuery({
+    queryKey: ["member-options", workspaceSlug],
+    queryFn: () => listMemberOptions(workspaceSlug)
+  });
   const event = eventQuery.data;
-  const detailKpis = eventKpis(event);
+  const coverUrl = backendMediaUrl(event?.cover_image || "");
+  const attendanceRate = Math.min(Number(event?.stats.attendance_rate || 0), 100);
+  const budgetRate = Math.min(Number(event?.stats.budget_consumed_rate || 0), 100);
 
   return (
-    <div className="grid gap-6">
-      <PageHeader
-        title={event ? event.title : `Evenement ${eventId}`}
-        description="Planning, participants, presences, tickets, finances et rapport."
-        actions={
-          <>
-            <Button asChild variant="outline"><Link href={`/app/${workspaceSlug}/events/${eventId}/attendance`}><QrCode className="size-4" /> Check-in</Link></Button>
-            <Button asChild><Link href={`/app/${workspaceSlug}/events/${eventId}/report`}><ScrollText className="size-4" /> Rapport</Link></Button>
-          </>
-        }
-      />
-      <section className="rounded-card border border-border bg-white p-5">
-        <div className="grid gap-4 md:grid-cols-[1fr_280px] md:items-center">
-          <div>
-            <div className="inline-flex rounded-md bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">{event?.status || "CHARGEMENT"}</div>
-            <h1 className="mt-3 text-2xl font-bold tracking-normal">{event?.title || "Chargement de l'evenement"}</h1>
-            <p className="mt-1 text-sm text-slate-500">{event ? `${event.code} - ${event.timezone} - ${event.location || "Lieu a confirmer"} - ${event.event_type_label}` : "Connexion aux donnees backend..."}</p>
-          </div>
-          <div className="rounded-md border border-border p-3">
-            <div className="flex justify-between text-sm"><span>Taux de presence</span><strong>{event?.stats.attendance_rate || 0}%</strong></div>
-            <div className="mt-2 h-3 rounded-full bg-slate-100"><div className="h-3 rounded-full bg-blue-700" style={{ width: `${Math.min(Number(event?.stats.attendance_rate || 0), 100)}%` }} /></div>
-          </div>
-        </div>
-      </section>
-      {eventQuery.isError ? <p className="rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">Impossible de charger cet evenement depuis l'API.</p> : null}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {detailKpis.map(([value, label]) => (
-          <Card key={label}><CardContent className="p-5"><div className="text-2xl font-bold tabular-nums">{value}</div><p className="mt-1 text-sm text-slate-500">{label}</p></CardContent></Card>
-        ))}
-      </section>
-      <section className="grid gap-4 lg:grid-cols-4">
-        {quickCards.map(([title, body, Icon]) => (
-          <Card key={String(title)}><CardContent className="p-4"><Icon className="size-5 text-blue-700" /><strong className="mt-3 block">{title}</strong><p className="text-sm text-slate-500">{body}</p></CardContent></Card>
-        ))}
-      </section>
-      <section className="flex gap-2 overflow-x-auto border-b border-border pb-2">
-        {tabs.map(([label, Icon]) => (
-          <button className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold text-slate-700 hover:bg-slate-100" key={label} type="button">
-            <Icon className="size-4" />
-            {label}
-          </button>
-        ))}
-      </section>
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Card>
-          <CardHeader><CardTitle className="text-base text-slate-900">Budget evenement</CardTitle></CardHeader>
-          <CardContent>
-            <div className="flex justify-between text-sm"><span>{money(event?.stats.expenses)} / {money(event?.stats.budget)}</span><strong>{event?.stats.budget_consumed_rate || 0}%</strong></div>
-            <div className="mt-2 h-3 rounded-full bg-slate-100"><div className="h-3 rounded-full bg-blue-700" style={{ width: `${Math.min(Number(event?.stats.budget_consumed_rate || 0), 100)}%` }} /></div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-slate-500">Depenses</p><strong>{money(event?.stats.expenses)}</strong></div>
-              <div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-slate-500">Recettes</p><strong>{money(event?.stats.revenues)}</strong></div>
-              <div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-slate-500">Marge</p><strong>{event?.stats.budget_consumed_rate || 0}%</strong></div>
+    <main className="min-h-screen w-full overflow-x-hidden bg-[#f5f7f8] px-4 pb-28 pt-5 text-slate-950 md:rounded-[28px] md:px-6">
+      <button className="mb-4 inline-flex min-h-10 items-center gap-2 rounded-md bg-white px-3 text-sm font-black text-slate-700 shadow-sm" type="button" onClick={() => router.back()}>
+        <ArrowLeft className="size-4" />
+        Retour
+      </button>
+
+      {eventQuery.isLoading ? (
+        <section className="grid min-h-80 place-items-center rounded-xl bg-white">
+          <Loader2 className="size-8 animate-spin text-blue-700" />
+        </section>
+      ) : null}
+
+      {eventQuery.isError ? (
+        <section className="rounded-xl border border-red-100 bg-red-50 p-5 text-red-700">
+          <h1 className="text-xl font-black">Impossible de charger cet événement</h1>
+          <p className="mt-2 text-sm font-semibold">Vérifie que le backend tourne et réessaie depuis le calendrier.</p>
+        </section>
+      ) : null}
+
+      {event ? (
+        <div className="grid gap-5">
+          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            {coverUrl ? (
+              <img className="h-52 w-full object-cover" src={coverUrl} alt="" />
+            ) : (
+              <div className="grid h-44 place-items-center bg-gradient-to-br from-blue-50 via-white to-orange-50">
+                <CalendarClock className="size-14 text-blue-700" />
+              </div>
+            )}
+            <div className="p-5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-md bg-blue-50 px-2 py-1 text-xs font-black text-blue-700">{event.status_label || event.status}</span>
+                <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-black text-slate-600">{event.event_type_label}</span>
+              </div>
+              <h1 className="mt-4 break-words text-3xl font-black leading-tight tracking-normal">{event.title}</h1>
+              <p className="mt-2 text-sm font-bold text-slate-500">{event.code || `Événement #${event.id}`}</p>
+              {event.description ? <p className="mt-4 whitespace-pre-wrap text-sm font-semibold leading-6 text-slate-600">{event.description}</p> : null}
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-base text-slate-900">Presences</CardTitle></CardHeader>
-          <CardContent className="grid gap-3 text-sm">
-            {["Awa Kone - presente", "Yao Kouame - confirme", "Mariam Traore - waitlist"].map((item) => <div className="rounded-md border border-border p-3" key={item}>{item}</div>)}
-          </CardContent>
-        </Card>
-      </section>
-      <section className="grid gap-4 lg:grid-cols-3">
-        {["08:00 Accueil", "09:00 Ouverture", "10:00 Formation", "12:00 Pause", "14:00 Atelier", "17:00 Cloture"].map((item) => (
-          <Card key={item}><CardContent className="p-4"><CheckCircle2 className="size-4 text-blue-700" /><strong className="mt-2 block">{item}</strong><p className="text-sm text-slate-500">Intervenant et salle charges depuis le programme.</p></CardContent></Card>
-        ))}
-      </section>
-    </div>
+          </section>
+
+          <section className="grid grid-cols-2 gap-3">
+            <StatCard label="Participants" value={String(event.stats.participants || 0)} tone="blue" />
+            <StatCard label="Confirmés" value={String(event.stats.confirmed || 0)} tone="green" />
+            <StatCard label="Présents" value={String(event.stats.attended || 0)} tone="green" />
+            <StatCard label="Capacité" value={event.capacity ? String(event.capacity) : "Illimitée"} />
+          </section>
+
+          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-xl font-black tracking-normal">Informations</h2>
+            <div className="mt-4 grid gap-3 text-sm font-semibold text-slate-600">
+              <p className="flex gap-3"><Clock3 className="mt-0.5 size-5 shrink-0 text-blue-700" /><span><strong className="block text-slate-950">Début</strong>{dateTime(event.start_at)}</span></p>
+              <p className="flex gap-3"><CalendarClock className="mt-0.5 size-5 shrink-0 text-blue-700" /><span><strong className="block text-slate-950">Fin</strong>{dateTime(event.end_at)}</span></p>
+              <p className="flex gap-3"><MapPin className="mt-0.5 size-5 shrink-0 text-blue-700" /><span className="min-w-0 break-words"><strong className="block text-slate-950">Lieu</strong>{locationLabel(event)}</span></p>
+              {event.location_type === "ONLINE" && event.online_url ? (
+                <a className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-blue-700 px-4 text-sm font-black text-white" href={event.online_url} target="_blank" rel="noreferrer">
+                  <LinkIcon className="size-4" />
+                  Ouvrir le lien
+                </a>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-xl font-black tracking-normal">Organisation</h2>
+            <div className="mt-4 grid gap-3">
+              <div className="rounded-lg bg-slate-50 p-4">
+                <p className="text-xs font-black text-slate-500">Projet associé</p>
+                <strong className="mt-1 block text-base">{projectName(event, projectsQuery.data || [])}</strong>
+              </div>
+              <div className="rounded-lg bg-slate-50 p-4">
+                <p className="text-xs font-black text-slate-500">Responsable</p>
+                <strong className="mt-1 block text-base">{responsibleName(event, membersQuery.data || [])}</strong>
+              </div>
+              <div className="rounded-lg bg-slate-50 p-4">
+                <p className="text-xs font-black text-slate-500">Inscription</p>
+                <strong className="mt-1 block text-base">{event.registration_required ? "Inscription requise" : "Inscription non requise"}</strong>
+                {event.registration_deadline ? <span className="mt-1 block text-xs font-bold text-slate-500">Limite: {dateTime(event.registration_deadline)}</span> : null}
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-xl font-black tracking-normal">Présence</h2>
+            <div className="mt-4 flex items-center justify-between text-sm font-bold text-slate-600">
+              <span>Taux de présence</span>
+              <strong className="text-slate-950">{attendanceRate}%</strong>
+            </div>
+            <div className="mt-2 h-3 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-blue-700" style={{ width: `${attendanceRate}%` }} />
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="rounded-lg bg-slate-50 p-3"><Users className="size-5 text-blue-700" /><p className="mt-2 text-xs font-bold text-slate-500">Absents</p><strong>{event.stats.absent || 0}</strong></div>
+              <div className="rounded-lg bg-slate-50 p-3"><CheckCircle2 className="size-5 text-emerald-700" /><p className="mt-2 text-xs font-bold text-slate-500">Liste d'attente</p><strong>{event.stats.waitlisted || 0}</strong></div>
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-xl font-black tracking-normal">Finances</h2>
+            <div className="mt-4 flex items-center justify-between text-sm font-bold text-slate-600">
+              <span>Budget utilisé</span>
+              <strong className="text-slate-950">{budgetRate}%</strong>
+            </div>
+            <div className="mt-2 h-3 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-emerald-600" style={{ width: `${budgetRate}%` }} />
+            </div>
+            <div className="mt-4 grid gap-3">
+              <div className="flex items-center justify-between rounded-lg bg-slate-50 p-4"><span className="inline-flex items-center gap-2 text-sm font-bold text-slate-500"><Banknote className="size-4" /> Budget</span><strong>{money(event.stats.budget || event.budget)}</strong></div>
+              <div className="flex items-center justify-between rounded-lg bg-slate-50 p-4"><span className="text-sm font-bold text-slate-500">Dépenses</span><strong>{money(event.stats.expenses)}</strong></div>
+              <div className="flex items-center justify-between rounded-lg bg-slate-50 p-4"><span className="text-sm font-bold text-slate-500">Recettes</span><strong>{money(event.stats.revenues)}</strong></div>
+              <div className="flex items-center justify-between rounded-lg bg-slate-50 p-4"><span className="text-sm font-bold text-slate-500">Résultat</span><strong>{money(event.stats.balance)}</strong></div>
+              <div className="flex items-center justify-between rounded-lg bg-slate-50 p-4"><span className="inline-flex items-center gap-2 text-sm font-bold text-slate-500"><Ticket className="size-4" /> Tarif</span><strong>{Number(event.ticket_price || 0) > 0 ? money(event.ticket_price) : "Gratuit"}</strong></div>
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="flex items-center gap-2 text-xl font-black tracking-normal"><FileText className="size-5 text-blue-700" /> Synthèse</h2>
+            <div className="mt-4 grid gap-3 text-sm font-semibold text-slate-600">
+              <p><strong className="text-slate-950">Fuseau horaire :</strong> {event.timezone}</p>
+              <p><strong className="text-slate-950">Récurrence :</strong> {event.recurrence}</p>
+              <p><strong className="text-slate-950">Dernière mise à jour :</strong> {dateTime(event.updated_at)}</p>
+            </div>
+          </section>
+        </div>
+      ) : null}
+    </main>
   );
 }

@@ -95,10 +95,11 @@ export function EventForm({ workspaceSlug }: Readonly<{ workspaceSlug: string }>
   });
   const mutation = useMutation({
     mutationFn: (values: EventFormValues) => createEvent(workspaceSlug, { ...toPayload(values), cover_image: coverImage }),
-    onSuccess: async (event) => {
+    onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["events"] });
       await queryClient.invalidateQueries({ queryKey: ["events-overview", workspaceSlug] });
-      router.push(`/app/${workspaceSlug}/events/${event.id}`);
+      await queryClient.invalidateQueries({ queryKey: ["calendar-items", workspaceSlug] });
+      router.push(`/app/${workspaceSlug}/events`);
     }
   });
   const locationType = useWatch({ control: form.control, name: "location_type" });

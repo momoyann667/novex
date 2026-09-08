@@ -65,12 +65,15 @@ export type EventResource = {
   address: string;
   city: string;
   country: string;
+  online_url: string;
+  online_platform: string;
   registration_required: boolean;
   registration_deadline: string | null;
   capacity: number | null;
   budget: string;
   ticket_price: string;
   project: number | null;
+  responsible_member: number | null;
   recurrence: string;
   stats: EventStats;
   created_at: string;
