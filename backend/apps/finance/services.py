@@ -173,7 +173,7 @@ def attach_transaction_document(*, transaction_obj: FinancialTransaction, actor,
 
 @transaction.atomic
 def sync_payment_to_finance(*, payment, actor=None) -> FinancialTransaction | None:
-    payment = payment.__class__.objects.select_for_update().select_related("workspace", "contribution", "member").get(id=payment.id)
+    payment = payment.__class__.objects.select_for_update().select_related("workspace").get(id=payment.id)
     if payment.status != PaymentStatus.SUCCESS:
         return None
     is_donation = payment.metadata.get("payment_type") == "DONATION"

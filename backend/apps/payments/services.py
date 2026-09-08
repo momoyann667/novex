@@ -387,7 +387,7 @@ def initialize_donation_payment(
 
 @transaction.atomic
 def apply_successful_payment(*, payment: Payment, actor=None, metadata: dict | None = None) -> Payment:
-    payment = Payment.objects.select_for_update().select_related("contribution", "member", "workspace").get(id=payment.id)
+    payment = Payment.objects.select_for_update().select_related("workspace").get(id=payment.id)
     if payment.status == PaymentStatus.SUCCESS:
         return payment
     if payment.contribution_id:
