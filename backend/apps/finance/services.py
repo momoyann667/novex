@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from apps.audit_logs.models import AuditLog
 from apps.payments.statuses import PaymentStatus
+from apps.projects.models import Project
 from apps.workspaces.models import Workspace
 from .models import FinancialCategory, FinancialSettings, FinancialTransaction, FinancialTransactionDocument, FiscalPeriod
 from .statuses import FinancialCategoryKind, FinancialTransactionSenderType, FinancialTransactionSource, FinancialTransactionStatus, FinancialTransactionType, FiscalPeriodStatus
