@@ -1,5 +1,5 @@
 from django.http import FileResponse
-from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework import decorators, filters, response, status, views, viewsets
 
 from common.permissions.workspace import RequireWorkspacePermission
@@ -49,6 +49,7 @@ def current_membership(request):
 
 class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = PaymentSerializer
+    parser_classes = [JSONParser, FormParser, MultiPartParser]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["reference", "provider_transaction_id", "member__first_name", "member__last_name", "member__phone", "contribution__campaign__name"]
     ordering_fields = ["created_at", "paid_at", "amount", "status", "payment_method"]
