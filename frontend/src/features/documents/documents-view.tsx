@@ -42,6 +42,7 @@ export function DocumentsView({ workspaceSlug, initialFolderId = "" }: Readonly<
   const [search, setSearch] = useState("");
   const [activeChip, setActiveChip] = useState<(typeof chips)[number]>(chips[0]);
   const [activeFolderId, setActiveFolderId] = useState(initialFolderId);
+  const [showAllFolders, setShowAllFolders] = useState(false);
   const [showFolderForm, setShowFolderForm] = useState(false);
   const [folderName, setFolderName] = useState("");
   const queryClient = useQueryClient();
@@ -64,6 +65,10 @@ export function DocumentsView({ workspaceSlug, initialFolderId = "" }: Readonly<
         folder: activeFolderId
       })
   });
+  const allDocumentsQuery = useQuery({
+    queryKey: ["documents", workspaceSlug, "folder-counts"],
+    queryFn: () => listDocuments(workspaceSlug, { ordering: "-updated_at", pageSize: "1000" })
+  });
   const userQuery = useQuery({
     queryKey: ["current-user", workspaceSlug],
     queryFn: () => getCurrentUser(workspaceSlug),
@@ -74,8 +79,14 @@ export function DocumentsView({ workspaceSlug, initialFolderId = "" }: Readonly<
 
   const folders = foldersQuery.data || [];
   const documents = documentsQuery.data || [];
+  const allDocuments = allDocumentsQuery.data || [];
+  const folderCounts = allDocuments.reduce<Record<number, number>>((counts, document) => {
+    if (document.folder) counts[document.folder] = (counts[document.folder] || 0) + 1;
+    return counts;
+  }, {});
   const activeFolder = folders.find((item) => String(item.id) === activeFolderId);
   const uploadHref = `${workspacePath(workspaceSlug, "documents/upload")}${activeFolderId ? `?folder=${encodeURIComponent(activeFolderId)}` : ""}`;
+  const visibleFolders = showAllFolders ? folders : folders.slice(0, 6);
   const featured = documents[0];
   const recentDocuments = featured ? documents.slice(1, 6) : documents.slice(0, 6);
   const createFolderMutation = useMutation({
@@ -134,9 +145,9 @@ export function DocumentsView({ workspaceSlug, initialFolderId = "" }: Readonly<
               Creer un dossier
             </button>
             ) : null}
-            <Link className="text-sm font-black text-blue-700" href={workspacePath(workspaceSlug, "documents/dashboard")}>
-              Voir tout
-            </Link>
+            <button className="text-sm font-black text-blue-700" type="button" onClick={() => setShowAllFolders((value) => !value)}>
+              {showAllFolders ? "Reduire" : "Voir tout"}
+            </button>
           </div>
         </div>
         {showFolderForm && canCreateDocument ? (
@@ -154,7 +165,7 @@ export function DocumentsView({ workspaceSlug, initialFolderId = "" }: Readonly<
           </div>
         ) : null}
         <div className="flex gap-3 overflow-x-auto pb-1">
-          {folders.slice(0, 6).map((folder, index) => {
+          {visibleFolders.map((folder, index) => {
             const Icon = folderIcon(index);
             const isActiveFolder = activeFolderId === String(folder.id);
             return (
@@ -164,19 +175,13 @@ export function DocumentsView({ workspaceSlug, initialFolderId = "" }: Readonly<
                 </span>
                 <span>
                   <strong className="block truncate text-sm">{folder.name}</strong>
-                  <span className={`mt-1 block text-xs font-semibold ${isActiveFolder ? "text-white/75" : "text-slate-500"}`}>{documents.filter((item) => item.folder === folder.id).length} fichiers</span>
+                  <span className={`mt-1 block text-xs font-semibold ${isActiveFolder ? "text-white/75" : "text-slate-500"}`}>{folderCounts[folder.id] || 0} fichiers</span>
                 </span>
               </button>
             );
           })}
           {!folders.length ? <div className="w-full rounded-lg bg-white p-4 text-sm text-slate-500 shadow-sm ring-1 ring-slate-200">{foldersQuery.isLoading ? "Chargement des dossiers..." : "Aucun dossier."}</div> : null}
         </div>
-        {activeFolder ? (
-          <div className="mt-3 flex items-center justify-between rounded-xl bg-blue-50 px-3 py-2 text-sm font-bold text-blue-800">
-            <span className="min-w-0 truncate">Dossier selectionne : {activeFolder.name}</span>
-            <button className="shrink-0 text-xs font-black" type="button" onClick={() => setActiveFolderId("")}>Tout afficher</button>
-          </div>
-        ) : null}
         {canCreateDocument ? <Link className="mt-4 flex min-h-14 items-center justify-center gap-3 rounded-xl bg-blue-700 px-4 text-sm font-black text-white shadow-lg shadow-blue-700/20" href={uploadHref}>
           <span className="grid size-8 place-items-center rounded-full bg-white/15">
             <Plus className="size-5" />
@@ -185,8 +190,25 @@ export function DocumentsView({ workspaceSlug, initialFolderId = "" }: Readonly<
         </Link> : null}
       </section>
 
+      {activeFolder ? (
+        <section className="mb-5 rounded-2xl border border-blue-100 bg-white p-4 shadow-sm">
+          <button className="mb-3 inline-flex min-h-9 items-center rounded-full bg-slate-100 px-3 text-xs font-black text-slate-700" type="button" onClick={() => setActiveFolderId("")}>
+            Retour aux documents
+          </button>
+          <div className="flex items-center gap-3">
+            <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700">
+              <Folder className="size-6" />
+            </span>
+            <div className="min-w-0">
+              <h2 className="truncate text-2xl font-black tracking-normal">{activeFolder.name}</h2>
+              <p className="mt-1 text-sm font-semibold text-slate-500">{folderCounts[activeFolder.id] || 0} document(s) dans ce dossier</p>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       <section className="mb-7">
-        <h2 className="mb-3 text-xl font-black tracking-normal">En evidence</h2>
+        <h2 className="mb-3 text-xl font-black tracking-normal">{activeFolder ? "Documents du dossier" : "En evidence"}</h2>
         {featured ? (
           <Link className="relative block overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200" href={workspacePath(workspaceSlug, `documents/${featured.id}`)}>
             <div className="grid h-36 place-items-center bg-slate-200">

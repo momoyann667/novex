@@ -234,13 +234,13 @@ export function MemberDetailView({ memberId }: Readonly<{ memberId: string }>) {
   const profile = profileFor(memberId);
 
   return (
-    <main className="min-h-screen bg-[#f5f7f8] px-4 pb-28 pt-4 text-slate-950 md:rounded-[28px] md:px-6">
+    <main className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#f5f7f8] px-4 pb-28 pt-4 text-slate-950 md:rounded-[28px] md:px-6">
       <button className="mb-4 inline-flex min-h-10 items-center gap-2 rounded-md bg-white px-3 text-sm font-black text-slate-700 shadow-sm" type="button" onClick={() => router.back()}>
         <ArrowLeft className="size-4" />
         Retour
       </button>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-5 text-center shadow-sm">
+      <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-5 text-center shadow-sm">
         <div className="mx-auto grid size-24 place-items-center rounded-full bg-slate-100 p-1">
           <div className={`relative grid size-20 place-items-center rounded-full ${profile.avatar}`}>
             <span className="text-xl font-black text-white">{profile.initials}</span>
@@ -263,14 +263,14 @@ export function MemberDetailView({ memberId }: Readonly<{ memberId: string }>) {
         </Button>
       </section>
 
-      <section className="mt-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="mt-4 min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="text-xl font-black tracking-normal">Informations Personnelles</h2>
         <div className="mt-4 grid gap-4 text-sm md:grid-cols-2">
           <div className="flex gap-3">
             <Mail className="mt-1 size-5 text-slate-600" />
             <div>
               <p className="text-xs font-bold text-slate-500">Email</p>
-              <a className="font-semibold text-slate-900" href={`mailto:${profile.email}`}>{profile.email}</a>
+              <a className="break-words font-semibold text-slate-900" href={`mailto:${profile.email}`}>{profile.email}</a>
             </div>
           </div>
           <div className="flex gap-3">
@@ -297,7 +297,7 @@ export function MemberDetailView({ memberId }: Readonly<{ memberId: string }>) {
         </div>
       </section>
 
-      <section className="mt-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="mt-4 min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="text-xl font-black tracking-normal">Adhesion</h2>
         <div className="mt-4 grid gap-3 text-sm">
           <div className="flex min-h-11 items-center justify-between rounded-md bg-slate-50 px-3">
@@ -319,7 +319,7 @@ export function MemberDetailView({ memberId }: Readonly<{ memberId: string }>) {
         </div>
       </section>
 
-      <section className="mt-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="mt-4 min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-black tracking-normal">Activites Recentes</h2>
           <button className="text-xs font-black text-blue-700" type="button">Voir tout</button>
@@ -343,7 +343,7 @@ export function MemberDetailView({ memberId }: Readonly<{ memberId: string }>) {
         </div>
       </section>
 
-      <Card className="mt-4">
+      <Card className="mt-4 min-w-0">
         <CardContent className="grid gap-4 p-6 md:grid-cols-4">
           <div><p className="text-sm text-slate-500">Numero</p><strong>{profile.number}</strong></div>
           <div><p className="text-sm text-slate-500">Membre depuis</p><strong>{new Intl.DateTimeFormat("fr-FR").format(new Date(profile.joinedAt))}</strong></div>
@@ -351,10 +351,10 @@ export function MemberDetailView({ memberId }: Readonly<{ memberId: string }>) {
           <div><p className="text-sm text-slate-500">Cotisation</p><strong className={contributionLabelClass(profile.contribution)}>{profile.contribution}</strong></div>
         </CardContent>
       </Card>
-      <div className="mt-4 flex gap-2 overflow-x-auto">
+      <div className="mt-4 flex max-w-full gap-2 overflow-x-auto">
         {tabs.map((tab) => <Button key={tab} type="button" variant={tab === "Informations" ? "default" : "outline"}>{tab}</Button>)}
       </div>
-      <Card className="mt-4">
+      <Card className="mt-4 min-w-0">
         <CardHeader><CardTitle className="flex items-center gap-2 text-base text-slate-900"><FileText className="size-4" /> Historique</CardTitle></CardHeader>
         <CardContent className="text-sm text-slate-500">Les actions recentes de {profile.name} alimenteront cet historique depuis l'audit log.</CardContent>
       </Card>

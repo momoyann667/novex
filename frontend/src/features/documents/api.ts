@@ -126,6 +126,7 @@ export type DocumentFilters = {
   folder?: string;
   view?: string;
   ordering?: string;
+  pageSize?: string;
 };
 
 function workspaceHeaders(workspaceSlug: string) {
@@ -158,7 +159,8 @@ export async function listDocuments(workspaceSlug: string, filters: DocumentFilt
       visibility: filters.visibility,
       folder: filters.folder,
       view: filters.view,
-      ordering: filters.ordering || "-updated_at"
+      ordering: filters.ordering || "-updated_at",
+      page_size: filters.pageSize
     })}`,
     { headers: workspaceHeaders(workspaceSlug), cache: "no-store" }
   );
