@@ -113,6 +113,9 @@ def financial_totals(*, workspace: Workspace, start_date, end_date) -> dict:
     expenses = period_totals["expenses"] or zero
 
     payment_total = Payment.objects.filter(workspace=workspace, status=Payment.Status.SUCCESS).aggregate(total=Sum("amount"))["total"] or zero
+    contribution_payment_total = (
+        Payment.objects.filter(workspace=workspace, status=Payment.Status.SUCCESS, contribution__isnull=False).aggregate(total=Sum("amount"))["total"] or zero
+    )
 
     if not revenues:
         revenues = payment_total
@@ -123,6 +126,7 @@ def financial_totals(*, workspace: Workspace, start_date, end_date) -> dict:
         "expenses": expenses,
         "net_flow": revenues - expenses,
         "payments_total": payment_total,
+        "contribution_payments_total": contribution_payment_total,
         "queryset": period_transactions,
     }
 
@@ -200,11 +204,12 @@ def get_dashboard_overview(*, workspace: Workspace, period_code: str | None, use
         "expenses": format_money(finances["expenses"], workspace.currency),
         "net_flow": format_money(finances["net_flow"], workspace.currency),
         "payments_total": format_money(finances["payments_total"], workspace.currency),
+        "contribution_payments_total": format_money(finances["contribution_payments_total"], workspace.currency),
         "masked": not can_view_finance,
     }
 
     if not can_view_finance:
-        finance = {**finance, "current_balance": None, "revenues": None, "expenses": None, "net_flow": None, "payments_total": None}
+        finance = {**finance, "current_balance": None, "revenues": None, "expenses": None, "net_flow": None, "payments_total": None, "contribution_payments_total": None}
 
     return {
         "workspace": {"id": workspace.id, "name": workspace.name, "slug": workspace.slug, "currency": workspace.currency},
@@ -222,6 +227,7 @@ def get_dashboard_overview(*, workspace: Workspace, period_code: str | None, use
             "contributions": {
                 "objective": format_money(contribution_totals["expected"], workspace.currency) if can_view_finance else None,
                 "collected": format_money(contribution_totals["collected"], workspace.currency) if can_view_finance else None,
+                "collected_all": format_money(finances["contribution_payments_total"], workspace.currency) if can_view_finance else None,
                 "remaining": format_money(contribution_totals["remaining"], workspace.currency) if can_view_finance else None,
                 "remaining_all": format_money(global_contribution_totals["remaining"], workspace.currency) if can_view_finance else None,
                 "recovery_rate": contribution_totals["recovery_rate"],

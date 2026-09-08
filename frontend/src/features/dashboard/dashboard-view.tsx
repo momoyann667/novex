@@ -353,8 +353,8 @@ export function DashboardView({
   const dashboardAssociationName = settingsQuery.data?.workspace_name || currentProfile.associationName || initialData.workspace.name;
   const moneyFallback = `0 ${overview.workspace.currency === "XOF" ? "FCFA" : overview.workspace.currency}`;
   const current = memberDashboard ? {
-    balance: overview.kpis.finance.payments_total || moneyFallback,
-    balanceTrend: "Paiements de l'association",
+    balance: overview.kpis.finance.contribution_payments_total || moneyFallback,
+    balanceTrend: "Paiements de cotisations de l'association",
     revenues: "",
     expenses: "",
     totalContributions: moneyAmount(memberDashboard.contribution_summary.total_due, overview.workspace.currency),
@@ -380,7 +380,7 @@ export function DashboardView({
     recoveryRate: overview.kpis.contributions.recovery_rate,
     metrics: [
       { label: "Membres actifs", value: overview.kpis.members.active.toLocaleString("fr-FR"), detail: `${overview.kpis.members.total.toLocaleString("fr-FR")} total`, tone: "green" as const },
-      { label: "Cotisations", value: overview.kpis.contributions.collected || moneyFallback, detail: `${overview.kpis.contributions.recovery_rate}% recouvres`, tone: "blue" as const },
+      { label: "Cotisations", value: overview.kpis.contributions.collected_all || overview.kpis.contributions.collected || moneyFallback, detail: "Paiements partiels et complets", tone: "blue" as const },
       { label: "Depenses", value: overview.kpis.finance.expenses || moneyFallback, detail: overview.kpis.finance.masked ? "Acces limite" : overview.period.label, tone: "slate" as const },
       { label: "Projets actifs", value: overview.kpis.projects.active.toLocaleString("fr-FR"), detail: `${overview.kpis.projects.total.toLocaleString("fr-FR")} total`, tone: "slate" as const },
       { label: "Evenements", value: overview.kpis.events.upcoming.toLocaleString("fr-FR"), detail: "A venir", tone: "blue" as const },
