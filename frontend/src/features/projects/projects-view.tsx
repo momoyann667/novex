@@ -68,8 +68,8 @@ function priorityLabel(project: ProjectResource) {
 
 function ProjectCard({ project, workspaceSlug }: Readonly<{ project: ProjectResource; workspaceSlug: string }>) {
   const budget = Number(project.budget_summary?.budget ?? project.budget ?? 0);
-  const spent = Number(project.budget_summary?.actual_expense ?? 0);
-  const rate = Number(project.budget_summary?.consumed_rate ?? 0);
+  const funded = Number(project.budget_summary?.funding_received ?? 0);
+  const rate = budget > 0 ? (funded / budget) * 100 : 0;
   const visibleRate = Math.min(Math.max(rate, 0), 100);
   const team = project.team_preview.length ? project.team_preview : responsibleLabel(project) !== "Responsable non defini" ? [{ id: project.id, name: responsibleLabel(project), role: "PROJECT_MANAGER" }] : [];
   const state = statusConfig(project);
@@ -93,12 +93,12 @@ function ProjectCard({ project, workspaceSlug }: Readonly<{ project: ProjectReso
 
         <div className="mt-4">
           <div className="mb-1 flex items-end justify-between gap-3">
-            <span className="text-xs font-bold text-slate-500">Budget alloue</span>
+            <span className="text-xs font-bold text-slate-500">Financement recu</span>
             {budget > 0 ? <strong className={cn("text-xl font-black tabular-nums", rate > 100 && "text-red-700")}>{Math.round(rate)}%</strong> : <strong className="text-sm font-black text-slate-600">Sans budget</strong>}
           </div>
           {budget > 0 ? (
             <>
-              <p className={cn("text-sm font-black tabular-nums", rate > 100 ? "text-red-700" : "text-slate-950")}>{money(spent, project.currency)} / {money(budget, project.currency)}</p>
+              <p className={cn("text-sm font-black tabular-nums", rate > 100 ? "text-red-700" : "text-slate-950")}>{money(funded, project.currency)} / {money(budget, project.currency)}</p>
               <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-200">
                 <div className={cn("h-full rounded-full", state.progress)} style={{ width: `${visibleRate}%` }} />
               </div>

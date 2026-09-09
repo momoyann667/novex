@@ -51,15 +51,17 @@ export function ProjectDetailView({ projectId, workspaceSlug }: Readonly<{ proje
 
   const project = query.data;
   const budget = Number(project.budget_summary.budget || 0);
+  const funded = Number(project.budget_summary.funding_received || 0);
+  const fundingRemaining = Number(project.budget_summary.funding_remaining || 0);
   const spent = Number(project.budget_summary.actual_expense || 0);
-  const remaining = Number(project.budget_summary.remaining || 0);
-  const rate = Number(project.budget_summary.consumed_rate || 0);
+  const rate = budget > 0 ? (funded / budget) * 100 : 0;
   const visibleRate = Math.min(Math.max(rate, 0), 100);
   const kpis = [
     [budget > 0 ? money(budget, project.currency) : "Sans budget", "Budget"],
-    [money(spent, project.currency), "Consomme"],
-    [budget > 0 ? money(remaining, project.currency) : "Non defini", "Restant"],
-    [`${Math.round(rate)}%`, "Consommation"],
+    [money(funded, project.currency), "Financement recu"],
+    [budget > 0 ? money(fundingRemaining, project.currency) : "Non defini", "Reste a financer"],
+    [money(spent, project.currency), "Depenses"],
+    [`${project.progress}%`, "Progression"],
     [`${project.analytics.completed_tasks} / ${project.analytics.task_count}`, "Taches"],
     [`${project.analytics.completed_milestones} / ${project.analytics.milestone_count}`, "Jalons"]
   ] as const;
@@ -92,7 +94,7 @@ export function ProjectDetailView({ projectId, workspaceSlug }: Readonly<{ proje
             </div>
           </div>
           <div>
-            <div className="mb-2 flex justify-between text-sm"><span>Budget consomme</span><strong className={cn(rate > 100 && "text-red-700")}>{Math.round(rate)}%</strong></div>
+            <div className="mb-2 flex justify-between text-sm"><span>Financement recu</span><strong className={cn(rate > 100 && "text-red-700")}>{Math.round(rate)}%</strong></div>
             <div className="h-3 overflow-hidden rounded-full bg-slate-100"><div className={cn("h-3 rounded-full", rate > 100 ? "bg-red-600" : "bg-blue-700")} style={{ width: `${visibleRate}%` }} /></div>
             {budget <= 0 ? <p className="mt-2 text-sm font-bold text-slate-500">Sans budget</p> : null}
           </div>
@@ -111,6 +113,7 @@ export function ProjectDetailView({ projectId, workspaceSlug }: Readonly<{ proje
           <CardContent className="grid gap-3 text-sm">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-md bg-slate-50 p-3"><WalletCards className="mb-2 size-4 text-blue-700" /> Budget alloue<br /><strong>{budget > 0 ? money(budget, project.currency) : "Sans budget"}</strong></div>
+              <div className="rounded-md bg-slate-50 p-3"><Banknote className="mb-2 size-4 text-blue-700" /> Financement recu<br /><strong>{money(funded, project.currency)}</strong></div>
               <div className="rounded-md bg-slate-50 p-3"><Banknote className="mb-2 size-4 text-blue-700" /> Depenses validees<br /><strong>{money(spent, project.currency)}</strong></div>
               <div className="rounded-md bg-slate-50 p-3"><ShieldAlert className="mb-2 size-4 text-blue-700" /> Risque<br /><strong>{project.risk.level}</strong></div>
               <div className="rounded-md bg-slate-50 p-3"><ListChecks className="mb-2 size-4 text-blue-700" /> Progression<br /><strong>{project.progress}%</strong></div>

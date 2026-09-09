@@ -61,8 +61,8 @@ export function BudgetFormView({ workspaceSlug }: Readonly<{ workspaceSlug: stri
       await activateBudget(workspaceSlug, budget.id);
       return budget;
     },
-    onSuccess: (budget) => {
-      router.push(`/app/${workspaceSlug}/budgets/${budget.id}`);
+    onSuccess: () => {
+      router.push(`/app/${workspaceSlug}/budgets`);
     }
   });
 

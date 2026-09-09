@@ -18,6 +18,7 @@ import {
   listExpenseCategories,
   listExpenses,
   rejectExpense,
+  uploadExpenseReceipt,
   type ExpenseBudgetLine,
   type ExpenseCategory,
   type ExpenseFilters,
@@ -51,12 +52,10 @@ const statusLabels: Record<ExpenseStatus, string> = {
 };
 
 const paymentMethods = [
-  ["", "Non precise"],
-  ["CASH", "Especes"],
+  ["CASH", "Espèces"],
   ["MOBILE_MONEY", "Mobile Money"],
-  ["BANK_TRANSFER", "Virement"],
-  ["CARD", "Carte"],
-  ["OTHER", "Autre"]
+  ["WAVE", "Wave"],
+  ["BANK_TRANSFER", "Virement"]
 ] as const;
 
 function money(value: string | number | undefined, currency = "FCFA") {
@@ -107,7 +106,7 @@ function ExpenseForm({
   isSubmitting,
   onClose,
   onSubmit
-}: Readonly<{ budgetLines: ExpenseBudgetLine[]; categories: ExpenseCategory[]; currency: string; isSubmitting: boolean; onClose: () => void; onSubmit: (payload: ExpensePayload) => void }>) {
+}: Readonly<{ budgetLines: ExpenseBudgetLine[]; categories: ExpenseCategory[]; currency: string; isSubmitting: boolean; onClose: () => void; onSubmit: (payload: ExpensePayload, receipt?: File | null) => void }>) {
   const [form, setForm] = useState({
     description: "",
     amount: "",
@@ -117,9 +116,10 @@ function ExpenseForm({
     supplier_name: "",
     supplier_phone: "",
     invoice_reference: "",
-    payment_method: "",
+    payment_method: "CASH",
     notes: ""
   });
+  const [receipt, setReceipt] = useState<File | null>(null);
 
   const selectedLine = budgetLines.find((line) => String(line.id) === form.budget_line);
   const categoryOptions = useMemo(() => {
@@ -134,6 +134,7 @@ function ExpenseForm({
     });
   }, [budgetLines, categories]);
   const amountExceedsBudget = selectedLine && Number(form.amount || 0) > Number(selectedLine.remaining || selectedLine.planned_amount || 0);
+  const requiresReference = form.payment_method !== "CASH";
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/45 md:grid md:place-items-center" role="dialog" aria-label="Nouvelle depense">
@@ -159,10 +160,10 @@ function ExpenseForm({
               budget_line: form.budget_line ? Number(form.budget_line) : null,
               supplier_name: form.supplier_name,
               supplier_phone: form.supplier_phone,
-              invoice_reference: form.invoice_reference,
+              invoice_reference: requiresReference ? form.invoice_reference : "",
               payment_method: form.payment_method,
               notes: form.notes
-            });
+            }, requiresReference ? receipt : null);
           }}
         >
           <label className="grid gap-2 text-sm font-bold text-slate-800">
@@ -202,17 +203,25 @@ function ExpenseForm({
               {categoryOptions.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
             </select>
           </label>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4">
             <label className="grid gap-2 text-sm font-bold text-slate-800">
               Moyen de paiement
               <select className="min-h-12 rounded-md border border-border bg-white px-3 outline-none focus:border-blue-600" value={form.payment_method} onChange={(event) => setForm({ ...form, payment_method: event.target.value })}>
                 {paymentMethods.map(([value, label]) => <option key={value || "empty"} value={value}>{label}</option>)}
               </select>
             </label>
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
-              Reference
-              <input className="min-h-12 rounded-md border border-border px-3 font-medium outline-none focus:border-blue-600" value={form.invoice_reference} onChange={(event) => setForm({ ...form, invoice_reference: event.target.value })} placeholder="Facture, recu..." />
-            </label>
+            {requiresReference ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="grid gap-2 text-sm font-bold text-slate-800">
+                  Reference
+                  <input className="min-h-12 rounded-md border border-border px-3 font-medium outline-none focus:border-blue-600" required value={form.invoice_reference} onChange={(event) => setForm({ ...form, invoice_reference: event.target.value })} placeholder="Reference du paiement" />
+                </label>
+                <label className="grid gap-2 text-sm font-bold text-slate-800">
+                  Reçu
+                  <input className="min-h-12 rounded-md border border-border px-3 py-2 text-sm font-medium outline-none file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:text-sm file:font-bold file:text-blue-700 focus:border-blue-600" type="file" accept="image/*,.pdf" onChange={(event) => setReceipt(event.target.files?.[0] ?? null)} />
+                </label>
+              </div>
+            ) : null}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="grid gap-2 text-sm font-bold text-slate-800">
@@ -270,7 +279,11 @@ export function FinanceExpensesView({ workspaceSlug }: Readonly<{ workspaceSlug:
   };
 
   const createMutation = useMutation({
-    mutationFn: (payload: ExpensePayload) => createExpense(workspaceSlug, payload),
+    mutationFn: async ({ payload, receipt }: { payload: ExpensePayload; receipt?: File | null }) => {
+      const expense = await createExpense(workspaceSlug, payload);
+      if (receipt) await uploadExpenseReceipt(workspaceSlug, expense.id, { title: receipt.name, file: receipt });
+      return expense;
+    },
     onSuccess: () => {
       setShowForm(false);
       setPage(1);
@@ -453,7 +466,7 @@ export function FinanceExpensesView({ workspaceSlug }: Readonly<{ workspaceSlug:
         <Plus className="size-7" />
       </button>
 
-      {showForm ? <ExpenseForm budgetLines={linesQuery.data ?? []} categories={categoriesQuery.data ?? []} currency={currency} isSubmitting={createMutation.isPending} onClose={() => setShowForm(false)} onSubmit={(payload) => createMutation.mutate(payload)} /> : null}
+      {showForm ? <ExpenseForm budgetLines={linesQuery.data ?? []} categories={categoriesQuery.data ?? []} currency={currency} isSubmitting={createMutation.isPending} onClose={() => setShowForm(false)} onSubmit={(payload, receipt) => createMutation.mutate({ payload, receipt })} /> : null}
       {selectedExpense ? (
         <div className="fixed inset-0 z-50 bg-slate-950/45 md:grid md:place-items-center" role="dialog" aria-label="Detail depense">
           <section className="ml-auto flex h-full w-full max-w-lg flex-col overflow-y-auto bg-white p-5 shadow-2xl md:h-auto md:max-h-[90vh] md:rounded-card">

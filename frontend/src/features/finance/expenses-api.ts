@@ -88,6 +88,11 @@ export type ExpensePayload = {
   notes?: string;
 };
 
+export type ExpenseReceiptPayload = {
+  title: string;
+  file: File;
+};
+
 export type Paginated<T> = {
   count: number;
   next: string | null;
@@ -174,6 +179,18 @@ export function createExpense(workspaceSlug: string, payload: ExpensePayload) {
     method: "POST",
     headers: workspaceHeaders(workspaceSlug),
     body: JSON.stringify(payload)
+  });
+}
+
+export function uploadExpenseReceipt(workspaceSlug: string, expenseId: number, payload: ExpenseReceiptPayload) {
+  const body = new FormData();
+  body.set("title", payload.title);
+  body.set("document_type", "RECEIPT");
+  body.set("file", payload.file);
+  return apiFetch(`/finance/expenses/${expenseId}/documents/`, {
+    method: "POST",
+    headers: workspaceHeaders(workspaceSlug),
+    body
   });
 }
 
