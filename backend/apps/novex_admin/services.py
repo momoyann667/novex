@@ -546,10 +546,12 @@ def normalize_plan_payload(data: dict, existing: Plan | None = None) -> dict:
     code = str(code_value or "").strip().upper().replace(" ", "_")
     name = str(name_value or "").strip()
     currency = str(currency_value or "XOF").strip().upper()
+    if currency == "FCFA":
+        currency = "XOF"
     billing_period = str(period_value or "month").strip()
     entitlements = data.get("entitlements", existing.entitlements if existing else {})
     try:
-        price = Decimal(str(data.get("price", existing.price if existing else 0)))
+        price = Decimal(str(data.get("price", existing.price if existing else 0)).replace(",", "."))
     except Exception as exc:
         raise ValueError("Le prix du plan est invalide.") from exc
 

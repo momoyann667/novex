@@ -331,11 +331,12 @@ function PlansSection() {
       await queryClient.invalidateQueries({ queryKey: ["novex-admin-dashboard"] });
     }
   });
+  const mutationError = createMutation.error || updateMutation.error || deleteMutation.error;
 
   return (
     <div className="grid gap-4">
       {notice ? <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm font-bold text-emerald-800">{notice}</div> : null}
-      {createMutation.error || updateMutation.error || deleteMutation.error ? <ErrorPanel message="Action impossible sur ce plan. Verifiez les champs ou desactivez un plan deja utilise." /> : null}
+      {mutationError ? <ErrorPanel message={errorMessage(mutationError, "Action impossible sur ce plan. Verifiez les champs ou desactivez un plan deja utilise.")} /> : null}
       <div className="flex justify-end">
         <button className="min-h-10 rounded-md bg-blue-700 px-4 text-sm font-black text-white" type="button" onClick={() => { setEditingPlan(null); setShowForm(true); }}>
           Creer une offre
@@ -721,6 +722,10 @@ function Empty({ message }: Readonly<{ message: string }>) {
 
 function ErrorPanel({ message }: Readonly<{ message: string }>) {
   return <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-800">{message}</div>;
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
 }
 
 function SkeletonRows() {

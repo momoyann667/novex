@@ -211,11 +211,12 @@ def test_admin_can_create_update_and_delete_plan(admin_user):
     )
     plan = Plan.objects.get(id=created["id"])
 
-    updated = update_admin_plan(actor=admin_user, plan_id=plan.id, data={"name": "NOVEX Premium Plus", "price": "30000", "is_active": False})
+    updated = update_admin_plan(actor=admin_user, plan_id=plan.id, data={"name": "NOVEX Premium Plus", "price": "30000,50", "currency": "FCFA", "is_active": False})
 
     assert created["code"] == "NOVEX_PREMIUM"
     assert updated["name"] == "NOVEX Premium Plus"
-    assert Decimal(str(updated["price"])) == Decimal("30000.00")
+    assert Decimal(str(updated["price"])) == Decimal("30000.50")
+    assert updated["currency"] == "XOF"
     assert updated["is_active"] is False
     assert AuditLog.objects.filter(action="admin.plan_updated", resource_id=str(plan.id)).exists()
 
@@ -236,6 +237,35 @@ def test_admin_cannot_delete_plan_used_by_subscription(admin_user, workspace):
         delete_admin_plan(actor=admin_user, plan_id=plan.id)
 
     assert Plan.objects.filter(id=plan.id).exists() is True
+
+
+@pytest.mark.django_db
+def test_admin_plan_endpoints_support_crud(admin_user):
+    api_client = APIClient()
+    api_client.force_authenticate(admin_user)
+
+    create_response = api_client.post(
+        "/api/v1/admin/plans/",
+        {"code": "NOVEX_PLUS", "name": "NOVEX Plus", "price": "18000", "currency": "XOF", "billing_period": "month", "is_active": True, "entitlements": {"SUPPORT": True}},
+        format="json",
+    )
+
+    assert create_response.status_code == 201
+    plan_id = create_response.data["id"]
+
+    update_response = api_client.patch(
+        f"/api/v1/admin/plans/{plan_id}/",
+        {"code": "NOVEX_PLUS", "name": "NOVEX Plus Ajuste", "price": "19000", "currency": "XOF", "billing_period": "month", "is_active": True, "entitlements": {"SUPPORT": True, "EXPORTS": True}},
+        format="json",
+    )
+
+    assert update_response.status_code == 200
+    assert update_response.data["name"] == "NOVEX Plus Ajuste"
+    assert update_response.data["entitlements"]["EXPORTS"] is True
+
+    delete_response = api_client.delete(f"/api/v1/admin/plans/{plan_id}/")
+
+    assert delete_response.status_code == 204
 
 
 @pytest.mark.django_db
