@@ -1,6 +1,6 @@
 import { apiFetch } from "@/lib/api/client";
 
-export type AdminSection = "dashboard" | "associations" | "users" | "subscriptions" | "payments" | "plans" | "activity" | "audit" | "reports" | "settings";
+export type AdminSection = "dashboard" | "associations" | "users" | "subscriptions" | "payments" | "tickets" | "plans" | "activity" | "audit" | "reports" | "settings";
 
 export type Paginated<T> = {
   count: number;
@@ -129,6 +129,34 @@ export type AdminActivity = {
   created_at: string;
 };
 
+export type AdminSupportTicket = {
+  id: number;
+  ticket_number: string;
+  workspace_name: string;
+  workspace_slug: string;
+  creator_name: string;
+  creator_email: string;
+  subject: string;
+  description: string;
+  category: string;
+  category_label: string;
+  status: "PENDING" | "IN_PROGRESS" | "RESOLVED";
+  status_label: string;
+  taken_at: string | null;
+  taken_by_name: string;
+  resolved_at: string | null;
+  resolved_by_name: string;
+  last_activity_at: string;
+  created_at: string;
+  updated_at: string;
+  messages: Array<{ id: number; author_name: string; body: string; is_admin_reply: boolean; created_at: string }>;
+};
+
+export type AdminSupportTicketsResponse = {
+  stats: { total: number; pending: number; in_progress: number; resolved: number };
+  tickets: Paginated<AdminSupportTicket>;
+};
+
 function qs(params: Record<string, string | number | undefined>) {
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -190,6 +218,24 @@ export function getAdminSubscriptions(params: Record<string, string | number | u
 
 export function getAdminPayments(params: Record<string, string | number | undefined>) {
   return apiFetch<Paginated<AdminPayment>>(`/admin/payments/${qs(params)}`);
+}
+
+export function getAdminTickets(params: Record<string, string | number | undefined>) {
+  return apiFetch<AdminSupportTicketsResponse>(`/admin/tickets/${qs(params)}`);
+}
+
+export function updateAdminTicketStatus(id: number, status: "PENDING" | "IN_PROGRESS" | "RESOLVED") {
+  return apiFetch<AdminSupportTicket>(`/admin/tickets/${id}/status/`, {
+    method: "PATCH",
+    body: JSON.stringify({ status })
+  });
+}
+
+export function replyAdminTicket(id: number, body: string) {
+  return apiFetch<AdminSupportTicket>(`/admin/tickets/${id}/reply/`, {
+    method: "POST",
+    body: JSON.stringify({ body })
+  });
 }
 
 export function getAdminPlans() {

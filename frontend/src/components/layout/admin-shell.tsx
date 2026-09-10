@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, BarChart3, Bell, Building2, CreditCard, FileSearch, Gauge, Layers3, LogOut, Search, Settings, ShieldCheck, Users } from "lucide-react";
+import { Activity, BarChart3, Bell, Building2, CreditCard, FileSearch, Gauge, Layers3, LifeBuoy, LogOut, Search, Settings, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
@@ -11,6 +11,7 @@ const nav = [
   { label: "Utilisateurs", href: "/admin/users", icon: Users },
   { label: "Abonnements", href: "/admin/subscriptions", icon: Layers3 },
   { label: "Paiements SaaS", href: "/admin/payments", icon: CreditCard },
+  { label: "Tickets", href: "/admin/tickets", icon: LifeBuoy },
   { label: "Plans & Offres", href: "/admin/plans", icon: BarChart3 },
   { label: "Activite", href: "/admin/activity", icon: Activity },
   { label: "Rapports", href: "/admin/reports", icon: FileSearch },

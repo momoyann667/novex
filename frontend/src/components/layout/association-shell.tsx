@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Bell, Bot, Calendar, CreditCard, FileText, FolderKanban, Home, Landmark, Menu, MessageSquare, Search, Settings, Users, Wallet } from "lucide-react";
+import { Bell, Bot, Calendar, CreditCard, FileText, FolderKanban, Home, Landmark, LifeBuoy, Menu, MessageSquare, Search, Settings, Users, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/features/auth/current-user";
@@ -37,6 +37,7 @@ const nav: readonly NavItem[] = [
   { label: "Documents", path: "documents", icon: FileText, permission: "documents.view" },
   { label: "Rapports", path: "reports", icon: FileText, permission: "reports.view", plan: "NOVEX_PRO" },
   { label: "Assistant IA", path: "assistant", icon: Bot, permission: "assistant.view", plan: "NOVEX_PRO" },
+  { label: "Ouvrir un ticket", path: "support", icon: LifeBuoy, permission: "support.tickets.view_own", creatorOnly: true },
   { label: "Parametres", path: "settings", icon: Settings, permission: "settings.view", creatorOnly: true },
   { label: "Parametres", path: "settings/security", icon: Settings, permission: "security.change_password", memberOnly: true }
 ];

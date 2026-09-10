@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "apps.analytics",
     "apps.reports",
     "apps.subscriptions",
+    "apps.support",
     "apps.audit_logs",
     "apps.novex_admin",
 ]

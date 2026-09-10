@@ -140,6 +140,8 @@ WORKSPACE_PERMISSIONS = {
     "reports.events": "Voir les rapports evenements",
     "reports.documents": "Voir les rapports documents",
     "assistant.view": "Utiliser l'assistant IA",
+    "support.tickets.view_own": "Voir ses tickets support",
+    "support.tickets.create": "Creer un ticket support",
 }
 
 MEMBER_PERMISSIONS = WORKSPACE_PERMISSIONS

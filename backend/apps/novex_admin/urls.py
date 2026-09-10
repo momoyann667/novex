@@ -1,5 +1,7 @@
 from django.urls import path
+from rest_framework.routers import DefaultRouter
 
+from apps.support.views import AdminSupportTicketViewSet
 from .views import (
     AdminActivityView,
     AdminAssociationActivateView,
@@ -17,6 +19,9 @@ from .views import (
     AdminUsersView,
 )
 
+router = DefaultRouter()
+router.register("tickets", AdminSupportTicketViewSet, basename="novex-admin-ticket")
+
 urlpatterns = [
     path("dashboard/", AdminDashboardView.as_view(), name="novex-admin-dashboard"),
     path("associations/", AdminAssociationsView.as_view(), name="novex-admin-associations"),
@@ -32,4 +37,4 @@ urlpatterns = [
     path("audit/", AdminAuditView.as_view(), name="novex-admin-audit"),
     path("reports/", AdminReportsView.as_view(), name="novex-admin-reports"),
     path("settings/", AdminSettingsView.as_view(), name="novex-admin-settings"),
-]
+] + router.urls

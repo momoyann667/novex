@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, Building2, CreditCard, Layers3, RefreshCw, ShieldCheck, Users } from "lucide-react";
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, Building2, CheckCircle2, Clock3, CreditCard, Layers3, LifeBuoy, MessageSquare, RefreshCw, ShieldCheck, Users, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   getAdminActivity,
@@ -13,11 +13,14 @@ import {
   getAdminReports,
   getAdminSettings,
   getAdminSubscriptions,
+  getAdminTickets,
   getAdminUsers,
+  replyAdminTicket,
   activateAdminAssociation,
   createAdminUser,
   deleteAdminUser,
   suspendAdminAssociation,
+  updateAdminTicketStatus,
   updateAdminUser,
   type AdminActivity,
   type AdminAssociation,
@@ -26,6 +29,7 @@ import {
   type AdminPlan,
   type AdminSection,
   type AdminSubscription,
+  type AdminSupportTicket,
   type AdminUser,
   type AdminUserPayload,
   type Paginated
@@ -48,6 +52,7 @@ const sectionTitles: Record<AdminSection, string> = {
   users: "Utilisateurs",
   subscriptions: "Abonnements",
   payments: "Paiements SaaS",
+  tickets: "Tickets",
   plans: "Plans & Offres",
   activity: "Activite globale",
   audit: "Audit",
@@ -83,6 +88,7 @@ export function AdminConsole({ section = "dashboard" }: Readonly<{ section?: Adm
       {section === "users" ? <UsersSection search={search} setSearch={setSearch} /> : null}
       {section === "subscriptions" ? <SubscriptionsSection search={search} setSearch={setSearch} /> : null}
       {section === "payments" ? <PaymentsSection search={search} setSearch={setSearch} /> : null}
+      {section === "tickets" ? <TicketsSection /> : null}
       {section === "plans" ? <PlansSection /> : null}
       {section === "activity" ? <ActivitySection search={search} setSearch={setSearch} audit={false} /> : null}
       {section === "audit" ? <ActivitySection search={search} setSearch={setSearch} audit /> : null}
@@ -224,6 +230,71 @@ function PaymentsSection({ search, setSearch }: Readonly<{ search: string; setSe
   return <TablePanel title="Historique des paiements SaaS" search={search} setSearch={setSearch}>{query.data ? <PaymentRows data={query.data} /> : <SkeletonRows />}</TablePanel>;
 }
 
+function TicketsSection() {
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
+  const [period, setPeriod] = useState("month");
+  const [selected, setSelected] = useState<AdminSupportTicket | null>(null);
+  const query = useQuery({ queryKey: ["novex-admin-tickets", search, status, period], queryFn: () => getAdminTickets({ search, status, period, page_size: 50 }) });
+  const statusMutation = useMutation({
+    mutationFn: ({ id, nextStatus }: { id: number; nextStatus: AdminSupportTicket["status"] }) => updateAdminTicketStatus(id, nextStatus),
+    onSuccess: async (ticket) => {
+      setSelected(ticket);
+      await queryClient.invalidateQueries({ queryKey: ["novex-admin-tickets"] });
+      await queryClient.invalidateQueries({ queryKey: ["novex-admin-dashboard"] });
+    }
+  });
+  const replyMutation = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: string }) => replyAdminTicket(id, body),
+    onSuccess: async (ticket) => {
+      setSelected(ticket);
+      await queryClient.invalidateQueries({ queryKey: ["novex-admin-tickets"] });
+    }
+  });
+  const stats = query.data?.stats;
+  return (
+    <div className="grid gap-5">
+      <div className="grid grid-cols-4 gap-4">
+        <Kpi title="Total tickets" value={stats?.total ?? 0} icon={LifeBuoy} />
+        <Kpi title="En attente" value={stats?.pending ?? 0} icon={Clock3} />
+        <Kpi title="Pris en charge" value={stats?.in_progress ?? 0} icon={MessageSquare} />
+        <Kpi title="Regles" value={stats?.resolved ?? 0} icon={CheckCircle2} />
+      </div>
+      <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="grid grid-cols-[1fr_220px_220px] gap-3 border-b border-slate-200 p-5">
+          <input className="h-11 rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-blue-600" placeholder="Numero, objet, creator, association..." value={search} onChange={(event) => setSearch(event.target.value)} />
+          <select className="h-11 rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-blue-600" value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option value="">Tous les statuts</option>
+            <option value="PENDING">En attente</option>
+            <option value="IN_PROGRESS">Pris en charge</option>
+            <option value="RESOLVED">Regle</option>
+          </select>
+          <select className="h-11 rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-blue-600" value={period} onChange={(event) => setPeriod(event.target.value)}>
+            <option value="today">Aujourd'hui</option>
+            <option value="week">Cette semaine</option>
+            <option value="month">Ce mois</option>
+            <option value="previous_month">Mois precedent</option>
+            <option value="">Toutes periodes</option>
+          </select>
+        </div>
+        <div className="overflow-x-auto">
+          {query.data ? <TicketRows data={query.data.tickets} onOpen={setSelected} /> : <SkeletonRows />}
+        </div>
+      </section>
+      {selected ? (
+        <TicketDrawer
+          ticket={selected}
+          pending={statusMutation.isPending || replyMutation.isPending}
+          onClose={() => setSelected(null)}
+          onReply={(body) => replyMutation.mutate({ id: selected.id, body })}
+          onStatus={(nextStatus) => statusMutation.mutate({ id: selected.id, nextStatus })}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 function PlansSection() {
   const query = useQuery({ queryKey: ["novex-admin-plans"], queryFn: getAdminPlans });
   return (
@@ -287,6 +358,89 @@ function TablePanel({ title, search, setSearch, children }: Readonly<{ title: st
 
 function AssociationTable({ rows }: Readonly<{ rows: AdminAssociation[] }>) {
   return <TablePanel title="Associations recentes" search="" setSearch={() => undefined}><AssociationRows data={{ results: rows, count: rows.length, page: 1, page_size: rows.length, next: null, previous: null }} /></TablePanel>;
+}
+
+function TicketRows({ data, onOpen }: Readonly<{ data: Paginated<AdminSupportTicket>; onOpen: (ticket: AdminSupportTicket) => void }>) {
+  return (
+    <table className="w-full min-w-[1280px] text-left text-sm">
+      <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+        <tr><Th>N Ticket</Th><Th>Date</Th><Th>Creator</Th><Th>Association</Th><Th>Objet</Th><Th>Categorie</Th><Th>Statut</Th><Th>Derniere activite</Th><Th>Action</Th></tr>
+      </thead>
+      <tbody>
+        {data.results.map((row) => (
+          <tr className="border-t border-slate-100" key={row.id}>
+            <Td strong>{row.ticket_number}</Td>
+            <Td>{dateTimeLabel(row.created_at)}</Td>
+            <Td>{row.creator_name}<br /><span className="text-xs text-slate-400">{row.creator_email}</span></Td>
+            <Td strong>{row.workspace_name}</Td>
+            <Td>{row.subject}</Td>
+            <Td>{row.category_label}</Td>
+            <Td><Badge>{row.status_label}</Badge></Td>
+            <Td>{dateTimeLabel(row.last_activity_at)}</Td>
+            <Td><button className="rounded-md bg-slate-950 px-3 py-2 text-xs font-black text-white" type="button" onClick={() => onOpen(row)}>Consulter</button></Td>
+          </tr>
+        ))}
+        {!data.results.length ? <tr><td className="px-4 py-10 text-center text-sm font-bold text-slate-500" colSpan={9}>Aucun ticket trouve.</td></tr> : null}
+      </tbody>
+    </table>
+  );
+}
+
+function TicketDrawer({ ticket, pending, onClose, onReply, onStatus }: Readonly<{ ticket: AdminSupportTicket; pending: boolean; onClose: () => void; onReply: (body: string) => void; onStatus: (status: AdminSupportTicket["status"]) => void }>) {
+  const [body, setBody] = useState("");
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-950/50" role="dialog" aria-modal="true" aria-label="Detail ticket">
+      <section className="ml-auto flex h-full w-[720px] flex-col overflow-y-auto bg-white p-6 shadow-2xl">
+        <div className="flex items-start justify-between gap-5">
+          <div>
+            <p className="text-xs font-black uppercase text-blue-700">{ticket.ticket_number}</p>
+            <h2 className="mt-2 text-3xl font-black text-slate-950">{ticket.subject}</h2>
+            <p className="mt-1 text-sm font-semibold text-slate-500">{ticket.workspace_name} - {ticket.creator_name}</p>
+          </div>
+          <button className="grid size-10 place-items-center rounded-md bg-slate-100" type="button" aria-label="Fermer" onClick={onClose}><X className="size-5" /></button>
+        </div>
+        <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
+          <Info label="Association" value={ticket.workspace_name} />
+          <Info label="Creator" value={ticket.creator_name} />
+          <Info label="Email" value={ticket.creator_email} />
+          <Info label="Date" value={dateTimeLabel(ticket.created_at)} />
+          <Info label="Categorie" value={ticket.category_label} />
+          <Info label="Statut" value={ticket.status_label} />
+          <Info label="Pris en charge" value={ticket.taken_at ? `${dateTimeLabel(ticket.taken_at)} par ${ticket.taken_by_name}` : "Non"} />
+          <Info label="Regle" value={ticket.resolved_at ? `${dateTimeLabel(ticket.resolved_at)} par ${ticket.resolved_by_name}` : "Non"} />
+        </div>
+        <div className="mt-6">
+          <h3 className="text-lg font-black">Description</h3>
+          <p className="mt-3 whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">{ticket.description}</p>
+        </div>
+        <div className="mt-6 grid gap-3">
+          <h3 className="text-lg font-black">Changer le statut</h3>
+          <div className="grid grid-cols-3 gap-2">
+            {(["PENDING", "IN_PROGRESS", "RESOLVED"] as const).map((item) => (
+              <button className={`min-h-11 rounded-md px-3 text-sm font-black ${ticket.status === item ? "bg-blue-700 text-white" : "border border-slate-200 bg-white text-slate-700"}`} disabled={pending} key={item} type="button" onClick={() => onStatus(item)}>
+                {item === "PENDING" ? "En attente" : item === "IN_PROGRESS" ? "Pris en charge" : "Regle"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="mt-6 grid gap-3">
+          <h3 className="text-lg font-black">Historique / Conversation</h3>
+          {ticket.messages.map((message) => (
+            <div className={`rounded-md border p-3 text-sm ${message.is_admin_reply ? "border-blue-100 bg-blue-50" : "border-slate-200 bg-white"}`} key={message.id}>
+              <div className="flex justify-between gap-3 text-xs font-bold text-slate-500"><span>{message.author_name}</span><span>{dateTimeLabel(message.created_at)}</span></div>
+              <p className="mt-2 whitespace-pre-wrap leading-6">{message.body}</p>
+            </div>
+          ))}
+        </div>
+        <form className="mt-6 grid gap-3" onSubmit={(event) => { event.preventDefault(); if (body.trim()) { onReply(body.trim()); setBody(""); } }}>
+          <textarea className="min-h-28 rounded-md border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-blue-600" value={body} onChange={(event) => setBody(event.target.value)} placeholder="Reponse NOVEX au creator..." />
+          <button className="min-h-11 rounded-md bg-blue-700 px-4 text-sm font-black text-white disabled:opacity-50" disabled={pending || !body.trim()} type="submit">
+            {pending ? "Envoi..." : "Repondre au creator"}
+          </button>
+        </form>
+      </section>
+    </div>
+  );
 }
 
 function AssociationRows({ data, onStatusChange }: Readonly<{ data: Paginated<AdminAssociation>; onStatusChange?: (id: number, status: string) => void }>) {
@@ -440,6 +594,11 @@ function SkeletonRows() {
 function dateLabel(value?: string | null) {
   if (!value) return "Non disponible";
   return new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium" }).format(new Date(value));
+}
+
+function dateTimeLabel(value?: string | null) {
+  if (!value) return "Non disponible";
+  return new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
 function monthLabel(value?: string | null) {

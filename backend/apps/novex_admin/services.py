@@ -35,6 +35,9 @@ ADMIN_PERMISSIONS = {
     "SYSTEM_ACTIVITY_VIEW": "Voir l'activite globale",
     "AUDIT_LOGS_VIEW": "Voir les audits",
     "ADMIN_SETTINGS_MANAGE": "Administrer les parametres NOVEX",
+    "SUPPORT_TICKETS_VIEW": "Voir tous les tickets support",
+    "SUPPORT_TICKETS_MANAGE": "Gerer les tickets support",
+    "SUPPORT_TICKETS_UPDATE_STATUS": "Changer le statut des tickets support",
 }
 
 
