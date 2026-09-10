@@ -7,6 +7,13 @@ function sessionIdFromSetCookie(setCookie: string | null) {
   return setCookie?.match(/(?:^|,\s*)sessionid=([^;]+)/)?.[1] || "";
 }
 
+function csrfToken() {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const values = new Uint8Array(32);
+  crypto.getRandomValues(values);
+  return Array.from(values, (value) => chars[value % chars.length]).join("");
+}
+
 export async function POST(request: Request) {
   const body = await request.text();
 
@@ -23,6 +30,11 @@ export async function POST(request: Request) {
 
     if (response.ok && sessionId) {
       nextResponse.cookies.set("novex_admin_sessionid", sessionId, {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+      });
+      nextResponse.cookies.set("novex_admin_csrftoken", csrfToken(), {
         httpOnly: true,
         sameSite: "lax",
         path: "/",

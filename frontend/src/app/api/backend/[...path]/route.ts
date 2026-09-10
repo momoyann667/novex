@@ -20,6 +20,13 @@ function csrfTokenFromCookie(cookieHeader: string) {
     ?.slice("csrftoken=".length);
 }
 
+function csrfToken() {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const values = new Uint8Array(32);
+  crypto.getRandomValues(values);
+  return Array.from(values, (value) => chars[value % chars.length]).join("");
+}
+
 function cookieValue(cookieHeader: string, name: string) {
   return cookieHeader
     .split(";")
@@ -35,15 +42,16 @@ async function proxy(request: Request, context: RouteContext) {
   const cookieHeader = request.headers.get("cookie") || "";
   const headers = new Headers();
   const adminSessionId = path.startsWith("admin/") ? cookieValue(cookieHeader, "novex_admin_sessionid") : "";
-  const forwardedCookie = adminSessionId ? `sessionid=${adminSessionId}` : cookieHeader;
+  const adminCsrfToken = path.startsWith("admin/") ? cookieValue(cookieHeader, "novex_admin_csrftoken") : "";
+  const csrf = adminCsrfToken || (adminSessionId ? csrfToken() : csrfTokenFromCookie(cookieHeader));
+  const forwardedCookie = adminSessionId ? [`sessionid=${adminSessionId}`, csrf ? `csrftoken=${csrf}` : ""].filter(Boolean).join("; ") : cookieHeader;
 
   const contentType = request.headers.get("content-type");
   if (contentType) headers.set("Content-Type", contentType);
   if (forwardedCookie) headers.set("Cookie", forwardedCookie);
   if (request.headers.get("x-workspace")) headers.set("X-Workspace", request.headers.get("x-workspace") || "");
 
-  const csrfToken = csrfTokenFromCookie(cookieHeader);
-  if (csrfToken) headers.set("X-CSRFToken", csrfToken);
+  if (csrf) headers.set("X-CSRFToken", csrf);
 
   try {
     const response = await fetch(targetUrl, {
@@ -62,6 +70,13 @@ async function proxy(request: Request, context: RouteContext) {
 
     if (setCookie) {
       nextResponse.headers.set("set-cookie", setCookie);
+    }
+    if (adminSessionId && csrf && !adminCsrfToken) {
+      nextResponse.cookies.set("novex_admin_csrftoken", csrf, {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+      });
     }
     if (contentType) {
       nextResponse.headers.set("content-type", contentType);

@@ -8,5 +8,11 @@ export async function POST() {
     sameSite: "lax",
     path: "/",
   });
+  response.cookies.set("novex_admin_csrftoken", "", {
+    httpOnly: true,
+    maxAge: 0,
+    sameSite: "lax",
+    path: "/",
+  });
   return response;
 }
