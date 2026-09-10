@@ -213,7 +213,7 @@ export function BudgetFormView({ workspaceSlug }: Readonly<{ workspaceSlug: stri
           </CardContent>
         </Card>
 
-        <div className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-40 grid grid-cols-2 gap-3 border-t border-border bg-white p-4 md:static md:rounded-md md:border">
+        <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+4.75rem)] z-40 grid grid-cols-2 gap-3 rounded-md border border-border bg-white p-3 shadow-lg md:static">
           <Button asChild className="w-full" type="button" variant="outline">
             <Link href={`/app/${workspaceSlug}/budgets`}>Annuler</Link>
           </Button>
