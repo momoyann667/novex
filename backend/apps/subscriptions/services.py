@@ -219,7 +219,7 @@ def quota_payload(limits: dict) -> list[dict]:
 
 def ensure_plan_catalog() -> None:
     for code, payload in PLAN_CATALOG.items():
-        Plan.objects.update_or_create(
+        Plan.objects.get_or_create(
             code=code,
             defaults={
                 "name": payload["name"],

@@ -78,6 +78,21 @@ def test_official_plan_prices_and_quotas_are_persisted():
 
 
 @pytest.mark.django_db
+def test_plan_catalog_does_not_overwrite_admin_updates():
+    ensure_plan_catalog()
+    start = Plan.objects.get(code=Plan.Code.NOVEX_START)
+    start.price = Decimal("7500.00")
+    start.name = "NOVEX Start Ajuste"
+    start.save(update_fields=["price", "name"])
+
+    ensure_plan_catalog()
+    start.refresh_from_db()
+
+    assert start.price == Decimal("7500.00")
+    assert start.name == "NOVEX Start Ajuste"
+
+
+@pytest.mark.django_db
 def test_online_contribution_payment_is_rejected_without_pro(django_user_model):
     owner = django_user_model.objects.create_user(username="blocked@example.com", email="blocked@example.com", password="pass")
     workspace = Workspace.objects.create(name="Association Blocked", slug="association-blocked", organization_type="association", owner=owner)
