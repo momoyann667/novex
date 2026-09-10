@@ -28,8 +28,8 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="fr-CI">
-      <body>
+    <html lang="fr-CI" suppressHydrationWarning>
+      <body suppressHydrationWarning>
         <QueryProvider>{children}</QueryProvider>
       </body>
     </html>
