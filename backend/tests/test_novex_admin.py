@@ -6,7 +6,18 @@ from django.core.management import call_command
 from rest_framework.test import APIClient
 
 from apps.audit_logs.models import AuditLog
-from apps.novex_admin.services import ADMIN_PERMISSIONS, admin_dashboard, create_admin_user, delete_admin_user, ensure_admin_rbac, update_admin_user, update_association_status
+from apps.novex_admin.services import (
+    ADMIN_PERMISSIONS,
+    admin_dashboard,
+    create_admin_plan,
+    create_admin_user,
+    delete_admin_plan,
+    delete_admin_user,
+    ensure_admin_rbac,
+    update_admin_plan,
+    update_admin_user,
+    update_association_status,
+)
 from apps.payments.models import Payment
 from apps.payments.statuses import PaymentMethod, PaymentStatus
 from apps.subscriptions.models import Plan, Subscription
@@ -182,6 +193,49 @@ def test_admin_cannot_update_or_delete_application_user(admin_user, workspace, n
         delete_admin_user(actor=admin_user, user_id=listed.id)
 
     assert User.objects.filter(id=listed.id).exists() is True
+
+
+@pytest.mark.django_db
+def test_admin_can_create_update_and_delete_plan(admin_user):
+    created = create_admin_plan(
+        actor=admin_user,
+        data={
+            "code": "novex_premium",
+            "name": "NOVEX Premium",
+            "price": "25000",
+            "currency": "XOF",
+            "billing_period": "month",
+            "is_active": True,
+            "entitlements": {"ONLINE_PAYMENT": True, "ADVANCED_REPORTS": True},
+        },
+    )
+    plan = Plan.objects.get(id=created["id"])
+
+    updated = update_admin_plan(actor=admin_user, plan_id=plan.id, data={"name": "NOVEX Premium Plus", "price": "30000", "is_active": False})
+
+    assert created["code"] == "NOVEX_PREMIUM"
+    assert updated["name"] == "NOVEX Premium Plus"
+    assert Decimal(str(updated["price"])) == Decimal("30000.00")
+    assert updated["is_active"] is False
+    assert AuditLog.objects.filter(action="admin.plan_updated", resource_id=str(plan.id)).exists()
+
+    delete_admin_plan(actor=admin_user, plan_id=plan.id)
+
+    assert Plan.objects.filter(id=plan.id).exists() is False
+    assert AuditLog.objects.filter(action="admin.plan_deleted", metadata__code="NOVEX_PREMIUM").exists()
+
+
+@pytest.mark.django_db
+def test_admin_cannot_delete_plan_used_by_subscription(admin_user, workspace):
+    ensure_plan_catalog()
+    plan = Plan.objects.get(code=Plan.Code.NOVEX_START)
+    workspace.subscription.plan = plan
+    workspace.subscription.save(update_fields=["plan"])
+
+    with pytest.raises(ValueError, match="deja utilise"):
+        delete_admin_plan(actor=admin_user, plan_id=plan.id)
+
+    assert Plan.objects.filter(id=plan.id).exists() is True
 
 
 @pytest.mark.django_db

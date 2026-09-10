@@ -17,9 +17,12 @@ import {
   getAdminUsers,
   replyAdminTicket,
   activateAdminAssociation,
+  createAdminPlan,
   createAdminUser,
+  deleteAdminPlan,
   deleteAdminUser,
   suspendAdminAssociation,
+  updateAdminPlan,
   updateAdminTicketStatus,
   updateAdminUser,
   type AdminActivity,
@@ -27,6 +30,7 @@ import {
   type AdminDashboard,
   type AdminPayment,
   type AdminPlan,
+  type AdminPlanPayload,
   type AdminSection,
   type AdminSubscription,
   type AdminSupportTicket,
@@ -296,10 +300,62 @@ function TicketsSection() {
 }
 
 function PlansSection() {
+  const queryClient = useQueryClient();
+  const [showForm, setShowForm] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<AdminPlan | null>(null);
+  const [notice, setNotice] = useState("");
   const query = useQuery({ queryKey: ["novex-admin-plans"], queryFn: getAdminPlans });
+  const createMutation = useMutation({
+    mutationFn: createAdminPlan,
+    onSuccess: async () => {
+      setNotice("Plan cree.");
+      setShowForm(false);
+      await queryClient.invalidateQueries({ queryKey: ["novex-admin-plans"] });
+      await queryClient.invalidateQueries({ queryKey: ["novex-admin-dashboard"] });
+    }
+  });
+  const updateMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: AdminPlanPayload }) => updateAdminPlan(id, payload),
+    onSuccess: async () => {
+      setNotice("Plan modifie.");
+      setEditingPlan(null);
+      await queryClient.invalidateQueries({ queryKey: ["novex-admin-plans"] });
+      await queryClient.invalidateQueries({ queryKey: ["novex-admin-dashboard"] });
+    }
+  });
+  const deleteMutation = useMutation({
+    mutationFn: deleteAdminPlan,
+    onSuccess: async () => {
+      setNotice("Plan supprime.");
+      await queryClient.invalidateQueries({ queryKey: ["novex-admin-plans"] });
+      await queryClient.invalidateQueries({ queryKey: ["novex-admin-dashboard"] });
+    }
+  });
+
   return (
-    <div className="grid grid-cols-3 gap-5">
-      {query.data?.results.map((plan) => <PlanCard plan={plan} key={plan.code} />) || <SkeletonRows />}
+    <div className="grid gap-4">
+      {notice ? <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm font-bold text-emerald-800">{notice}</div> : null}
+      {createMutation.error || updateMutation.error || deleteMutation.error ? <ErrorPanel message="Action impossible sur ce plan. Verifiez les champs ou desactivez un plan deja utilise." /> : null}
+      <div className="flex justify-end">
+        <button className="min-h-10 rounded-md bg-blue-700 px-4 text-sm font-black text-white" type="button" onClick={() => { setEditingPlan(null); setShowForm(true); }}>
+          Creer une offre
+        </button>
+      </div>
+      {showForm || editingPlan ? (
+        <AdminPlanForm
+          key={editingPlan?.id || "create-plan"}
+          plan={editingPlan}
+          pending={createMutation.isPending || updateMutation.isPending}
+          onCancel={() => { setShowForm(false); setEditingPlan(null); }}
+          onSubmit={(payload) => {
+            if (editingPlan) updateMutation.mutate({ id: editingPlan.id, payload });
+            else createMutation.mutate(payload);
+          }}
+        />
+      ) : null}
+      <div className="grid grid-cols-3 gap-5">
+        {query.data?.results.map((plan) => <PlanCard plan={plan} key={plan.id} onDelete={(item) => deleteMutation.mutate(item.id)} onEdit={(item) => { setEditingPlan(item); setShowForm(false); }} />) || <SkeletonRows />}
+      </div>
     </div>
   );
 }
@@ -507,6 +563,72 @@ function AdminInput({ label, value, type = "text", onChange }: Readonly<{ label:
   return <label className="grid gap-2 text-sm font-black text-slate-700">{label}<input className="h-11 rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-blue-600" type={type} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
+function AdminPlanForm({ plan, pending, onSubmit, onCancel }: Readonly<{ plan: AdminPlan | null; pending: boolean; onSubmit: (payload: AdminPlanPayload) => void; onCancel: () => void }>) {
+  const [form, setForm] = useState({
+    code: plan?.code || "",
+    name: plan?.name || "",
+    price: String(plan?.price || "0"),
+    currency: plan?.currency || "XOF",
+    billing_period: plan?.billing_period || "month",
+    is_active: plan?.is_active ?? true
+  });
+  const [entitlementsText, setEntitlementsText] = useState(JSON.stringify(plan?.entitlements || {}, null, 2));
+  const [jsonError, setJsonError] = useState("");
+
+  function update(key: keyof typeof form, value: string | boolean) {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function submit() {
+    try {
+      const entitlements = JSON.parse(entitlementsText || "{}") as Record<string, unknown>;
+      if (!entitlements || Array.isArray(entitlements) || typeof entitlements !== "object") {
+        setJsonError("Les fonctionnalites doivent etre un objet JSON.");
+        return;
+      }
+      setJsonError("");
+      onSubmit({ ...form, entitlements });
+    } catch {
+      setJsonError("Les fonctionnalites doivent etre un JSON valide.");
+    }
+  }
+
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-black">{plan ? "Modifier l'offre" : "Creer une offre"}</h2>
+          <p className="mt-1 text-sm font-semibold text-slate-500">Les changements s'appliquent au catalogue visible par les associations.</p>
+        </div>
+        <button className="rounded-md border border-slate-200 px-3 py-2 text-sm font-black" type="button" onClick={onCancel}>Annuler</button>
+      </div>
+      <div className="mt-5 grid grid-cols-4 gap-3">
+        <AdminInput label="Code" value={form.code} onChange={(value) => update("code", value)} />
+        <AdminInput label="Nom" value={form.name} onChange={(value) => update("name", value)} />
+        <AdminInput label="Prix" type="number" value={form.price} onChange={(value) => update("price", value)} />
+        <AdminInput label="Devise" value={form.currency} onChange={(value) => update("currency", value)} />
+        <label className="grid gap-2 text-sm font-black text-slate-700">
+          Periode
+          <select className="h-11 rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-blue-600" value={form.billing_period} onChange={(event) => update("billing_period", event.target.value)}>
+            <option value="trial">Essai</option>
+            <option value="month">Mensuel</option>
+            <option value="year">Annuel</option>
+          </select>
+        </label>
+        <label className="flex min-h-12 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-bold"><input checked={form.is_active} type="checkbox" onChange={(event) => update("is_active", event.target.checked)} /> Offre active</label>
+      </div>
+      <label className="mt-5 grid gap-2 text-sm font-black text-slate-700">
+        Fonctionnalites JSON
+        <textarea className="min-h-40 rounded-md border border-slate-200 p-3 font-mono text-xs font-semibold outline-none focus:border-blue-600" value={entitlementsText} onChange={(event) => setEntitlementsText(event.target.value)} />
+      </label>
+      {jsonError ? <p className="mt-2 text-sm font-black text-red-700">{jsonError}</p> : null}
+      <button className="mt-5 min-h-11 rounded-md bg-blue-700 px-4 text-sm font-black text-white disabled:opacity-50" type="button" disabled={pending} onClick={submit}>
+        {pending ? "Enregistrement..." : plan ? "Modifier l'offre" : "Creer l'offre"}
+      </button>
+    </section>
+  );
+}
+
 function SubscriptionRows({ data }: Readonly<{ data: Paginated<AdminSubscription> }>) {
   return (
     <table className="w-full min-w-[1100px] text-left text-sm">
@@ -538,13 +660,27 @@ function ActivityList({ rows }: Readonly<{ rows: AdminActivity[] }>) {
   return <Panel title="Activite recente">{rows.length ? rows.map((row) => <div className="border-b border-slate-100 py-3 last:border-b-0" key={row.id}><p className="font-black">{row.action}</p><p className="text-xs font-semibold text-slate-500">{row.association} - {row.actor} - {dateLabel(row.created_at)}</p></div>) : <Empty message="Aucune activite recente." />}</Panel>;
 }
 
-function PlanCard({ plan }: Readonly<{ plan: AdminPlan }>) {
+function PlanCard({ plan, onEdit, onDelete }: Readonly<{ plan: AdminPlan; onEdit?: (plan: AdminPlan) => void; onDelete?: (plan: AdminPlan) => void }>) {
   const entitlementCount = Object.values(plan.entitlements || {}).filter(Boolean).length;
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between"><div><h2 className="text-xl font-black">{plan.name}</h2><p className="text-sm font-semibold text-slate-500">{plan.code}</p></div><Badge>{plan.is_active ? "Actif" : "Inactif"}</Badge></div>
       <p className="mt-6 text-3xl font-black">{money(plan.price, plan.currency)}</p>
       <div className="mt-5 grid grid-cols-2 gap-3 text-sm"><Info label="Abonnements" value={plan.subscriptions} /><Info label="Revenus" value={money(plan.revenue, plan.currency)} /><Info label="Periode" value={plan.billing_period} /><Info label="Entitlements" value={entitlementCount} /></div>
+      <div className="mt-5 flex gap-2">
+        <button className="min-h-10 flex-1 rounded-md bg-slate-950 px-3 text-sm font-black text-white" type="button" onClick={() => onEdit?.(plan)}>Modifier</button>
+        <button
+          className="min-h-10 flex-1 rounded-md bg-red-600 px-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+          type="button"
+          disabled={plan.subscriptions > 0}
+          title={plan.subscriptions > 0 ? "Ce plan est deja utilise par des abonnements." : "Supprimer ce plan"}
+          onClick={() => {
+            if (window.confirm(`Supprimer l'offre ${plan.name} ?`)) onDelete?.(plan);
+          }}
+        >
+          Supprimer
+        </button>
+      </div>
     </section>
   );
 }

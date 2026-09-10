@@ -117,6 +117,16 @@ export type AdminPlan = {
   revenue: string;
 };
 
+export type AdminPlanPayload = {
+  code: string;
+  name: string;
+  price: string;
+  currency: string;
+  billing_period: string;
+  is_active: boolean;
+  entitlements: Record<string, unknown>;
+};
+
 export type AdminActivity = {
   id: number;
   actor: string;
@@ -240,6 +250,26 @@ export function replyAdminTicket(id: number, body: string) {
 
 export function getAdminPlans() {
   return apiFetch<{ results: AdminPlan[] }>("/admin/plans/");
+}
+
+export function createAdminPlan(payload: AdminPlanPayload) {
+  return apiFetch<AdminPlan>("/admin/plans/", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateAdminPlan(id: number, payload: AdminPlanPayload) {
+  return apiFetch<AdminPlan>(`/admin/plans/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function deleteAdminPlan(id: number) {
+  return apiFetch<void>(`/admin/plans/${id}/`, {
+    method: "DELETE"
+  });
 }
 
 export function getAdminActivity(params: Record<string, string | number | undefined>) {

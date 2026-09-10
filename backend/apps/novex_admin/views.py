@@ -12,8 +12,11 @@ from .services import (
     admin_reports,
     admin_subscriptions,
     admin_users,
+    create_admin_plan,
     create_admin_user,
+    delete_admin_plan,
     delete_admin_user,
+    update_admin_plan,
     update_admin_user,
     update_association_status,
 )
@@ -93,6 +96,29 @@ class AdminPaymentsView(AdminBaseView):
 class AdminPlansView(AdminBaseView):
     def get(self, request):
         return response.Response(admin_plans())
+
+    def post(self, request):
+        try:
+            payload = create_admin_plan(actor=request.user, data=request.data)
+        except ValueError as exc:
+            return response.Response({"message": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(payload, status=status.HTTP_201_CREATED)
+
+
+class AdminPlanDetailView(AdminBaseView):
+    def patch(self, request, plan_id):
+        try:
+            payload = update_admin_plan(actor=request.user, plan_id=plan_id, data=request.data)
+        except ValueError as exc:
+            return response.Response({"message": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(payload)
+
+    def delete(self, request, plan_id):
+        try:
+            delete_admin_plan(actor=request.user, plan_id=plan_id)
+        except ValueError as exc:
+            return response.Response({"message": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class AdminActivityView(AdminBaseView):

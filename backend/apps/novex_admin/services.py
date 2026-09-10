@@ -522,27 +522,101 @@ def admin_payments(params: dict) -> dict:
     return paginate(queryset, serialize_payment, params.get("page", 1), params.get("page_size", 25))
 
 
+def serialize_plan(plan: Plan) -> dict:
+    paid_payments = saas_payments_queryset().filter(status=PaymentStatus.SUCCESS, metadata__plan_code=plan.code)
+    return {
+        "id": plan.id,
+        "code": plan.code,
+        "name": plan.name,
+        "price": plan.price,
+        "currency": plan.currency,
+        "billing_period": plan.billing_period,
+        "is_active": plan.is_active,
+        "entitlements": plan.entitlements,
+        "subscriptions": Subscription.objects.filter(plan=plan).count(),
+        "revenue": money(paid_payments.aggregate(total=Sum("amount"))["total"]),
+    }
+
+
+def normalize_plan_payload(data: dict, existing: Plan | None = None) -> dict:
+    code_value = data.get("code") if "code" in data else existing.code if existing else ""
+    name_value = data.get("name") if "name" in data else existing.name if existing else ""
+    currency_value = data.get("currency") if "currency" in data else existing.currency if existing else "XOF"
+    period_value = data.get("billing_period") if "billing_period" in data else existing.billing_period if existing else "month"
+    code = str(code_value or "").strip().upper().replace(" ", "_")
+    name = str(name_value or "").strip()
+    currency = str(currency_value or "XOF").strip().upper()
+    billing_period = str(period_value or "month").strip()
+    entitlements = data.get("entitlements", existing.entitlements if existing else {})
+    try:
+        price = Decimal(str(data.get("price", existing.price if existing else 0)))
+    except Exception as exc:
+        raise ValueError("Le prix du plan est invalide.") from exc
+
+    if not code:
+        raise ValueError("Le code du plan est obligatoire.")
+    if not name:
+        raise ValueError("Le nom du plan est obligatoire.")
+    if price < 0:
+        raise ValueError("Le prix du plan ne peut pas etre negatif.")
+    if len(currency) != 3:
+        raise ValueError("La devise doit contenir 3 caracteres.")
+    if not isinstance(entitlements, dict):
+        raise ValueError("Les fonctionnalites doivent etre un objet JSON valide.")
+
+    return {
+        "code": code[:32],
+        "name": name[:120],
+        "price": price,
+        "currency": currency,
+        "billing_period": billing_period[:24],
+        "entitlements": entitlements,
+        "is_active": bool(data.get("is_active", existing.is_active if existing else True)),
+    }
+
+
 def admin_plans() -> dict:
     ensure_plan_catalog()
-    paid_payments = saas_payments_queryset().filter(status=PaymentStatus.SUCCESS)
-    rows = []
-    for plan in Plan.objects.order_by("id"):
-        plan_payments = paid_payments.filter(metadata__plan_code=plan.code)
-        rows.append(
-            {
-                "id": plan.id,
-                "code": plan.code,
-                "name": plan.name,
-                "price": plan.price,
-                "currency": plan.currency,
-                "billing_period": plan.billing_period,
-                "is_active": plan.is_active,
-                "entitlements": plan.entitlements,
-                "subscriptions": Subscription.objects.filter(plan=plan).count(),
-                "revenue": money(plan_payments.aggregate(total=Sum("amount"))["total"]),
-            }
-        )
-    return {"results": rows}
+    return {"results": [serialize_plan(plan) for plan in Plan.objects.order_by("id")]}
+
+
+@transaction.atomic
+def create_admin_plan(*, actor, data: dict) -> dict:
+    payload = normalize_plan_payload(data)
+    if Plan.objects.filter(code=payload["code"]).exists():
+        raise ValueError("Un plan existe deja avec ce code.")
+    plan = Plan.objects.create(**payload)
+    AuditLog.objects.create(actor=actor, action="admin.plan_created", resource="plan", resource_id=str(plan.id), metadata={"code": plan.code})
+    return serialize_plan(plan)
+
+
+@transaction.atomic
+def update_admin_plan(*, actor, plan_id: int, data: dict) -> dict:
+    try:
+        plan = Plan.objects.select_for_update().get(id=plan_id)
+    except Plan.DoesNotExist as exc:
+        raise ValueError("Plan introuvable.") from exc
+    payload = normalize_plan_payload(data, existing=plan)
+    if Plan.objects.exclude(id=plan.id).filter(code=payload["code"]).exists():
+        raise ValueError("Un plan existe deja avec ce code.")
+    for field, value in payload.items():
+        setattr(plan, field, value)
+    plan.save()
+    AuditLog.objects.create(actor=actor, action="admin.plan_updated", resource="plan", resource_id=str(plan.id), metadata={"code": plan.code})
+    return serialize_plan(plan)
+
+
+@transaction.atomic
+def delete_admin_plan(*, actor, plan_id: int) -> None:
+    try:
+        plan = Plan.objects.select_for_update().get(id=plan_id)
+    except Plan.DoesNotExist as exc:
+        raise ValueError("Plan introuvable.") from exc
+    if Subscription.objects.filter(plan=plan).exists():
+        raise ValueError("Impossible de supprimer un plan deja utilise par des abonnements. Desactivez-le plutot.")
+    code = plan.code
+    AuditLog.objects.create(actor=actor, action="admin.plan_deleted", resource="plan", resource_id=str(plan.id), metadata={"code": code})
+    plan.delete()
 
 
 def admin_activity(params: dict) -> dict:
