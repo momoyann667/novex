@@ -162,6 +162,7 @@ function ExpenseForm({
               supplier_phone: form.supplier_phone,
               invoice_reference: requiresReference ? form.invoice_reference : "",
               payment_method: form.payment_method,
+              requires_receipt: requiresReference,
               notes: form.notes
             }, requiresReference ? receipt : null);
           }}
@@ -276,12 +277,23 @@ export function FinanceExpensesView({ workspaceSlug }: Readonly<{ workspaceSlug:
     queryClient.invalidateQueries({ queryKey: ["expense-dashboard", workspaceSlug] });
     queryClient.invalidateQueries({ queryKey: ["expense-budgets", workspaceSlug] });
     queryClient.invalidateQueries({ queryKey: ["expenses", workspaceSlug] });
+    queryClient.invalidateQueries({ queryKey: ["expense-budget-lines", workspaceSlug] });
+    queryClient.invalidateQueries({ queryKey: ["budget-dashboard", workspaceSlug] });
+    queryClient.invalidateQueries({ queryKey: ["budgets", workspaceSlug] });
+    queryClient.invalidateQueries({ queryKey: ["budget", workspaceSlug] });
+    queryClient.invalidateQueries({ queryKey: ["budget-analytics", workspaceSlug] });
   };
 
   const createMutation = useMutation({
     mutationFn: async ({ payload, receipt }: { payload: ExpensePayload; receipt?: File | null }) => {
       const expense = await createExpense(workspaceSlug, payload);
-      if (receipt) await uploadExpenseReceipt(workspaceSlug, expense.id, { title: receipt.name, file: receipt });
+      if (receipt) {
+        try {
+          await uploadExpenseReceipt(workspaceSlug, expense.id, { title: receipt.name, file: receipt });
+        } catch {
+          return expense;
+        }
+      }
       return expense;
     },
     onSuccess: () => {

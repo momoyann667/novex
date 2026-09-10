@@ -184,7 +184,8 @@ def line_summary(line: BudgetLine, *, year: int | None = None) -> dict:
     pending = expense_sum_for_line(line, status=FinancialTransactionStatus.PENDING, year=year)
     committed = line.committed_amount + pending
     remaining = line.planned_amount - actual - committed
-    rate = round((actual / line.planned_amount) * 100, 2) if line.planned_amount else Decimal("0.00")
+    consumed = actual + committed
+    rate = round((consumed / line.planned_amount) * 100, 2) if line.planned_amount else Decimal("0.00")
     return {
         "id": line.id,
         "category": line.category.name,
@@ -192,6 +193,7 @@ def line_summary(line: BudgetLine, *, year: int | None = None) -> dict:
         "planned": line.planned_amount,
         "committed": committed,
         "actual": actual,
+        "consumed": consumed,
         "remaining": remaining,
         "variance": line.planned_amount - actual,
         "consumption_rate": rate,
@@ -205,7 +207,8 @@ def budget_summary(budget: Budget, *, year: int | None = None) -> dict:
     actual = sum((item["actual"] for item in lines), ZERO)
     committed = sum((item["committed"] for item in lines), ZERO)
     remaining = budget.total_amount - actual - committed
-    rate = round((actual / budget.total_amount) * 100, 2) if budget.total_amount else Decimal("0.00")
+    consumed = actual + committed
+    rate = round((consumed / budget.total_amount) * 100, 2) if budget.total_amount else Decimal("0.00")
     return {
         "id": budget.id,
         "name": budget.name,
@@ -215,10 +218,11 @@ def budget_summary(budget: Budget, *, year: int | None = None) -> dict:
         "budget_total": budget.total_amount,
         "committed": committed,
         "actual": actual,
+        "consumed": consumed,
         "remaining": remaining,
         "variance": budget.total_amount - actual,
         "consumption_rate": rate,
-        "overrun": max(actual - budget.total_amount, ZERO),
+        "overrun": max(consumed - budget.total_amount, ZERO),
         "risk_level": risk_level(rate, budget.workspace),
         "lines": lines,
     }
@@ -363,8 +367,9 @@ def budget_dashboard(*, workspace: Workspace, year: int | None = None) -> dict:
     total = sum((item["budget_total"] for item in cards), ZERO)
     actual = sum((item["actual"] for item in cards), ZERO)
     committed = sum((item["committed"] for item in cards), ZERO)
+    consumed = actual + committed
     remaining = total - actual - committed
-    rate = round((actual / total) * 100, 2) if total else Decimal("0.00")
+    rate = round((consumed / total) * 100, 2) if total else Decimal("0.00")
     unbudgeted = FinancialTransaction.objects.filter(
         workspace=workspace,
         transaction_type=FinancialTransactionType.EXPENSE,
@@ -377,6 +382,7 @@ def budget_dashboard(*, workspace: Workspace, year: int | None = None) -> dict:
         "budget_total": total,
         "committed": committed,
         "actual": actual,
+        "consumed": consumed,
         "remaining": remaining,
         "consumption_rate": rate,
         "overrun": sum((item["overrun"] for item in cards), ZERO),
@@ -391,7 +397,7 @@ def budget_dashboard(*, workspace: Workspace, year: int | None = None) -> dict:
 def budget_analytics(*, budget: Budget) -> dict:
     summary = budget_summary(budget)
     monthly_rows = (
-        BudgetAssignment.objects.filter(budget=budget, transaction__status=FinancialTransactionStatus.VALIDATED)
+        BudgetAssignment.objects.filter(budget=budget, transaction__status__in=[FinancialTransactionStatus.VALIDATED, FinancialTransactionStatus.PENDING])
         .annotate(month=TruncMonth("transaction__transaction_date"))
         .values("month")
         .annotate(actual=Sum("transaction__amount"))

@@ -398,27 +398,35 @@ def expense_budget_cards(*, workspace: Workspace, year: int | None = None, month
             workspace=workspace,
             budget__in=budgets,
             transaction__transaction_type=FinancialTransactionType.EXPENSE,
-            transaction__status=FinancialTransactionStatus.VALIDATED,
+            transaction__status__in=[FinancialTransactionStatus.VALIDATED, FinancialTransactionStatus.PENDING],
             transaction__transaction_date__gte=start,
             transaction__transaction_date__lte=end,
         )
         .values("budget_id")
-        .annotate(spent=Sum("transaction__amount"))
+        .annotate(
+            spent=Sum("transaction__amount", filter=Q(transaction__status=FinancialTransactionStatus.VALIDATED)),
+            pending=Sum("transaction__amount", filter=Q(transaction__status=FinancialTransactionStatus.PENDING)),
+            consumed=Sum("transaction__amount"),
+        )
     )
     spent_by_budget = {row["budget_id"]: row["spent"] or ZERO for row in rows}
+    pending_by_budget = {row["budget_id"]: row["pending"] or ZERO for row in rows}
+    consumed_by_budget = {row["budget_id"]: row["consumed"] or ZERO for row in rows}
     cards = []
     for budget in budgets:
         planned = budget.total_amount
         spent = spent_by_budget.get(budget.id, ZERO)
-        remaining = planned - spent
-        rate = round((spent / planned) * 100, 2) if planned else Decimal("0.00")
+        pending = pending_by_budget.get(budget.id, ZERO)
+        consumed = consumed_by_budget.get(budget.id, ZERO)
+        remaining = planned - consumed
+        rate = round((consumed / planned) * 100, 2) if planned else Decimal("0.00")
         if rate > 100:
             state = "Budget depasse"
         elif rate >= 80:
             state = "Presque epuise"
         elif rate >= 50:
             state = "A surveiller"
-        elif spent == ZERO:
+        elif consumed == ZERO:
             state = "Budget non consomme"
         else:
             state = "Normal"
@@ -430,10 +438,12 @@ def expense_budget_cards(*, workspace: Workspace, year: int | None = None, month
                 "scope_type": budget.scope_type,
                 "category": ", ".join(line.category.name for line in budget.lines.all()[:2]) or "",
                 "budget_total": planned,
-                "spent": spent,
+                "spent": consumed,
+                "validated_spent": spent,
+                "pending_spent": pending,
                 "remaining": remaining,
                 "consumption_rate": rate,
-                "overrun": max(spent - planned, ZERO),
+                "overrun": max(consumed - planned, ZERO),
                 "state": state,
                 "currency": budget.currency or workspace.currency,
             }

@@ -39,6 +39,7 @@ class FinancialCategoryKind(models.TextChoices):
 class ExpensePaymentMethod(models.TextChoices):
     CASH = "CASH", "Especes"
     MOBILE_MONEY = "MOBILE_MONEY", "Mobile Money"
+    WAVE = "WAVE", "Wave"
     BANK_TRANSFER = "BANK_TRANSFER", "Virement"
     CARD = "CARD", "Carte"
     OTHER = "OTHER", "Autre"

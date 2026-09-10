@@ -85,6 +85,7 @@ export type ExpensePayload = {
   supplier_phone?: string;
   invoice_reference?: string;
   payment_method?: string;
+  requires_receipt?: boolean;
   notes?: string;
 };
 
